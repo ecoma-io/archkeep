@@ -187,20 +187,47 @@ versus what the gate itself must add.
    `delta` and `explain` ship today; the gate is breadth — the questions an
    agent or a reviewer asks before touching a boundary, answered in
    machine-readable form every time.
-5. **Add the intelligence and proposal capabilities.** The layer that reads
-   and predicts on top of the core. Optional and later by design — each
-   capability arrives through the door
-   [architecture-authority.md](architecture-authority.md) puts in front of
-   the layer, and none is required by the gates above.
-6. **Close the agentic feedback loop.** An agent draws its architectural
-   context from Archkeep, makes the change inside it, and Archkeep verifies
-   and reconciles the result deterministically — the loop closed by the
-   authority, never by the agent's own judgment. The `arch-*` skills, the
-   MCP tools and the read-only command set are the loop's shape today; the
-   gate is the loop running end to end without a human assembling the
-   pieces.
+5. **Harden and broaden architectural impact context.** The layer that
+   answers "what changes if I touch this" — not a prediction engine, but a
+   descriptive impact model that grows in breadth and depth. `impact`,
+   `context`, `delta`, and `explain` ship today; the gate is their breadth —
+   more constraint dimensions surfaced (fitness functions, debt burden,
+   decision lineage), deeper evidence bundles (what exactly a rule judged and
+   why), and the full provenance chain from source to verdict. This gate
+   hardens the _descriptive_ authority the next gate reads. It is not
+   scenario evaluation, and it never assigns a score or a risk level.
+   [architecture-authority.md](architecture-authority.md) owns the
+   abstractions this gate feeds.
+6. **Add deterministic scenario evaluation.** The capability to answer "if we
+   apply hypothetical architectural change X to baseline revision R, how
+   would the deterministic governance state change?" — reuses Impact's
+   descriptive model as its substrate. The answer is a _delta against a
+   counterfactual_, not a runtime simulation, a cost estimate, or a risk
+   score. Each scenario evaluation produces a full diff of the governance
+   state (violations, drift, debt, coverage), every row marked
+   `hypothetical` so nothing looks like a real verdict. A scenario is
+   never a decision; a decision lives in an ADR or a policy change, and
+   scenario evaluation informs it without becoming it. This gate
+   depends on gate 5 — impact breadth is the substrate scenario evaluates
+   over — and requires gate 6 before gate 7 can use its output.
+7. **Build the evidence-grounded architectural advisor.** A read-only advisor
+   that explains architectural facts, inferences, uncertainties, and
+   options — drawing from canonical evidence (gate 2 provenance), impact
+   context (gate 5), and scenario evaluation (gate 6) — and never creates
+   its own authority. The advisor:
+   - Explains what is known, what is inferred, and what is uncertain.
+   - Presents options ranked by tradeoffs, not by a score.
+   - Links every claim to its source evidence and the deterministic check
+     that proved it.
+   - Never writes to the architecture state (no policy, no waiver, no ADR).
+   - Never proposes changes autonomously — `discover --propose` already
+     exists for that, and its proposals are always marked `proposed`.
+     This gate depends on gates 5 and 6 for its substrate, and on the
+     five `arch-*` skills' safety constraints for its agent-facing contract.
+     It is the read-only consummation of the deterministic core, not a
+     replacement for it.
 
-Gates 1–4 are the foundation stable 1.0 stands on. Gates 5–6 are later
+Gates 1–4 are the foundation stable 1.0 stands on. Gates 5–7 are later
 maturity on the same line: they follow stable 1.0, they never fork it, and
 nothing in them holds the foundation hostage.
 
@@ -212,8 +239,8 @@ state, deepened reconciliation, broadened change context — hold every
 property that makes them an official foundation: **deterministic**,
 **explainable**, **reproducible**, **provenance-complete**,
 **provider-independent**, **cross-language**, **conformance-hardened**, and
-quiet long enough to be trusted with a stability promise. The intelligence
-capabilities of gate 5 and the full agentic loop of gate 6 are deliberately
+quiet long enough to be trusted with a stability promise. The impact-hardening,
+scenario-evaluation and advisory capabilities of gates 5–7 are deliberately
 absent from that list: they extend a finished foundation rather than block
 it, and no capability on those gates may hold the deterministic authority
 hostage by being made a prerequisite of it.
@@ -293,46 +320,219 @@ None of the four is a feature, and that is the point: what separates 0.x from
 1.0 here is evidence, and evidence is something the project accumulates rather
 than something it implements.
 
-## Later maturity: the intelligence capabilities
+## Later maturity: dependency chain — impact, scenario, advisor
 
-Gate 5 of the ladder, and "optional" is part of its name: these are later
+Gates 5–7 of the ladder, and "optional" is part of their name: these are later
 capabilities on the same development line — not a next product, not a second
 platform, and not a stage the foundation waits for. They extend the
 deterministic core with a different relationship to the architecture it
 already governs: reading and predicting, on top of — never in place of — the
 checking and judging.
 
-- **Deeper architecture intent** — richer, machine-readable intent beyond the
-  dependency constraint table.
-- **Semantic architecture understanding** — the architecture as a meaning to be
-  read, not only a graph to be checked.
-- **Advanced drift detection** — drift that is anticipated or explained, on top
-  of the deterministic drift already reported.
-- **Architecture evolution intelligence** — how the architecture changed and
-  why, on top of the deterministic snapshot-and-diff history already kept.
-- **Change risk analysis and architectural impact prediction** — what a change
-  is _likely_ to break, not only what it _demonstrably_ breaks.
-- **Migration planning and architecture recommendations** — proposed paths,
-  offered to a human to accept or refuse.
-- **Cross-repository architecture intelligence** — reasoning across more
-  than one repository at a time; an optional later reading, never a
-  cross-repository authority or a universal architecture graph.
-- **Agent-assisted architecture planning** — planning help that extends the
-  facts already provided, while the agent remains the decision-maker.
-- **Potentially AI-assisted reasoning** — where intelligence is not a verdict.
+The three gates form a **strict dependency chain**. Each gate's output is the
+next gate's substrate. None can be built before its predecessor earns its gate
+conditions.
+
+---
+
+### Gate 5: Impact hardening and breadth expansion
+
+**Problem.** `impact`, `context`, `delta`, and `explain` ship today, but they
+answer one question each. An agent or reviewer facing a change must assemble
+the picture from several commands and manually reconcile their output. The
+constraint dimensions are also narrow: fitness functions, debt burden, decision
+lineage, and the full provenance chain are not surfaced in a single impact
+report.
+
+**User workflow.** An agent calls `archkeep context --plan <project>` and
+receives a single document containing: every applicable constraint (tags,
+boundaries, fitness functions), every recorded decision in scope, every
+relevant debt entry, every active waiver, the current drift state, and the
+provenance chain linking each row to its source. The same document is
+machine-readable (JSON envelope) and human-readable (text). An agent or
+reviewer does not call five commands to understand what a change touches.
+
+**Scope.** Deeper constraint context — fitness gates surfaced alongside
+boundary rules; decision lineage resolved in the same report; debt burden per
+project; drift state as of the report's snapshot; the full evidence chain
+(which source lines fed which verdict rows). New commands or flags may be
+added; existing commands may gain output dimensions; no existing command's
+contract shrinks.
+
+**Non-goals.** No scenario evaluation (gate 6). No scores, risk levels, or
+confidence estimates. No cross-repository queries. No predictive analysis of
+any kind — this gate is descriptive only.
+
+**Dependencies.** Gates 1–4 (foundation hardened, state first-class,
+reconciliation deepened, context broadened). No new dependencies beyond those.
+
+**Acceptance criteria.** A single `archkeep context --plan <project>` returns
+every constraint dimension (tags, boundaries, fitness, decisions, debt, drift,
+waivers, provenance) in one document. The output is deterministic and
+reproducible. Every constraint row carries a source reference (file, line,
+decision ID, or evidence bundle id). An agent consuming the JSON envelope can
+make a governance-aware plan without calling any other command.
+
+**Provenance requirements.** Every row in the impact report carries its origin:
+which source file, which ADR, which check run, which snapshot. No "inferred"
+or "estimated" row appears without a `provenance: inferred` tag and the
+evidence that grounds the inference.
+
+**Unsupported behavior.** The report never includes a recommendation (use the
+agent's own reasoning for that). It never scores or ranks projects. It never
+simulates a change before it is made.
+
+**Exit gate.** All acceptance criteria hold on at least three real-world
+workspaces (not only the test fixtures). `archkeep context --plan <project>`
+returns deterministically for every project in those workspaces. No existing
+command's output contract is weakened (the check-cli-docs-roster gate and the
+JSON envelope schema are the contract).
+
+---
+
+### Gate 6: Deterministic scenario evaluation
+
+**Problem.** Today, answering "what if we change project A's boundary" requires
+a human or agent to make the change, run `check`, observe the result, and
+undo. There is no safe, counterfactual evaluation path. The architecture
+governance state is deterministic on real trees; it should also be
+deterministic on hypothetical ones.
+
+**User workflow.** An agent invokes a command like `archkeep scenario --base
+HEAD --edit <patch-file>` (the command name and syntax are examples; the final
+spelling is design work within this gate). The engine applies the hypothetical
+edit to a copy of the graph (not the real tree), runs the full deterministic
+pipeline (graph build, boundary check, drift, debt), and produces a diff
+against the real governance state. Every row in the output is marked
+`hypothetical`. The agent reads the diff and decides whether the change is
+safe, never modifying the real architecture state.
+
+**Scope.** A single command or subcommand that accepts a hypothetical
+architectural change (as a graph edit, a policy edit, or both) and a base
+revision, then produces the full deterministic governance diff: violations
+(new, removed, unchanged), drift (new, removed, unchanged), debt changes,
+coverage changes. The output is a delta against the real state, every row
+marked `hypothetical`. Reuses the existing `graph`, `check`, `diff`, `drift`,
+`debt` pipeline — no reimplementation of those engines.
+
+**Non-goals.** No runtime simulation (no code execution, no performance
+modelling). No cost estimation. No risk scoring. No probabilistic predictions.
+No migration plan generation. No cross-repository scenarios. No "scenario
+database" or scenario history — each evaluation is stateless and standalone.
+
+**Dependencies.** Gate 5 (impact breadth is the substrate scenario evaluates
+over). Gates 1–4 (the deterministic pipeline the scenario invokes). The
+existing `graph`, `check`, `diff`, `drift`, `debt` commands — scenario
+evaluation composes them rather than reimplementing them.
+
+**Acceptance criteria.** A scenario evaluation produces a full governance diff
+against the real state. Every output row is marked `hypothetical`. The
+scenario never modifies the real architecture state (no snapshots captured, no
+events recorded, no policies changed). Running the same scenario twice produces
+the same diff. The exit code is always 0 for a successful evaluation (even if
+the hypothetical change introduces violations — those are output, not errors).
+
+**Provenance requirements.** Every `hypothetical` row carries a `scenarioId`
+(deterministic from the input) and the base revision. The scenario command
+does not produce events, snapshots, or evidence files — it is ephemeral by
+design. Its output is the diff, and the diff is the record.
+
+**Unsupported behavior.** The scenario command never creates a snapshot, never
+writes to the history directory, never issues a waiver, never modifies policy,
+and never captures an evolution event. It never proposes a change — the agent
+reading its output decides.
+
+**Exit gate.** Scenario evaluation produces the same diff for the same input
+across three real-world workspaces. The `hypothetical` marking is present on
+every output row and absent from every real command's output. No existing
+command's contract is weakened. The scenario output format (the JSON envelope
+or a new schema) passes the envelope-shape integration test.
+
+---
+
+### Gate 7: Evidence-grounded architectural advisor
+
+**Problem.** An agent or human with a rich impact report (gate 5) and scenario
+evaluation results (gate 6) still must interpret both and decide what to do.
+The advisor is a read-only layer that explains architectural facts, inferences,
+uncertainties, and options — drawing from canonical evidence and never creating
+its own authority.
+
+**User workflow.** An agent asks: "project B currently depends on project A
+through these paths, which violate the boundary. What are my options?" The
+advisor answers with: the relevant violations (from `check`), the relevant
+intent and decisions (from `decisions` and `adr`), the relevant impact context
+(from gate 5), and scenario evaluations for each option (from gate 6). Each
+fact is linked to its source evidence. Options are presented with tradeoffs but
+no score. The agent decides — the advisor never does.
+
+**Scope.** A read-only command or subcommand that accepts a natural or
+structured query about the architecture and returns: what is known (facts from
+canonical commands), what is inferred (derived facts with provenance), what is
+uncertain (gaps or ambiguities in the evidence), options with tradeoffs (each
+option backed by a scenario evaluation when applicable). The advisor composes
+existing commands — it does not implement its own analysis. Every claim links
+to its source command and evidence row.
+
+**Non-goals.** No autonomous proposal or decision-making. No scores, ratings,
+or risk levels. No migration plans. No natural-language-only interface (the
+structured JSON envelope is always available). No learning or adaptation across
+sessions (each query is stateless). No agent personality or judgment. No
+replacement for the five `arch-*` skills — the advisor informs, it does not
+enforce.
+
+**Dependencies.** Gate 5 (impact context as the substrate). Gate 6 (scenario
+evaluation for "what if" questions). The five `arch-*` skills' safety
+constraints define the agent-facing contract. The existing read-only command
+set (`check`, `graph`, `diff`, `delta`, `drift`, `explain`, `context`,
+`impact`, `decisions`, `adr`, `debt`, `history`, `report`, `provenance`).
+
+**Acceptance criteria.** The advisor answers at least five distinct
+architecture questions drawn from real-world scenarios (defined in the gate's
+test plan). Every claim in an answer links to a source command and evidence
+row. The advisor never produces output that could be mistaken for a verdict
+(no exit codes, no "passed"/"failed" on architecture state). The advisor never
+modifies any architecture state. Running the same query twice produces the same
+answer. The advisor's JSON output is a valid envelope (or a defined extension
+of it) that passes the envelope-shape integration test.
+
+**Provenance requirements.** Every claim carries a `provenance` field with one
+of: `measured` (from a deterministic command), `inferred` (derived with a
+reproducible rule), `uncertain` (no conclusive evidence either way), or
+`scenario` (from a scenario evaluation). Claims with `inferred` or `uncertain`
+provenance are clearly marked as such in the human-readable output.
+
+**Unsupported behavior.** The advisor never writes to the architecture state
+(no policy, no waiver, no ADR, no snapshot, no event). It never proposes
+changes autonomously — `discover --propose` already exists for that. It never
+scores, ranks, or recommends a single best option. It never learns from past
+queries. It never cross-references repositories. It never answers questions
+about runtime behaviour, cost, team structure, or business risk.
+
+**Exit gate.** Five distinct scenarios answered correctly and reproducibly. All
+provenance rules enforced in the output. The JSON envelope test passes. No
+existing command's contract is weakened. The `arch-*` skills remain the sole
+authority on when to invoke governance — the advisor never replaces them.
+
+---
+
+Each of these three gates depends on its predecessor. Gate 5 broadens the
+descriptive model gate 6 evaluates over. Gate 6 provides the counterfactual
+deltas gate 7 composes into advisory answers. None skips a step. None creates
+its own authority. All three remain optional — gates 1–4 earn stable 1.0
+without them.
 
 None of these is a platform promise — not a knowledge-graph product, not a
 risk-prediction engine, not an autonomous migration planner, not an
-architecture-intelligence platform — and none changes the authority
-boundary: whatever they become, they remain predictions, proposals and
-judgments beside verdicts, never verdicts themselves. This stage is a
-**direction, not a commitment to implementation details**. The list above
-names the headroom; nothing in it is a dated promise, and a prediction is
-allowed to be wrong where a verdict is not. Nothing ahead weakens what ships
-today: every intelligence capability sits on top of the deterministic core,
-never in place of it — and each must answer the five questions
-[architecture-authority.md](architecture-authority.md) puts to the layer
-before it is built.
+architecture-intelligence platform — and none changes the authority boundary:
+whatever they become, they remain predictions, proposals and judgments beside
+verdicts, never verdicts themselves. This stage is a **direction, not a
+commitment to implementation details**. Nothing in it is a dated promise, and
+a prediction is allowed to be wrong where a verdict is not. Nothing ahead
+weakens what ships today: every later capability sits on top of the
+deterministic core, never in place of it — and each must answer the five
+questions [architecture-authority.md](architecture-authority.md) puts to the
+layer before it is built.
 
 ## What this roadmap refuses
 
