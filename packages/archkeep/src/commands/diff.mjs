@@ -114,6 +114,13 @@ export function parseBaseline(text, path) {
     );
   }
 
+  if (envelope.command !== "graph") {
+    throw new Error(
+      `archkeep: the baseline snapshot at '${path}' is a '${envelope.command}' envelope, not a ` +
+        `'graph' envelope — diff requires a graph snapshot as its baseline`,
+    );
+  }
+
   // A consumer that reads a schemaVersion it does not recognise should refuse
   // to parse the rest (`docs/reference/json-output.md`). This tool IS that
   // consumer when reading a baseline — a future schema version could change
@@ -124,13 +131,6 @@ export function parseBaseline(text, path) {
         `but this build only understands schemaVersion ${SCHEMA_VERSION}. A baseline from a later ` +
         `major version may have a different shape this diff would silently misread; upgrade ` +
         `archkeep or regenerate the snapshot.`,
-    );
-  }
-
-  if (envelope.command !== "graph") {
-    throw new Error(
-      `archkeep: the baseline snapshot at '${path}' is a '${envelope.command}' envelope, not a ` +
-        `'graph' envelope — diff requires a graph snapshot as its baseline`,
     );
   }
 

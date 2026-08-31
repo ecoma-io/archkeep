@@ -35,7 +35,8 @@ descriptive one: a declared function that `fail`s makes it exit 1 (and an
 undetermined one, 3) — see the prose below. `rules verify` also exits 1 when
 catalog integrity finds violations.
 
-`archkeep --help` prints the help text and exits 0. An omitted command name is a
+`archkeep --help` prints the help text and exits 0. `archkeep --version` (or
+`-v`) prints the tool name and version and exits 0. An omitted command name is a
 usage error (exit 2). If the first positional argument names a path that exists
 on disk, it is treated as `check` scoped to that path, the same as `archkeep check <path>`.
 
@@ -94,13 +95,13 @@ diff.
 
 ### `delta`
 
-| flag          | argument                | default                  | meaning                                                                                                                                                       |
-| ------------- | ----------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--capture`   | (none)                  | off                      | Write an evidence snapshot of the current tree (raw import records, graph, coverage, policy fingerprint) for a later delta run to compare against.            |
-| `--format`    | `text`\|`sarif`\|`json` | `text`                   | Terminal report (default), SARIF 2.1.0 of the introduced findings for GitHub code scanning, or the versioned JSON envelope.                                   |
-| `--output`    | `<file>`                | stdout                   | Write the report — or, with `--capture`, the snapshot — to a file instead of stdout.                                                                          |
-| `--config`    | `<file>`                | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. Both sides are re-judged under whichever law this run resolves.                   |
-| `--event-out` | `<dir>`                 | (nothing written)        | Append the delta's evolution event to this directory (one canonical record per transition; idempotent — a rerun over the same transition writes nothing new). |
+| flag          | argument                | default                  | meaning                                                                                                                                                                                           |
+| ------------- | ----------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--capture`   | (none)                  | off                      | Print an evidence snapshot of the current tree (raw import records, graph, coverage, policy fingerprint) for a later delta run to compare against. Without --output, the snapshot goes to stdout. |
+| `--format`    | `text`\|`sarif`\|`json` | `text`                   | Terminal report (default), SARIF 2.1.0 of the introduced findings for GitHub code scanning, or the versioned JSON envelope.                                                                       |
+| `--output`    | `<file>`                | stdout                   | Write the report — or, with `--capture`, the snapshot — to a file instead of stdout.                                                                                                              |
+| `--config`    | `<file>`                | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. Both sides are re-judged under whichever law this run resolves.                                                       |
+| `--event-out` | `<dir>`                 | (nothing written)        | Append the delta's evolution event to this directory (one canonical record per transition; idempotent — a rerun over the same transition writes nothing new).                                     |
 
 Without `--capture`, the baseline evidence snapshot is the single positional
 argument (a file, not a git ref); with `--capture` there are no positionals.

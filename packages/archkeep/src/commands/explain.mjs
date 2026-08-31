@@ -97,6 +97,7 @@ import {
   resolveDecisionRef,
   stripAdrPrefix,
 } from "../governance/adr-registry.mjs";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 
 /**
  * Parses a `file:line:column` site string into its components.
@@ -353,6 +354,16 @@ export function explainCommand(site, commandContext, config, options = {}) {
   }
 
   const parsed = parseSite(site);
+
+  // Normalize the site's sourceFile to a workspace-relative path so it
+  // matches the analysis record's sourceFile field (contract.md: workspace-relative).
+  // Handles: absolute paths, cwd-relative paths, and backslash separators.
+  const rawFile = parsed.sourceFile;
+  const normalizedFile = isAbsolute(rawFile)
+    ? relative(root, rawFile)
+    : relative(root, resolve(root, rawFile));
+  // Normalize backslash separators (Windows paths) to forward slashes.
+  parsed.sourceFile = sep === "\\" ? normalizedFile.replaceAll("\\", "/") : normalizedFile;
 
   const notAnalyzed = commandContext.analysis.failures
     .filter(isWholeFileFailure)

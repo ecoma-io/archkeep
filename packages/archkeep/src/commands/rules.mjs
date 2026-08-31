@@ -84,7 +84,9 @@ function loadCatalog(catalogPath, cwd) {
 
   if (!existsSync(resolvedPath)) {
     throw new Error(
-      `catalog not found at ${catalogPath} — install @ecoma-io/archkeep-rules or use --catalog to point to a catalog.json file`,
+      `catalog not found at ${catalogPath} — install @ecoma-io/archkeep-rules ` +
+        `(\`npm install -D @ecoma-io/archkeep-rules\`) or use --catalog to point to a ` +
+        `catalog.json file`,
     );
   }
 
