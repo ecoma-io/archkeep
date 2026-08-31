@@ -5,10 +5,8 @@
 
 ### Bug Fixes
 
-* **archkeep:** clearer error when delta snapshot fed to diff/history — no 'command' field ([c7542e9](https://github.com/ecoma-io/archkeep/commit/c7542e9bf3848ce54789343a18c5101274c4a596))
 * **archkeep:** hardening audit — clearer error for delta snapshot fed to diff/history ([#547](https://github.com/ecoma-io/archkeep/issues/547)) ([c7542e9](https://github.com/ecoma-io/archkeep/commit/c7542e9bf3848ce54789343a18c5101274c4a596))
 * **archkeep:** hardening pass — CLI contract, evidence errors, explain normalization ([#545](https://github.com/ecoma-io/archkeep/issues/545)) ([280a122](https://github.com/ecoma-io/archkeep/commit/280a1222cdc172794f457e95719687e4024c1804))
-* **archkeep:** hardening pass — CLI contract, evidence errors, explain normalization, rules error ([280a122](https://github.com/ecoma-io/archkeep/commit/280a1222cdc172794f457e95719687e4024c1804))
 
 ## [0.18.0](https://github.com/ecoma-io/archkeep/compare/v0.17.0...v0.18.0) (2026-08-31)
 
