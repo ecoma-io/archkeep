@@ -3484,6 +3484,7 @@ const COMMANDS = Object.freeze({
     flagHelp: REPORT_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(REPORT_FLAG_HELP.map((f) => [f.flag, f.key]))),
     defaults: Object.freeze({ format: "text", output: null, config: null }),
+    formats: DESCRIBABLE_FORMATS,
     run: runReport,
   }),
   debt: Object.freeze({

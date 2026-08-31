@@ -5725,6 +5725,11 @@ var _ = adapter.Name
     expect(await runCli(["report", "one", "two"], streams)).toBe(EXIT.usage);
     expect(streams.lines.err.join("\n")).toContain("report takes at most one positional argument");
   });
+  it("refuses sarif on the report verb — it is descriptive, not a findings command", async () => {
+    const streams = profEnv();
+    expect(await runCli(["report", "--format", "sarif"], streams)).toBe(EXIT.usage);
+    expect(streams.lines.err.join("\n")).toContain("unknown format 'sarif'");
+  });
 
   it("diff detects a real policy change under an unchanged profile NAME (P1-17)", async () => {
     // Its own tmpdir workspace, mutated mid-test — kept separate from the
