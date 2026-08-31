@@ -1610,7 +1610,7 @@ async function runExplain(options, { cwd, env }) {
  * same as `check` and `explain`, because the answer depends on which boundary
  * law is in effect.
  *
- * @param {{format: string, output: string|null, config: string|null, plan: boolean, paths: string[]}} options
+ * @param {{format: string, output: string|null, config: string|null, plan: boolean, paths: string[], historyDir: string|null}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */

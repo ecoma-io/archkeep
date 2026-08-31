@@ -408,7 +408,7 @@ export async function planContextCommand(
           covered: waiversResult.covered,
           expired: waiversResult.expired,
           stale: waiversResult.stale,
-          permanentSuppressions: waiversResult.permanentSuppressions,
+          permanentSuppressions: waiversResult.suppressions,
         };
 
   // Decisions / ADRs in scope: the positive lineage — which ADRs, rules, or
