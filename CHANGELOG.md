@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.18.0](https://github.com/ecoma-io/archkeep/compare/v0.17.0...v0.18.0) (2026-08-31)
+
+
+### Features
+
+* **archkeep:** wave 3 — evolution report, event model, and hardening ([#521](https://github.com/ecoma-io/archkeep/issues/521)) ([aace10a](https://github.com/ecoma-io/archkeep/commit/aace10ae3f30b99bab85004fdb11c7562e534ac6))
+
+
+### Bug Fixes
+
+* **archkeep:** add missing formats property to report COMMANDS entry ([#533](https://github.com/ecoma-io/archkeep/issues/533)) ([04b63cc](https://github.com/ecoma-io/archkeep/commit/04b63cc4e7c0075e3db2ba896cd2867487b91773))
+
+
+### Documentation
+
+* harden documentation foundation — roadmap dependency chain and AGENTS.md execution order ([#528](https://github.com/ecoma-io/archkeep/issues/528)) ([d534f1b](https://github.com/ecoma-io/archkeep/commit/d534f1bf1004dcfa6bf04098c7d3218e5c596792))
+* record Phase 4 semantic-model audit outcome ([9d4a017](https://github.com/ecoma-io/archkeep/commit/9d4a0178bf3a4a0895c810b81ec27dcb67b899c6))
+* record Phase 4 semantic-model audit outcome (ADR 0007) ([#523](https://github.com/ecoma-io/archkeep/issues/523)) ([9d4a017](https://github.com/ecoma-io/archkeep/commit/9d4a0178bf3a4a0895c810b81ec27dcb67b899c6))
+* **workspace:** add decisions command documentation ([#535](https://github.com/ecoma-io/archkeep/issues/535)) ([11abbe0](https://github.com/ecoma-io/archkeep/commit/11abbe01ba1d238a5ee873c467c52750c1a7b498))
+* **workspace:** fix 6 documentation gaps from Phase 1 audit ([#534](https://github.com/ecoma-io/archkeep/issues/534)) ([85b9769](https://github.com/ecoma-io/archkeep/commit/85b9769e947dc025d559e01cea5bb99df0a2da25))
+* **workspace:** narrow intelligence roadmap to three gated capabilities ([#527](https://github.com/ecoma-io/archkeep/issues/527)) ([f96cde2](https://github.com/ecoma-io/archkeep/commit/f96cde2e939a60c955db51c0d2a0fb317d06e7d0))
+
 ## [0.17.0](https://github.com/ecoma-io/archkeep/compare/v0.16.1...v0.17.0) (2026-08-29)
 
 
