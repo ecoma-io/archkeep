@@ -96,13 +96,22 @@ function resolveDecision(ref, byId, knownFitness) {
  *   null when the ADR registry is unreadable.
  */
 function buildDecisionImpact(root, constraintImpact, config) {
-  // Collect all unique decisionRefs from affected constraint rows
+  // Collect unique decisionRefs ONLY from constraint rows that are actually
+  // AFFECTED by the change — rows that govern edges from impacted dependents.
+  // A decisionRef in the config is not enough: the decision must be causally
+  // bound to a governance entity the change touches.
   const seenRefs = new Set();
   const affectedRefs = [];
 
-  if (config && config.depConstraints) {
+  if (constraintImpact && config && config.depConstraints) {
+    // Use identity matching: constraintImpact.constraintRows are the actual
+    // config row objects returned by findConstraintsFor — check by reference,
+    // not by string label, for exact causal binding.
+    const activeRows = new Set(constraintImpact.flatMap((entry) => entry.constraintRows));
+
     for (const row of config.depConstraints) {
-      if (row.decisionRef && !seenRefs.has(row.decisionRef)) {
+      if (!row.decisionRef) continue;
+      if (activeRows.has(row) && !seenRefs.has(row.decisionRef)) {
         seenRefs.add(row.decisionRef);
         affectedRefs.push(row.decisionRef);
       }
@@ -160,7 +169,7 @@ function buildDecisionImpact(root, constraintImpact, config) {
   }
 
   return {
-    decisions,
+    decisions: decisions.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
     unresolvedDecisionRefs: [...new Set(unresolvedDecisionRefs)].sort(),
   };
 }
@@ -169,7 +178,7 @@ function buildDecisionImpact(root, constraintImpact, config) {
  * Builds the evolution alignment section: the `affected` shape matching
  * `EvolutionEvent.affected` vocabulary.
  *
- * @param {string} projectName The target project.
+ *
  * @param {{direct: string[], transitive: string[], dependents: string[]}} impact
  * @param {object[]} [constraintImpact] Per-dependent constraint rows.
  * @param {string[]} [resolvedDecisions] Decision IDs that bind affected rows.
@@ -179,9 +188,18 @@ function buildDecisionImpact(root, constraintImpact, config) {
 function buildEvolutionAlignment(projectName, impact, constraintImpact, resolvedDecisions) {
   const affectedProjects = [projectName, ...impact.dependents];
   const affectedConstraints = [];
+  const affectedBoundaries = [];
 
   if (constraintImpact) {
     for (const entry of constraintImpact) {
+      // Collect edge identities for each affected boundary
+      for (const edge of entry.edges) {
+        const edgeId = `${entry.project}>${edge.target}:${edge.type}`;
+        if (!affectedBoundaries.includes(edgeId)) {
+          affectedBoundaries.push(edgeId);
+        }
+      }
+      // Collect constraint row labels
       for (const row of entry.constraintRows) {
         const label = isComboDepConstraint(row)
           ? `allSourceTags:${row.allSourceTags.join(",")}`
@@ -195,7 +213,7 @@ function buildEvolutionAlignment(projectName, impact, constraintImpact, resolved
 
   return {
     projects: [...new Set(affectedProjects)].sort(),
-    boundaries: [],
+    boundaries: affectedBoundaries.sort(),
     constraints: affectedConstraints.sort(),
     decisions: resolvedDecisions ? [...new Set(resolvedDecisions)].sort() : [],
   };
@@ -245,7 +263,22 @@ export function composeImpactStatement(projectName, commandContext, config = nul
     resolvedDecisions,
   );
 
-  // Step 5: Assemble the statement
+  // Step 5: Assemble the statement with coverage notes
+  const notes = [];
+
+  if (config && config.depConstraints) {
+    notes.push(
+      "constraint impact covers only depConstraints (3 of 15 violation types). " +
+        "A project with no violations here may still violate other rules " +
+        "that require import-site details. Run `check` for the complete verdict.",
+    );
+  }
+
+  notes.push(
+    "finding and debt impact are not yet evaluated. " +
+      "The impact statement covers dependency structure and constraint violations only.",
+  );
+
   const statement = {
     project: impact.project,
     impact: {
@@ -255,7 +288,7 @@ export function composeImpactStatement(projectName, commandContext, config = nul
     },
     evolutionAlignment,
     complete: true,
-    notes: [],
+    notes,
   };
 
   if (constraintImpact) {

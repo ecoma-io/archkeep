@@ -465,6 +465,25 @@ describe("evaluateScenario — edge cases", () => {
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.base.revision).toBe("(current workspace)");
+    expect(result.base.attributed).toBe(false);
+  });
+  it("marks complete:false when changes are refused", () => {
+    const graph = makeGraph(["a"], []);
+    const input = {
+      changes: [change("dependency_added", "nonexistent", "a")],
+    };
+    const result = evaluateScenario("a", makeCommandContext(graph), input);
+    expect(result.refused).toBeDefined();
+    expect(result.complete).toBe(false);
+  });
+  it("marks complete:true when all changes apply", () => {
+    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
+    const input = {
+      changes: [change("dependency_added", "b", "a")],
+    };
+    const result = evaluateScenario("a", makeCommandContext(graph), input);
+    expect(result.refused).toBeUndefined();
+    expect(result.complete).toBe(true);
   });
 });
 
