@@ -41,6 +41,7 @@ import { computeImpactConstraints } from "./edge-constraints.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatImpactReport } from "../report/impact-text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import { composeImpactStatement } from "./impact-statement.mjs";
 
 /**
  * Computes the impact set: every project that transitively depends on
@@ -203,6 +204,13 @@ export function impactCommand(projectName, commandContext, config = null) {
       graph.dependencies,
       config.depConstraints,
     );
+  }
+
+  // Full impact statement: when a boundary config is available, compose the
+  // enriched statement that includes decision impact and evolution alignment
+  // in addition to the reverse reachability and constraint impact above.
+  if (config) {
+    result.impactStatement = composeImpactStatement(projectName, commandContext, config);
   }
 
   const envelope = jsonEnvelope({
