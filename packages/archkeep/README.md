@@ -225,8 +225,7 @@ Ten minutes end to end, most of it spent deciding what your tags mean:
 Ten minutes end to end, most of it spent deciding what your tags mean:
 [**Getting started →**](https://github.com/ecoma-io/archkeep/blob/main/docs/getting-started/installation.md). `graph`, `diff`,
 `history`, `trajectory`, `evolution`, `drift`, `impact`, `explain`,
-`context` and the rest of the 23-command surface are in the
-[CLI reference](https://github.com/ecoma-io/archkeep/blob/main/docs/reference/cli.md).
+`context` and the rest of the 24-command surface are in the
 
 ## Documentation map
 

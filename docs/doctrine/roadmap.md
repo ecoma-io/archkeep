@@ -63,7 +63,7 @@ A new reader should find these capabilities described as present, not promised.
 - **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
   a machine-readable report; the same tree and the same model always produce
   the same answer. ([reference/exit-codes.md](../reference/exit-codes.md))
-- **23 commands — `check`, `change`, `graph`, `diff`, `delta`, `discover`,
+- **24 commands — `check`, `change`, `graph`, `diff`, `delta`, `discover`,
   `drift`, `reconcile`, `waivers`, `fitness`, `history`, `trajectory`,
   `evolution`, `health`, `report`, `debt`, `impact`, `explain`, `context`,
   `provenance`, `decisions`, `adr`, `rules`** — each with
