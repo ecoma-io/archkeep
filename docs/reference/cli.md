@@ -29,6 +29,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/archkeep/
 | `decisions`  | `<id>`                           | Walk the full chain behind one recorded decision — decision to bound rows, projects, findings, and its verification level | no               |
 | `adr`        | `[<id>]`                         | List recorded architecture decisions and what each binds                                                                  | no               |
 | `rules`      | `<list                           | info                                                                                                                      | verify           | add> [<rule-name>]` | List official rules, show details, verify catalog integrity, or add a rule | no* |
+| `scenario`   | `<file>`                         | Evaluate a hypothetical change against the current architecture                                                           | no               |
 
 \* `fitness` reports no boundary violation, but it is a verdict command, not a
 descriptive one: a declared function that `fail`s makes it exit 1 (and an
@@ -634,6 +635,23 @@ affected shape matching the `EvolutionEvent.affected` vocabulary: projects,
 boundaries, constraints, and decisions). A `decisionRef` that does not resolve
 is reported in `unresolvedDecisionRefs`, never silently dropped. See
 [json-output.md](json-output.md) for the full schema. Descriptive.
+
+### `scenario <project> --scenario-file <path>`
+
+Evaluates a hypothetical change to the dependency graph and reports what would
+change for the named project. The scenario input is a JSON file (see
+[json-output.md](json-output.md) for the schema) describing one or more
+dependency additions or removals.
+
+The output compares the **current** impact against the **scenario** impact:
+which dependents would be added or removed, whether constraint-impact rows
+would change, and how the decision governance would align. Every result is
+marked `virtual` and `notAuthoritative` — this is a what-if projection, never
+an authoritative verdict.
+
+`--format json` produces a full structured envelope with current, scenario,
+and delta sections. See [json-output.md](json-output.md) for the envelope
+schema. Descriptive.
 
 ### `explain <file:line:column>`
 

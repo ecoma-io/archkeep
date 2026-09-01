@@ -121,7 +121,7 @@ that looked and found nothing — and that holds for a declared gate exactly as
 it holds for a file: a rule that trapped, or whose artifact would not load, is
 never a rule that found nothing.
 
-## The 23 commands
+## The 24 commands
 
 | command      | what it does                                                                                                       | finds violations |
 | ------------ | ------------------------------------------------------------------------------------------------------------------ | ---------------- |
@@ -148,13 +148,14 @@ never a rule that found nothing.
 | `decisions`  | Walks the full chain behind one recorded decision — decision to bound rows, projects, findings, verification level | no               |
 | `adr`        | Lists recorded architecture decisions and what each binds (`docs/adr/`)                                            | no               |
 | `rules`      | Lists official rules, shows details, verifies catalog integrity, or adds a rule                                    | no               |
+| `scenario`   | Evaluates a hypothetical change against the current architecture                                                   | no               |
 
 `check` is the only command that exits 1 on boundary findings — with three
 companions: `fitness` exits 1 when a declared function fails (a failing fitness
 function is a finding, not a print job), `delta` exits 1 when the compared
 change introduced a violation no active waiver covers, and `change` exits 1
 when the change produced architectural consequences its declaration did not
-cover (or skipped ones it did). The other eighteen are
+cover (or skipped ones it did). The other nineteen are
 descriptive or
 proposal-only: they answer questions about the architecture without claiming a
 violation. `context` answers the question an agent asks _before_ editing (what
