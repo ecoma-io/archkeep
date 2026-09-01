@@ -55,6 +55,7 @@ import {
   impactCommand,
   planContextCommand,
   reconcileCommand,
+  scenarioCommand,
   resolveCommandContext,
   resolveDescribedPolicy,
   resolvePolicy,
@@ -448,4 +449,26 @@ export async function proposeTool({ workspaceRoot, mode }, io = {}) {
     authoritative: false,
     written: false,
   };
+}
+
+/**
+ * `archkeep_scenario`: evaluate a hypothetical dependency change without
+ * touching the workspace — a read-only "what if" analysis. The scenario
+ * describes changes (add, remove, or modify dependencies between projects),
+ * and the engine reports what the workspace would look like after those
+ * changes, including new or resolved violations, compared against the current
+ * state. The scenario is never written — every output field carries a
+ * `virtual: true` marker.
+ *
+ * @param {{workspaceRoot?: string, projectName: string, scenarioJson: string}} input
+ * @param {{readGraph?: Function, listFiles?: Function}} [io]
+ * @returns {Promise<object>} The scenario evaluation envelope.
+ * @throws {Error} on the engine's refusals (incomplete coverage), message
+ *   verbatim.
+ */
+export async function scenarioTool({ workspaceRoot, projectName, scenarioJson }, io = {}) {
+  const cwd = cwdOf(workspaceRoot);
+  const commandContext = resolveCommandContext({ cwd }, ioOf(io));
+  const { config } = await resolvePolicy({ config: null }, commandContext, cwd);
+  return envelopeOf(scenarioCommand(projectName, scenarioJson, commandContext, config));
 }

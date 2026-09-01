@@ -57,6 +57,7 @@ import {
   historyTool,
   impactTool,
   proposeTool,
+  scenarioTool,
 } from "./engine.mjs";
 
 /** The server's own name, as a client sees it in `initialize`. */
@@ -369,6 +370,42 @@ export function createServer(io = {}) {
       }),
     },
     asHandler(proposeTool, io),
+  );
+
+  server.registerTool(
+    "archkeep_scenario",
+    {
+      title: "Evaluate a hypothetical dependency change",
+      description:
+        "Evaluates a 'what-if' scenario of dependency changes without modifying the " +
+        "workspace: add, remove, or modify dependencies between projects and see what " +
+        "the workspace would look like after those changes, including new or resolved " +
+        "violations, compared against the current state. The scenario is a JSON object " +
+        "describing one or more changes (see scenario-evaluation.mjs for the schema). " +
+        "The evaluation is read-only — every output field carries a `virtual: true` " +
+        "marker. Equivalent to `archkeep scenario <project> --scenario-file <file> " +
+        "--format json`.",
+      annotations: { readOnlyHint: true },
+      inputSchema: z.strictObject({
+        workspaceRoot: workspaceRootField,
+        projectName: z
+          .string()
+          .min(1)
+          .describe(
+            "Name of the project to evaluate the scenario against (a node of the " +
+              "project graph — `archkeep_graph` lists them).",
+          ),
+        scenarioJson: z
+          .string()
+          .min(1)
+          .describe(
+            "The scenario description as a JSON string. Must be a valid JSON object " +
+              "with a `changes` array. Each change describes a hypothetical dependency " +
+              "modification (e.g. add, remove, or retarget an edge between projects).",
+          ),
+      }),
+    },
+    asHandler(scenarioTool, io),
   );
 
   return server;

@@ -121,7 +121,7 @@ that looked and found nothing — and that holds for a declared gate exactly as
 it holds for a file: a rule that trapped, or whose artifact would not load, is
 never a rule that found nothing.
 
-## The 23 commands
+## The 24 commands
 
 | command      | what it does                                                                                                       | finds violations |
 | ------------ | ------------------------------------------------------------------------------------------------------------------ | ---------------- |
@@ -142,6 +142,7 @@ never a rule that found nothing.
 | `report`     | Composes health, waivers, fitness, decisions and provenance under one resolved law                                 | no               |
 | `debt`       | Ages waivers, gaps and drift across snapshots — a ledger, not a gate                                               | no               |
 | `impact`     | Lists projects that depend on the named one, with constraint context¹                                              | no               |
+| `scenario`   | Evaluates a hypothetical change against the current workspace                                                      | no               |
 | `explain`    | Explains the judgment for one import site                                                                          | no               |
 | `context`    | Shows the architecture constraints that apply to a project¹                                                        | no               |
 | `provenance` | Reports the governance row schema and the run's origin                                                             | no               |
@@ -154,12 +155,13 @@ companions: `fitness` exits 1 when a declared function fails (a failing fitness
 function is a finding, not a print job), `delta` exits 1 when the compared
 change introduced a violation no active waiver covers, and `change` exits 1
 when the change produced architectural consequences its declaration did not
-cover (or skipped ones it did). The other eighteen are
+cover (or skipped ones it did). The other twenty are
 descriptive or
 proposal-only: they answer questions about the architecture without claiming a
 violation. `context` answers the question an agent asks _before_ editing (what
 is this project allowed to reach?); `impact` answers the question during
-planning (what depends on this?); `explain` answers the question after a
+planning (what depends on this?); `scenario` answers the question during
+planning too (what if this dependency changed?); `explain` answers the question after a
 violation is reported (why did this one fail?). `diff` answers the question
 across a single change (what changed, and what boundary implications did the
 change carry?), and `delta` answers its violation half as a gate (which

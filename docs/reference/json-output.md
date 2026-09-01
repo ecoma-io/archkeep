@@ -6,7 +6,7 @@
 `waivers --format json`, `fitness --format json`, `history --format json`,
 `trajectory --format json`,
 `health --format json`, `report --format json`, `debt --format json`,
-`impact --format json`,
+`impact --format json`, `scenario --format json`,
 `explain --format json`, `context --format json`, `provenance --format
 json`, and `adr --format json` wrap the same verdict the terminal report
 and SARIF already carry in one versioned envelope. They change no exit code and no byte
@@ -36,6 +36,8 @@ archkeep impact billing-core --format json --output impact.json
 archkeep explain libs/alpha/main.go:10:5 --format json
 archkeep explain libs/alpha/main.go:10:5 --format json --output explain.json
 archkeep context billing-core --format json
+archkeep scenario billing-core --scenario-file scenario.json --format json
+archkeep scenario billing-core --scenario-file scenario.json --format json --output scenario.json
 archkeep context billing-core --format json --output context.json
 ```
 
@@ -80,13 +82,11 @@ the tree, so two runs of an unchanged workspace differ in
 exactly that one field and nowhere else; `coverage.notes` names the excluded
 field in-band on every `waivers`/`debt` run, so a consumer diffing or hashing
 two envelopes to detect real drift knows what to strip first.
-
 `command` is the one field that varies by which command produced the envelope —
 `"check"`, `"graph"`, `"diff"`, `"delta"`, `"change"`, `"discover"`, `"drift"`, `"reconcile"`,
 `"waivers"`, `"fitness"`, `"history"`, `"trajectory"`, `"evolution"`, `"health"`, `"report"`,
 `"debt"`,
-
-`"impact"`, `"explain"`, `"context"`, `"provenance"`, or `"adr"`. `src/report/json.mjs`
+`"impact"`, `"scenario"`, `"explain"`, `"context"`, `"provenance"`, or `"adr"`. `src/report/json.mjs`
 (the module that builds the envelope) and `src/commands/README.md` (the
 module layout it follows) are both written for each command to reuse the same
 wrapper.
@@ -100,7 +100,7 @@ wrapper.
 | `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"delta"`, `"change"`, `"discover"`, `"drift"`, `"reconcile"`, `"waivers"`, `"fitness"`, `"history"`, `"trajectory"`, `"evolution"`, `"health"`, `"report"`, `"debt"`, `"impact"`, `"explain"`, `"context"`, `"provenance"`, or `"adr"`.                                                                                                                                                 |
 | `workspace`     | `{root, provider, marker, provenance}`   | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"archkeep.json"`, `".moon"`, or `".config/moon"`) — except on an `adr` envelope, which reads no project model and carries `provider: "native"`, `marker: "docs/adr"` ([adr.md](adr.md)). `provenance` is the git origin of the run, or `null` when git is unavailable — see below. |
 | `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `exitCode`      | `0` \| `1` \| `3`                        | The same code the process exits with — never `2`: a usage error never reaches far enough to build an envelope.                                                                                                                                                                                                                                                                                                                                                 |
+| `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"delta"`, `"change"`, `"discover"`, `"drift"`, `"reconcile"`, `"waivers"`, `"fitness"`, `"history"`, `"trajectory"`, `"evolution"`, `"health"`, `"report"`, `"debt"`, `"impact"`, `"scenario"`, `"explain"`, `"context"`, `"provenance"`, or `"adr"`.                                                                                                                                   |
 | `decision`      | object \| absent                         | The same verdict in the four-state vocabulary — `{verdict, reason?, notApplicableReason?, sampleTime?}`. Present on every `check` and `delta` envelope; see [evidence.md](evidence.md).                                                                                                                                                                                                                                                                        |
 | `coverage`      | object                                   | What the run inspected, and what it could not. See below.                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `result`        | object                                   | The command's own payload — for `check`, the violations, the three workspace-level checks (`goWork`, `tsconfigPaths`, `declaredEdges`), and — when the workspace has one — the architecture-intent verdict. See below.                                                                                                                                                                                                                                         |
@@ -699,13 +699,44 @@ run (exit 3) that produces no envelope, never an empty ledger.
 on it. It is descriptive: it never exits `1`, because a reverse-reachability
 listing is never a finding.
 
-| field              | type                 | meaning                                                                                                                                                                                                                                                                  |
-| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `project`          | string               | The project whose impact was queried.                                                                                                                                                                                                                                    |
-| `direct`           | `string[]`           | Projects whose edges point straight at the target, sorted by plain string comparison.                                                                                                                                                                                    |
-| `transitive`       | `string[]`           | Projects that reach the target only through another project, sorted by plain string comparison.                                                                                                                                                                          |
-| `dependents`       | `string[]`           | The union of `direct` and `transitive`, sorted by plain string comparison. An empty list is a claim.                                                                                                                                                                     |
-| `constraintImpact` | `object[]` or absent | Present when a boundary config with `depConstraints` was provided. Each entry is `{project, edges, constraintRows, violations}` for a dependent. Covers only tag-based constraints (3 of 15 violation types) — see `coverage.notes`. Absent when no config was provided. |
+| field              | type                 | meaning                                                                                                                                                                                                                                                                                                                   |
+| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project`          | string               | The project whose impact was queried.                                                                                                                                                                                                                                                                                     |
+| `direct`           | `string[]`           | Projects whose edges point straight at the target, sorted by plain string comparison.                                                                                                                                                                                                                                     |
+| `transitive`       | `string[]`           | Projects that reach the target only through another project, sorted by plain string comparison.                                                                                                                                                                                                                           |
+| `dependents`       | `string[]`           | The union of `direct` and `transitive`, sorted by plain string comparison. An empty list is a claim.                                                                                                                                                                                                                      |
+| `constraintImpact` | `object[]` or absent | Present when a boundary config with `depConstraints` was provided. Each entry is `{project, edges, constraintRows, violations}` for a dependent. Covers only tag-based constraints (3 of 15 violation types) — see `coverage.notes`. Absent when no config was provided.                                                  |
+| `impactStatement`  | object or absent     | The composed Impact Statement for the target project: reverse reachability (`impact`), constraint impact, decision impact, and evolution alignment. Contains `{project, impact, constraintImpact?, decisionImpact?, evolutionAlignment, complete, notes}`. Present when a boundary config was provided; absent otherwise. |
+
+## `result` (for `command: "scenario"`)
+
+`scenario` evaluates a hypothetical change against the current workspace. It is
+descriptive: it never exits `1`, because a what-if evaluation is never a
+finding. Every result field carries `virtual: true` / `notAuthoritative` markers
+— the output describes a would-be state, never a real verdict.
+
+| field              | type                     | meaning                                                                                                                                                                                                                                                               |
+| ------------------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `virtual`          | boolean                  | Always `true`. The scenario result is a would-be evaluation, not a real workspace verdict.                                                                                                                                                                            |
+| `notAuthoritative` | boolean                  | Always `true`. The scenario result carries no authority — it is a projection, never a gate.                                                                                                                                                                           |
+| `project`          | string                   | The project whose scenario was evaluated.                                                                                                                                                                                                                             |
+| `base`             | `{revision, attributed}` | The base graph against which the scenario was evaluated. `revision` is a string identifying the base; `attributed` is an object describing its origin.                                                                                                                |
+| `changes`          | `string[]`               | The changes that were applied, described as human-readable strings (e.g. `"added dependency: A → B"`).                                                                                                                                                                |
+| `refused`          | `string[]` or absent     | Changes that could not be applied, with reasons. Present only when one or more changes were refused (e.g. source or target project not in graph, edge does not exist for removal).                                                                                    |
+| `complete`         | boolean                  | `true` when all changes were applied (refused is empty or absent). `false` when some changes were refused — partial results remain valid.                                                                                                                             |
+| `notes`            | `string[]`               | Caveats about the evaluation — such as constraint or decision gaps, or limits of the scenario capability.                                                                                                                                                             |
+| `current`          | object                   | The current (pre-scenario) impact state. Structure mirrors the impact statement: `{impact, constraintImpact?, decisionImpact?, evolutionAlignment}`. See the `impact` result table for field descriptions.                                                            |
+| `scenario`         | object                   | The would-be (post-scenario) impact state. Same structure as `current`.                                                                                                                                                                                               |
+| `delta`            | object                   | What would change between current and scenario: `{dependentsAdded: string[], dependentsRemoved: string[], constraintsChanged: boolean, decisionsChanged: boolean}`. `dependentsAdded` and `dependentsRemoved` name the projects whose impact membership would change. |
+
+Each of `current` and `scenario` contains:
+
+| sub-field            | type               | meaning                                                                                                                                                                                                                                   |
+| -------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `impact`             | object             | The reverse-reachability impact: `{direct: string[], transitive: string[], dependents: string[]}`. Same shape as the `impact` command's result.                                                                                           |
+| `constraintImpact`   | object[] or absent | Present when a boundary config with `depConstraints` was provided. Each entry is `{project, edges, constraintRows, violations}` — same shape as the `impact` command's `constraintImpact`. Absent when no config was provided.            |
+| `decisionImpact`     | object or absent   | Present when constraint impact was computed. Contains `{decisions, unresolvedDecisionRefs}`. `decisions` lists decisions engaged by constraint violations; `unresolvedDecisionRefs` names decision references that could not be resolved. |
+| `evolutionAlignment` | object             | Present on both current and scenario. Contains `{boundaries, constraints, decisions, projects}` — the evolution-alignment analysis for the project in each state.                                                                         |
 
 ## `result` (for `command: "explain"`)
 
