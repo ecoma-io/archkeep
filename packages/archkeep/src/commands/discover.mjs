@@ -73,6 +73,46 @@ export function buildObserved(commandContext) {
 }
 
 /**
+ * Convert a discovery proposal into an `architecture-intent.json`-compatible
+ * object. The conversion preserves the proposal's structural intent:
+ *
+ * - **Components** (directory groupings of 2+ projects) → `boundaries` entries
+ *   with `directory:` selectors.
+ * - **`noDependency` rules** → `forbidden` entries — cross-component
+ *   dependencies that should not exist.
+ *
+ * Confidence markers and evidence are dropped: the user is expected to review
+ * the output before using it with `drift` or `reconcile`.
+ *
+ * @param {object} proposal The proposal from `evaluateDiscovery`.
+ * @returns {{version: string, boundaries: Array<{name: string, match: string[]}>, forbidden?: Array<{source: string, target: string}>}}
+ */
+export function proposalToIntent(proposal) {
+  const boundaries = (proposal.components?.items ?? []).map((component) => ({
+    name: component.name,
+    match: [`directory:${component.commonDirectory}`],
+  }));
+
+  // `noDependency` rules map to `forbidden` intent rows. The rules array
+  // includes both `noDependency` and `boundary` kinds; only the former
+  // carries source/target project pairs.
+  const forbidden = (proposal.rules?.items ?? [])
+    .filter((rule) => rule.kind === "noDependency")
+    .map((rule) => ({
+      source: rule.source,
+      target: rule.target,
+    }));
+
+  return {
+    version: "1",
+    // Auto-generated header comment is not possible in strict JSON; the
+    // user is expected to review before using with drift/reconcile.
+    boundaries,
+    ...(forbidden.length > 0 ? { forbidden } : {}),
+  };
+}
+
+/**
  * Runs the `discover` command: observes the workspace, optionally proposes the
  * candidate architecture over it, and returns the report.
  *
