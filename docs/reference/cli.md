@@ -625,6 +625,15 @@ direct from transitive dependents. When a boundary config is available, also
 shows which constraint rows govern each dependent's edge and whether it
 violates them. Descriptive.
 
+When a boundary config is available, `--format json` additionally carries
+an `impactStatement` field — a composed impact statement that includes
+**decision impact** (which recorded ADRs bind the affected constraint rows,
+with their lifecycle status and authority) and **evolution alignment** (the
+affected shape matching the `EvolutionEvent.affected` vocabulary: projects,
+boundaries, constraints, and decisions). A `decisionRef` that does not resolve
+is reported in `unresolvedDecisionRefs`, never silently dropped. See
+[json-output.md](json-output.md) for the full schema. Descriptive.
+
 ### `explain <file:line:column>`
 
 Explains the judgment for one import site: which constraint row matched, which
