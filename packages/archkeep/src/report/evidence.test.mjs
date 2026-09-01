@@ -176,7 +176,11 @@ describe("buildDecision — additional silent-direction invariants", () => {
 
 describe("buildDecision — determinism", () => {
   it("produces byte-identical output across 10 calls with status-based input", () => {
-    const input = { status: "ok", coverageComplete: true, findings: 0 };
+    const input = /** @type {{ status: "ok", coverageComplete: true, findings: 0 }} */ ({
+      status: "ok",
+      coverageComplete: true,
+      findings: 0,
+    });
     const results = Array.from({ length: 10 }, () => buildDecision(input));
     const first = JSON.stringify(results[0]);
     for (let i = 1; i < results.length; i++) {
@@ -185,11 +189,11 @@ describe("buildDecision — determinism", () => {
   });
 
   it("produces byte-identical output across 10 calls with explicit verdict", () => {
-    const input = {
+    const input = /** @type {{ verdict: "fail", coverageComplete: true, findings: 3 }} */ ({
       verdict: "fail",
       coverageComplete: true,
       findings: 3,
-    };
+    });
     const results = Array.from({ length: 10 }, () => buildDecision(input));
     const first = JSON.stringify(results[0]);
     for (let i = 1; i < results.length; i++) {
@@ -198,11 +202,11 @@ describe("buildDecision — determinism", () => {
   });
 
   it("produces byte-identical output across 10 calls with unknown verdict", () => {
-    const input = {
+    const input = /** @type {{ status: "no-verdict", coverageComplete: false, findings: 0 }} */ ({
       status: "no-verdict",
       coverageComplete: false,
       findings: 0,
-    };
+    });
     const results = Array.from({ length: 10 }, () => buildDecision(input));
     const first = JSON.stringify(results[0]);
     for (let i = 1; i < results.length; i++) {
@@ -211,12 +215,13 @@ describe("buildDecision — determinism", () => {
   });
 
   it("produces byte-identical output across 10 calls with not_applicable verdict", () => {
-    const input = {
-      verdict: "not_applicable",
-      coverageComplete: true,
-      findings: 0,
-      notApplicableReason: "this workspace declares no fitness functions",
-    };
+    const input =
+      /** @type {{ verdict: "not_applicable", coverageComplete: true, findings: 0, notApplicableReason: string }} */ ({
+        verdict: "not_applicable",
+        coverageComplete: true,
+        findings: 0,
+        notApplicableReason: "this workspace declares no fitness functions",
+      });
     const results = Array.from({ length: 10 }, () => buildDecision(input));
     const first = JSON.stringify(results[0]);
     for (let i = 1; i < results.length; i++) {
@@ -233,13 +238,17 @@ describe("buildDecision — error-path", () => {
   });
 
   it("refuses an empty run object — missing both status and verdict", () => {
-    expect(() => buildDecision({})).toThrow(/needs either a status or an explicit verdict/);
+    expect(() => buildDecision(/** @type {any} */ ({}))).toThrow(
+      /needs either a status or an explicit verdict/,
+    );
   });
 
   it("refuses a run with unknown status string — no silent default to 'unknown'", () => {
-    expect(() => buildDecision({ status: "pending", coverageComplete: true, findings: 0 })).toThrow(
-      /has no verdict/,
-    );
+    expect(() =>
+      buildDecision(
+        /** @type {any} */ ({ status: "pending", coverageComplete: true, findings: 0 }),
+      ),
+    ).toThrow(/has no verdict/);
   });
 
   it("refuses undefined findings — cannot count violations from absence", () => {
@@ -250,7 +259,9 @@ describe("buildDecision — error-path", () => {
 
   it("refuses a non-numeric findings value — a string cannot be a count", () => {
     expect(() =>
-      buildDecision({ status: "findings", coverageComplete: true, findings: "three" }),
+      buildDecision(
+        /** @type {any} */ ({ status: "findings", coverageComplete: true, findings: "three" }),
+      ),
     ).toThrow(/findings must be a non-negative number/);
   });
 

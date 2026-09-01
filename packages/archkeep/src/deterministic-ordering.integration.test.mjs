@@ -23,7 +23,7 @@ import { join } from "node:path";
 
 import { runCli } from "../cli.mjs";
 import { ADR_DIR } from "./governance/adr-registry.mjs";
-import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "./spawn-budget.mjs";
+import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../spawn-budget.mjs";
 
 // ---------------------------------------------------------------------------
 // Fixture: two projects that sort in reverse-alphabetical order, with tags
