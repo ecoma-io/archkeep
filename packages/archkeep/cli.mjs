@@ -115,7 +115,7 @@ import { adrCommand } from "./src/commands/adr.mjs";
 import { decisionsCommand } from "./src/commands/decisions.mjs";
 import { diffCommand } from "./src/commands/diff.mjs";
 import { captureDelta, deltaCommand } from "./src/commands/delta.mjs";
-import { discoverCommand } from "./src/commands/discover.mjs";
+import { discoverCommand, proposalToIntent } from "./src/commands/discover.mjs";
 import { driftCommand } from "./src/commands/drift.mjs";
 import { fitnessCommand } from "./src/commands/fitness.mjs";
 import { reconcileCommand } from "./src/commands/reconcile.mjs";
@@ -2212,13 +2212,18 @@ async function runDebt(options, { cwd, env }) {
  * graph. `--propose` is opt-in: a proposal is a suggestion, and a workspace
  * that does not ask for one must not get one.
  *
- * @param {{format: string, output: string|null, propose: boolean, paths: string[]}} options
+ * @param {{format: string, output: string|null, propose: boolean, writeIntent: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
 async function runDiscover(options, { cwd, env }) {
   if (options.paths.length > 0) {
     env.err(`archkeep: discover takes no positional arguments; got ${options.paths.join(", ")}`);
+    return EXIT.usage;
+  }
+
+  if (options.writeIntent && !options.propose) {
+    env.err("archkeep: --write-intent requires --propose");
     return EXIT.usage;
   }
 
@@ -2255,6 +2260,17 @@ async function runDiscover(options, { cwd, env }) {
     );
   } else {
     env.out(report);
+  }
+
+  if (options.writeIntent) {
+    try {
+      const intentJson = JSON.stringify(proposalToIntent(result.proposal), null, 2) + "\n";
+      writeFileSync(options.writeIntent, intentJson, "utf-8");
+      env.err(`archkeep: proposed architecture written to ${options.writeIntent}`);
+    } catch (error) {
+      env.err(`archkeep: failed to write intent file: ${error.message}`);
+      return EXIT.error;
+    }
   }
 
   // Discover is descriptive: 0 when it completes, never 1.
@@ -2707,6 +2723,17 @@ const DISCOVER_FLAG_HELP = Object.freeze([
       "Also derive candidate components, boundaries, tags and rules from",
       "the observed facts — every candidate marked proposed and not",
       "authoritative; nothing is ever written",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--write-intent",
+    key: "writeIntent",
+    arg: "<file>",
+    describe: Object.freeze([
+      "Write the proposed components and rules to a valid",
+      "architecture-intent.json file. Only valid with --propose;",
+      "the file is a candidate for drift/reconcile and must be",
+      "reviewed before use",
     ]),
   }),
   Object.freeze({
@@ -3390,7 +3417,7 @@ const COMMANDS = Object.freeze({
     summary: "Report observed facts, and optionally propose candidate architecture",
     flagHelp: DISCOVER_FLAG_HELP,
     flags: Object.freeze(Object.fromEntries(DISCOVER_FLAG_HELP.map((f) => [f.flag, f.key]))),
-    defaults: Object.freeze({ format: "text", output: null, propose: false }),
+    defaults: Object.freeze({ format: "text", output: null, propose: false, writeIntent: null }),
     formats: DESCRIBABLE_FORMATS,
     booleans: Object.freeze(["propose"]),
     run: runDiscover,

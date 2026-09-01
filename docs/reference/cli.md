@@ -186,11 +186,12 @@ presence.
 
 ### `discover`
 
-| flag        | argument       | default | meaning                                                                                                                        |
-| ----------- | -------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `--format`  | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope.                                                                                |
-| `--output`  | `<file>`       | stdout  | Write the report to a file instead of stdout.                                                                                  |
-| `--propose` | (none)         | off     | Compute and print the candidate architecture — components, boundary assertions, tag vocabulary, rules — over the observations. |
+| flag             | argument       | default | meaning                                                                                                                        |
+| ---------------- | -------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `--format`       | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope.                                                                                |
+| `--output`       | `<file>`       | stdout  | Write the report to a file instead of stdout.                                                                                  |
+| `--propose`      | (none)         | off     | Compute and print the candidate architecture — components, boundary assertions, tag vocabulary, rules — over the observations. |
+| `--write-intent` | `<file>`       | off     | With `--propose`, write the proposed components and rules to a valid `architecture-intent.json` file (review before use).      |
 
 No positional arguments. `discover` is descriptive: it never exits 1, only 0 on
 a completed observation and 3 when coverage is incomplete, the model cannot be
@@ -460,14 +461,14 @@ policy identity for [`diff`](#diff-baseline) to compare against. A boundary
 config that IS there and will not load still fails the run with exit 3, because
 an absent law and a broken one must not report alike.
 
-### `discover`
-
 Reports the observed architecture: projects, edges, tags, and the coverage a
 verdict over this tree could trust. With `--propose`, it also derives the
 candidate architecture those observations imply — components, boundary
 assertions, tag vocabulary and rules — each marked `proposed: true` and
-`notAuthoritative: true`, and never written to `architecture-intent.json`.
-Descriptive -- an observation, or a candidate, is never a finding.
+`notAuthoritative: true`. With `--write-intent`, the proposed components
+and rules are written to a valid `architecture-intent.json` file (review
+before use with `drift` or `reconcile`). Descriptive -- an observation,
+or a candidate, is never a finding.
 
 ### `diff <baseline>`
 
