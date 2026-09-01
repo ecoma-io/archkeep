@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { buildObserved, discoverCommand } from "./discover.mjs";
+import { buildObserved, discoverCommand, proposalToIntent } from "./discover.mjs";
 import { formatDiscoverReport } from "../report/discover-text.mjs";
 
 vi.mock("./provenance.mjs", () => ({ resolveProvenance: vi.fn(() => "mock-provenance") }));
@@ -249,5 +249,146 @@ describe("formatDiscoverReport", () => {
       coverage: { complete: true, imports: 0, analyzedFiles: 0, projects: 0, notAnalyzed: [] },
     });
     expect(report).toContain("no observed projects — nothing to propose");
+  });
+});
+
+describe("proposalToIntent", () => {
+  it("converts components to boundaries with directory: selectors", () => {
+    const proposal = {
+      proposed: true,
+      notAuthoritative: true,
+      unknown: false,
+      components: {
+        items: [
+          {
+            name: "libs/core",
+            commonDirectory: "libs/core",
+            projects: ["core-a", "core-b"],
+            evidence: [],
+            confidence: "medium",
+          },
+        ],
+        total: 1,
+      },
+      rules: { items: [], total: 0 },
+    };
+
+    const intent = proposalToIntent(proposal);
+    expect(intent.version).toBe("1");
+    expect(intent.boundaries).toEqual([{ name: "libs/core", match: ["directory:libs/core"] }]);
+    expect(intent.forbidden).toBeUndefined();
+  });
+
+  it("converts noDependency rules to forbidden entries", () => {
+    const proposal = {
+      proposed: true,
+      notAuthoritative: true,
+      unknown: false,
+      components: { items: [], total: 0 },
+      rules: {
+        items: [
+          {
+            kind: "noDependency",
+            source: "web-app",
+            target: "core-lib",
+            evidence: [],
+            confidence: "medium",
+          },
+        ],
+        total: 1,
+      },
+    };
+
+    const intent = proposalToIntent(proposal);
+    expect(intent.forbidden).toEqual([{ source: "web-app", target: "core-lib" }]);
+  });
+
+  it("skips boundary-kind rules (they carry no source/target)", () => {
+    const proposal = {
+      proposed: true,
+      notAuthoritative: true,
+      unknown: false,
+      components: { items: [], total: 0 },
+      rules: {
+        items: [
+          { kind: "boundary", component: "libs/core", evidence: [], confidence: "medium" },
+          {
+            kind: "noDependency",
+            source: "a",
+            target: "b",
+            evidence: [],
+            confidence: "medium",
+          },
+        ],
+        total: 2,
+      },
+    };
+
+    const intent = proposalToIntent(proposal);
+    expect(intent.forbidden).toHaveLength(1);
+    expect(intent.forbidden[0]).toEqual({ source: "a", target: "b" });
+  });
+
+  it("returns empty boundaries and no forbidden key for an empty proposal", () => {
+    const proposal = {
+      proposed: true,
+      notAuthoritative: true,
+      unknown: true,
+      components: { items: [], total: 0 },
+      rules: { items: [], total: 0 },
+    };
+
+    const intent = proposalToIntent(proposal);
+    expect(intent.boundaries).toEqual([]);
+    expect(intent.forbidden).toBeUndefined();
+  });
+
+  it("produces valid architecture-intent.json (version '1')", () => {
+    const proposal = {
+      proposed: true,
+      notAuthoritative: true,
+      unknown: false,
+      components: {
+        items: [
+          {
+            name: "libs/shared",
+            commonDirectory: "libs/shared",
+            projects: ["shared-utils", "shared-ui"],
+            evidence: [],
+            confidence: "medium",
+          },
+          {
+            name: "apps/portal",
+            commonDirectory: "apps/portal",
+            projects: ["portal-web"],
+            evidence: [],
+            confidence: "medium",
+          },
+        ],
+        total: 2,
+      },
+      rules: {
+        items: [
+          {
+            kind: "noDependency",
+            source: "portal-web",
+            target: "shared-ui",
+            evidence: [],
+            confidence: "medium",
+          },
+        ],
+        total: 1,
+      },
+    };
+
+    const intent = proposalToIntent(proposal);
+    // The output must be valid JSON with the expected top-level keys.
+    const raw = JSON.stringify(intent);
+    expect(() => JSON.parse(raw)).not.toThrow();
+    expect(intent).toHaveProperty("version", "1");
+    expect(intent).toHaveProperty("boundaries");
+    expect(intent).toHaveProperty("forbidden");
+    expect(intent.boundaries).toHaveLength(2);
+    expect(intent.forbidden).toHaveLength(1);
   });
 });
