@@ -6,7 +6,8 @@
 `waivers --format json`, `fitness --format json`, `history --format json`,
 `trajectory --format json`,
 `health --format json`, `report --format json`, `debt --format json`,
-`impact --format json`, `scenario --format json`,
+`impact --format json`,
+`scenario --format json`,
 `explain --format json`, `context --format json`, `provenance --format
 json`, and `adr --format json` wrap the same verdict the terminal report
 and SARIF already carry in one versioned envelope. They change no exit code and no byte
@@ -699,48 +700,59 @@ run (exit 3) that produces no envelope, never an empty ledger.
 on it. It is descriptive: it never exits `1`, because a reverse-reachability
 listing is never a finding.
 
-| field              | type                 | meaning                                                                                                                                                                                                                                                                                                                   |
-| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `project`          | string               | The project whose impact was queried.                                                                                                                                                                                                                                                                                     |
-| `direct`           | `string[]`           | Projects whose edges point straight at the target, sorted by plain string comparison.                                                                                                                                                                                                                                     |
-| `transitive`       | `string[]`           | Projects that reach the target only through another project, sorted by plain string comparison.                                                                                                                                                                                                                           |
-| `dependents`       | `string[]`           | The union of `direct` and `transitive`, sorted by plain string comparison. An empty list is a claim.                                                                                                                                                                                                                      |
-| `constraintImpact` | `object[]` or absent | Present when a boundary config with `depConstraints` was provided. Each entry is `{project, edges, constraintRows, violations}` for a dependent. Covers only tag-based constraints (3 of 15 violation types) — see `coverage.notes`. Absent when no config was provided.                                                  |
-| `impactStatement`  | object or absent     | The composed Impact Statement for the target project: reverse reachability (`impact`), constraint impact, decision impact, and evolution alignment. Contains `{project, impact, constraintImpact?, decisionImpact?, evolutionAlignment, complete, notes}`. Present when a boundary config was provided; absent otherwise. |
-
-## `result` (for `command: "scenario"`)
-
-`scenario` evaluates a hypothetical change against the current workspace. It is
-descriptive: it never exits `1`, because a what-if evaluation is never a
-finding. Every result field carries `virtual: true` / `notAuthoritative` markers
-— the output describes a would-be state, never a real verdict.
-
-| field              | type                     | meaning                                                                                                                                                                                                                                                               |
-| ------------------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `virtual`          | boolean                  | Always `true`. The scenario result is a would-be evaluation, not a real workspace verdict.                                                                                                                                                                            |
-| `notAuthoritative` | boolean                  | Always `true`. The scenario result carries no authority — it is a projection, never a gate.                                                                                                                                                                           |
-| `project`          | string                   | The project whose scenario was evaluated.                                                                                                                                                                                                                             |
-| `base`             | `{revision, attributed}` | The base graph against which the scenario was evaluated. `revision` is a string identifying the base; `attributed` is an object describing its origin.                                                                                                                |
-| `changes`          | `string[]`               | The changes that were applied, described as human-readable strings (e.g. `"added dependency: A → B"`).                                                                                                                                                                |
-| `refused`          | `string[]` or absent     | Changes that could not be applied, with reasons. Present only when one or more changes were refused (e.g. source or target project not in graph, edge does not exist for removal).                                                                                    |
-| `complete`         | boolean                  | `true` when all changes were applied (refused is empty or absent). `false` when some changes were refused — partial results remain valid.                                                                                                                             |
-| `notes`            | `string[]`               | Caveats about the evaluation — such as constraint or decision gaps, or limits of the scenario capability.                                                                                                                                                             |
-| `current`          | object                   | The current (pre-scenario) impact state. Structure mirrors the impact statement: `{impact, constraintImpact?, decisionImpact?, evolutionAlignment}`. See the `impact` result table for field descriptions.                                                            |
-| `scenario`         | object                   | The would-be (post-scenario) impact state. Same structure as `current`.                                                                                                                                                                                               |
-| `delta`            | object                   | What would change between current and scenario: `{dependentsAdded: string[], dependentsRemoved: string[], constraintsChanged: boolean, decisionsChanged: boolean}`. `dependentsAdded` and `dependentsRemoved` name the projects whose impact membership would change. |
-
-Each of `current` and `scenario` contains:
-
-| sub-field            | type               | meaning                                                                                                                                                                                                                                   |
-| -------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `impact`             | object             | The reverse-reachability impact: `{direct: string[], transitive: string[], dependents: string[]}`. Same shape as the `impact` command's result.                                                                                           |
-| `constraintImpact`   | object[] or absent | Present when a boundary config with `depConstraints` was provided. Each entry is `{project, edges, constraintRows, violations}` — same shape as the `impact` command's `constraintImpact`. Absent when no config was provided.            |
-| `decisionImpact`     | object or absent   | Present when constraint impact was computed. Contains `{decisions, unresolvedDecisionRefs}`. `decisions` lists decisions engaged by constraint violations; `unresolvedDecisionRefs` names decision references that could not be resolved. |
-| `evolutionAlignment` | object             | Present on both current and scenario. Contains `{boundaries, constraints, decisions, projects}` — the evolution-alignment analysis for the project in each state.                                                                         |
-
-## `result` (for `command: "explain"`)
-
-`explain` takes a `file:line:column` site and explains the judgment for that one
+| field              | type                 | meaning                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project`          | string               | The project whose impact was queried.                                                                                                                                                                                                                                                                                                                               |
+| `direct`           | `string[]`           | Projects whose edges point straight at the target, sorted by plain string comparison.                                                                                                                                                                                                                                                                               |
+| `transitive`       | `string[]`           | Projects that reach the target only through another project, sorted by plain string comparison.                                                                                                                                                                                                                                                                     |
+| `dependents`       | `string[]`           | The union of `direct` and `transitive`, sorted by plain string comparison. An empty list is a claim.                                                                                                                                                                                                                                                                |
+| `constraintImpact` | `object[]` or absent | Present when a boundary config with `depConstraints` was provided. Each entry is `{project, edges, constraintRows, violations}` for a dependent. Covers only tag-based constraints (3 of 15 violation types) — see `coverage.notes`. Absent when no config was provided.                                                                                            |
+| `impactStatement`  | object or absent     | Present when a boundary config was provided. The composed impact statement: an enriched reverse-reachability analysis that includes decision impact (which recorded decisions bind the affected constraint rows) and evolution alignment (the affected shape in `EvolutionEvent.affected` vocabulary). See the sub-table below. Absent when no config was provided. |
+|
+|### `impactStatement` fields
+|
+| field                | type     | meaning                                                                                                                                                                    |
+| -------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project`            | string   | The project name the impact was evaluated for.                                                                                                                             |
+| `impact`             | object   | The impact shape: `{dependents, direct, transitive}`.                                                                                                                      |
+| `decisionImpact`     | object   | Which recorded decisions bind the affected constraint rows. `{decisions: [{id, kind, status, hasAuthority, supersedes, supersededBy}], unresolvedDecisionRefs: [string]}`. |
+| `constraintImpact`   | array    | Constraint impact per dependent, same shape as the top-level `constraintImpact` array.                                                                                     |
+| `evolutionAlignment` | object   | The affected shape matching the `EvolutionEvent.affected` vocabulary: `{projects, boundaries, constraints, decisions}`.                                                    |
+| `notes`              | string[] | Informational notes.                                                                                                                                                       |
+| `complete`           | boolean  | Whether the statement could be fully composed.                                                                                                                             |
+|
+|## `result` (for `command: "scenario"`)
+|
+|`scenario <project> --scenario-file <path>` evaluates a hypothetical change to
+|the dependency graph and compares the current impact against the scenario
+|impact. It is descriptive: it exits `0` on completion, never `1`. Every result
+|is marked `virtual` and `notAuthoritative` — a what-if projection, never an
+|authoritative verdict.
+|
+| field                         | type                 | meaning                                                                                                                                                         |
+| ----------------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project`                     | string               | The project name the scenario was evaluated for.                                                                                                                |
+| `virtual`                     | boolean              | Always `true`. Marks the output as a what-if projection, never an authoritative verdict.                                                                        |
+| `notAuthoritative`            | boolean              | Always `true`. Synonym for `virtual`, present in the same envelope.                                                                                             |
+| `complete`                    | boolean              | Whether the evaluation could run to completion. Always `true` — a refusal populates `refused` instead.                                                          |
+| `base`                        | object               | The base revision the scenario is evaluated against. `{revision: string, attributed: boolean}`. `attributed` is `true` when a `base` was provided in the input. |
+| `changes`                     | string[]             | Human-readable descriptions of each applied change.                                                                                                             |
+| `notes`                       | string[]             | Informational notes about the evaluation (e.g. `"virtual evaluation — not authoritative"`).                                                                     |
+| `current`                     | object               | The current impact state, before the scenario changes. Same shape as `impact --format json`'s top-level `result`.                                               |
+| `current.impact`              | object               | The current impact: `{project, dependents, direct, transitive}`.                                                                                                |
+| `current.constraintImpact`    | `object[]` or `null` | Current constraint impact per dependent. `null` when no boundary config was provided.                                                                           |
+| `current.decisionImpact`      | object               | Current decision impact: which recorded decisions bind the affected constraint rows.                                                                            |
+| `current.evolutionAlignment`  | object               | Current evolution alignment: which `EvolutionEvent.affected` categories are touched.                                                                            |
+| `scenario`                    | object               | The scenario impact state, after the changes are applied. Same shape as `current`.                                                                              |
+| `scenario.impact`             | object               | The scenario impact: `{project, dependents, direct, transitive}`.                                                                                               |
+| `scenario.constraintImpact`   | `object[]` or `null` | Scenario constraint impact. `null` when no boundary config was provided.                                                                                        |
+| `scenario.decisionImpact`     | object               | Scenario decision impact.                                                                                                                                       |
+| `scenario.evolutionAlignment` | object               | Scenario evolution alignment.                                                                                                                                   |
+| `delta`                       | object               | What changes between current and scenario.                                                                                                                      |
+| `delta.dependentsAdded`       | string[]             | Projects that become dependents in the scenario.                                                                                                                |
+| `delta.dependentsRemoved`     | string[]             | Projects that cease being dependents in the scenario.                                                                                                           |
+| `delta.constraintsChanged`    | boolean              | Whether any constraint-impact rows differ between current and scenario.                                                                                         |
+| `delta.decisionsChanged`      | boolean              | Whether any decision-impact fields differ between current and scenario.                                                                                         |
 import. It is descriptive: it never exits `1`, because an explanation is never a
 finding.
 

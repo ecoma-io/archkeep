@@ -159,7 +159,8 @@ let baseline;
 let deltaBaseline;
 let changeIntent;
 let firstCommit;
-let scenarioFile;
+let scenarioInput;
+
 /** A git command in the fixture, with an identity that does not read the machine's. */
 const git = (...args) =>
   spawnSync("git", args, {
@@ -246,6 +247,17 @@ beforeAll(async () => {
     )}\n`,
   );
 
+  // Scenario input for the scenario command — a hypothetical dependency added
+  // from "adapter" to "domain" (the edge already exists, so the scenario notes
+  // it as already present rather than failing).
+  scenarioInput = join(root, "scenario.json");
+  write(
+    "scenario.json",
+    JSON.stringify({
+      changes: [{ type: "dependency_added", source: "adapter", target: "domain" }],
+    }),
+  );
+
   expect(git("init", "-q", "-b", "main")).toBe(0);
   expect(git("add", "-A")).toBe(0);
   expect(git("commit", "-q", "-m", "fixture")).toBe(0);
@@ -316,9 +328,9 @@ beforeAll(async () => {
     )}\n`,
   );
   // `scenario` needs a scenario JSON file describing a hypothetical change.
-  scenarioFile = join(root, "scenario.json");
+  scenarioInput = join(root, "scenario.json");
   writeFileSync(
-    scenarioFile,
+    scenarioInput,
     `${JSON.stringify(
       { changes: [{ type: "dependency_added", source: "adapter", target: "domain" }] },
       null,
@@ -408,7 +420,7 @@ function argvForEveryCommand() {
     decisions: ["decisions", "0001-layers", "--format", "json"],
     adr: ["adr", "--format", "json"],
     rules: ["rules", "list", "--format", "json"],
-    scenario: ["scenario", "domain", "--scenario-file", scenarioFile, "--format", "json"],
+    scenario: ["scenario", "domain", "--scenario-file", scenarioInput, "--format", "json"],
   };
 }
 

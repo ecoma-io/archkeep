@@ -149,6 +149,7 @@ never a rule that found nothing.
 | `decisions`  | Walks the full chain behind one recorded decision — decision to bound rows, projects, findings, verification level | no               |
 | `adr`        | Lists recorded architecture decisions and what each binds (`docs/adr/`)                                            | no               |
 | `rules`      | Lists official rules, shows details, verifies catalog integrity, or adds a rule                                    | no               |
+| `scenario`   | Evaluates a hypothetical change against the current architecture                                                   | no               |
 
 `check` is the only command that exits 1 on boundary findings — with three
 companions: `fitness` exits 1 when a declared function fails (a failing fitness

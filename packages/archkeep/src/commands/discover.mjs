@@ -73,8 +73,13 @@ export function buildObserved(commandContext) {
 }
 
 /**
- * Converts a `discover --propose` proposal into a minimal
- * architecture-intent.json file that `drift` and `reconcile` can read.
+ * Convert a discovery proposal into an `architecture-intent.json`-compatible
+ * object. The conversion preserves the proposal's structural intent:
+ *
+ * - **Components** (directory groupings of 2+ projects) → `boundaries` entries
+ *   with `directory:` selectors.
+ * - **`noDependency` rules** → `forbidden` entries — cross-component
+ *   dependencies that should not exist.
  *
  * Confidence markers and evidence are dropped: the user is expected to review
  * the output before using it with `drift` or `reconcile`.

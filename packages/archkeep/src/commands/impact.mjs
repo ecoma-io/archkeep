@@ -207,6 +207,13 @@ export function impactCommand(projectName, commandContext, config = null) {
   }
   result.impactStatement = composeImpactStatement(projectName, commandContext, config);
 
+  // Full impact statement: when a boundary config is available, compose the
+  // enriched statement that includes decision impact and evolution alignment
+  // in addition to the reverse reachability and constraint impact above.
+  if (config) {
+    result.impactStatement = composeImpactStatement(projectName, commandContext, config);
+  }
+
   const envelope = jsonEnvelope({
     command: "impact",
     context,
