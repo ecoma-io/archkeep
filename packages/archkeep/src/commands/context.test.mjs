@@ -323,6 +323,71 @@ describe("resolveCommandContext — the loud refusals it owns", () => {
     );
     expect(context.analysis.analyzedFiles).toEqual([]);
   });
+
+  it("throws a descriptive error when no workspace marker is found above the working directory", () => {
+    // A bare directory with none of nx.json, archkeep.json, or .moon/workspace.yml
+    // should refuse loudly rather than silently produce an empty context.
+    const { root } = fixture("context-no-marker-");
+    expect(() => resolveCommandContext({ cwd: root })).toThrow(/no workspace root/);
+  });
+});
+
+describe("resolveCommandContext — coverage data completeness", () => {
+  it("includes all expected analysis fields on every provider", () => {
+    // The analysis object must always carry analyzed, imports, failures,
+    // and analyzedFiles so downstream commands can build a correct coverage
+    // envelope without checking for missing keys.
+    const { root, write } = fixture("context-coverage-fields-");
+    write("nx.json", "{}\n");
+    write("libs/a/a.go", "package a\n");
+
+    const context = resolveCommandContext(
+      { cwd: root },
+      {
+        readGraph: () => ({
+          nodes: { a: { name: "a", type: "lib", data: { root: "libs/a" } } },
+          dependencies: { a: [] },
+        }),
+        listFiles: () => ["nx.json", "libs/a/a.go"],
+      },
+    );
+
+    expect(context.analysis).toBeDefined();
+    expect(typeof context.analysis.analyzed).toBe("number");
+    expect(Array.isArray(context.analysis.imports)).toBe(true);
+    expect(Array.isArray(context.analysis.failures)).toBe(true);
+    expect(Array.isArray(context.analysis.analyzedFiles)).toBe(true);
+  });
+
+  it("resolves gracefully when paths reference a project not in the graph nodes", () => {
+    // A path under a directory that looks like a project root but is not
+    // declared in the graph should not crash — the file is analyzed (if
+    // tracked) but no project owns it, so it appears in failures as unclaimed.
+    const { root, write } = fixture("context-nonexistent-project-");
+    write("nx.json", "{}\n");
+    write("libs/a/a.go", "package a\n");
+    // orphan exists on disk and in tracked files, but is not in the graph
+    write("libs/orphan/orphan.go", "package orphan\n");
+
+    const context = resolveCommandContext(
+      { cwd: root, paths: ["libs/orphan"] },
+      {
+        readGraph: () => ({
+          nodes: { a: { name: "a", type: "lib", data: { root: "libs/a" } } },
+          dependencies: { a: [] },
+        }),
+        listFiles: () => ["nx.json", "libs/a/a.go", "libs/orphan/orphan.go"],
+      },
+    );
+
+    expect(context.provider).toBe("nx");
+    // The orphan file should be in failures (unclaimed), not crash
+    const orphanFailures = context.analysis.failures.filter(
+      (f) => f.sourceFile === "libs/orphan/orphan.go",
+    );
+    expect(orphanFailures).toHaveLength(1);
+    expect(context.analysis.analyzedFiles).not.toContain("libs/orphan/orphan.go");
+  });
 });
 
 describe("resolveCommandContext — pluginGap", () => {
@@ -963,6 +1028,34 @@ describe("resolveCommandContext — options.boundaryConfigDeclared, on all three
     );
     expect(context.options.inline).toBe(true);
     expect(context.options.boundaryConfigDeclared).toBe(true);
+  });
+
+  it("native: declares a law with empty depConstraints — no constraints in practice", () => {
+    // The workspace named an inline law, so boundaryConfigDeclared is true,
+    // but the law itself has zero constraint rows — the "no constraints"
+    // case. The context must still resolve correctly.
+    const context = nativeContextFor(
+      {
+        boundaryConfig: {
+          depConstraints: [],
+          moduleBoundaryOptions: {
+            allow: [],
+            buildTargets: ["build"],
+            enforceBuildableLibDependency: false,
+            allowCircularSelfDependency: false,
+            checkDynamicDependenciesExceptions: [],
+            ignoredCircularDependencies: [],
+            banTransitiveDependencies: false,
+            checkNestedExternalImports: false,
+          },
+        },
+      },
+      "declared-empty-constraints",
+    );
+    expect(context.options.inline).toBe(true);
+    expect(context.options.boundaryConfigDeclared).toBe(true);
+    // The inline config's depConstraints is an empty array
+    expect(context.options.boundaryConfig.depConstraints).toEqual([]);
   });
 
   it("nx: false when nx.json registers the plugin without naming a law", () => {
