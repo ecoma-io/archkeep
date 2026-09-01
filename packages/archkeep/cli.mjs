@@ -2279,7 +2279,7 @@ async function runDebt(options, { cwd, env }) {
  * graph. `--propose` is opt-in: a proposal is a suggestion, and a workspace
  * that does not ask for one must not get one.
  *
- * @param {{format: string, output: string|null, propose: boolean, paths: string[]}} options
+ * @param {{format: string, output: string|null, propose: boolean, writeIntent: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
