@@ -132,11 +132,29 @@ describe("CLI contract — unknown or invalid flags", () => {
 
 describe("CLI contract — per-command --help exits 0", () => {
   const COMMANDS_WITH_HELP = [
-    "check", "graph", "diff", "delta", "change",
-    "discover", "drift", "reconcile", "waivers", "fitness",
-    "history", "trajectory", "evolution", "health", "report",
-    "debt", "impact", "explain", "context", "provenance",
-    "decisions", "adr", "rules",
+    "check",
+    "graph",
+    "diff",
+    "delta",
+    "change",
+    "discover",
+    "drift",
+    "reconcile",
+    "waivers",
+    "fitness",
+    "history",
+    "trajectory",
+    "evolution",
+    "health",
+    "report",
+    "debt",
+    "impact",
+    "explain",
+    "context",
+    "provenance",
+    "decisions",
+    "adr",
+    "rules",
   ];
 
   for (const cmd of COMMANDS_WITH_HELP) {
