@@ -1,5 +1,5 @@
 /**
- * The MCP server: eight tools, each one adapter from `./engine.mjs` registered
+ * The MCP server: nine tools, each one adapter from `./engine.mjs` registered
  * on the reference SDK's high-level server.
  *
  * This module holds no architecture decision of its own. What it owns is the
@@ -18,7 +18,7 @@
  *   prepended so an agent can tell a retypable mistake from a workspace
  *   refusal without pattern-matching message text.
  *
- * The eight tools are the whole surface. The CLI's other verbs (`diff`,
+ * The nine tools are the whole surface. The CLI's other verbs (`diff`,
  * `delta`, `debt`, `health`, `report`, `waivers`, `fitness`, `provenance`,
  * …) are deliberately NOT tools: a capability face answers the questions an
  * agent asks mid-change — context, verdict, impact, drift, explanation,
@@ -35,8 +35,7 @@
  *   `check`, a scoped run widening to the workspace (the safe direction), but
  *   for `context`, a narrowing that leaves no trace at all. `z.strictObject`
  *   turns every unknown key into a validation error that names it, before
- *   the engine is reached.
- * - **Every tool announces `readOnlyHint: true`.** All eight compose the
+ * - **Every tool announces `readOnlyHint: true`.** All nine compose the
  *   engine's read and propose surfaces; a host uses the hint to trim
  *   permission prompts, and the authority boundary the propose tool's
  *   description argues is the fact the annotation rests on.
@@ -132,9 +131,8 @@ function asHandler(adapter, io) {
     }
   };
 }
-
 /**
- * Builds the Archkeep MCP server: eight tools over the engine's command
+ * Builds the Archkeep MCP server: nine tools over the engine's command
  * layer, no resources, no prompts. Not connected to any transport — the
  * caller owns how the server is reached (`../mcp.mjs` wires stdio; a test
  * wires an in-memory pair).

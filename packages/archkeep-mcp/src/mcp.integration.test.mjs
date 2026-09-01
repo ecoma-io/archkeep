@@ -38,13 +38,13 @@ afterAll(async () => {
 });
 
 describe("the shipped stdio entry", () => {
-  it("completes the initialize handshake and lists the eight tools", async () => {
+  it("completes the initialize handshake and lists the nine tools", async () => {
     const session = await spawnServer(packageRoot);
     spawned.push(session);
     const { client } = session;
     expect(client.getServerVersion()?.name).toBe("archkeep-mcp");
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(8);
+    expect(tools).toHaveLength(9);
     expect(tools.map((tool) => tool.name)).toContain("archkeep_check");
   });
 

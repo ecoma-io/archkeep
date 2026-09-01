@@ -28,8 +28,7 @@ workspace root (or pass an absolute `workspaceRoot` on any call — a relative
 path is refused). One registry-published
 package is all a consumer needs — it depends on `@ecoma-io/archkeep` itself,
 version-locked to this package's own version.
-
-Configuration, the eight tools, the authority boundary `archkeep_propose`
+Configuration, the nine tools, the authority boundary `archkeep_propose`
 holds, and how the MCP face relates to the skills and the CLI:
 [docs/integrations/mcp.md](https://github.com/ecoma-io/archkeep/blob/main/docs/integrations/mcp.md).
 
@@ -47,7 +46,7 @@ Example client registration (Claude Code):
 }
 ```
 
-## The eight tools
+## The nine tools
 
 | tool               | answers                                                   |
 | ------------------ | --------------------------------------------------------- |

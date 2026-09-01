@@ -9,8 +9,7 @@
  * `../../archkeep/lsp.mjs` makes with `src/lsp/`: adapters that hold decisions
  * are testable without a protocol, and the protocol layer holds no decision of
  * its own.
- *
- * ## The result contract, stated once for all eight
+ * ## The result contract, stated once for all nine
  *
  * Every completed call returns the engine's versioned JSON envelope — the same
  * object `archkeep <command> --format json` renders, parsed from the bytes the

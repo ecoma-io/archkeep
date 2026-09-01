@@ -111,9 +111,8 @@ describe("initialization", () => {
     await server.close();
   });
 });
-
 describe("tools/list — the whole surface, exactly", () => {
-  it("registers the eight tools and nothing else", async () => {
+  it("registers the nine tools and nothing else", async () => {
     const { server, client } = await connectedSession();
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name)).toEqual(TOOL_NAMES);
