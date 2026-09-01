@@ -351,6 +351,7 @@ let deltaBaseline;
 let changeBaseline;
 let changeIntent;
 let changeIntentWrongBase;
+let scenarioFile;
 beforeAll(async () => {
   // `diff` compares against a snapshot the tool itself wrote, and
   // `health`/`report`/`debt` read a history the tool itself captured — both
@@ -395,6 +396,17 @@ beforeAll(async () => {
   writeFileSync(changeIntent, manifestFor(capturedCommit));
   changeIntentWrongBase = join(artifactsDir, "change-intent-wrong-base.json");
   writeFileSync(changeIntentWrongBase, manifestFor("0".repeat(40)));
+
+  // `scenario` needs a scenario JSON file.
+  scenarioFile = join(artifactsDir, "scenario.json");
+  writeFileSync(
+    scenarioFile,
+    `${JSON.stringify(
+      { changes: [{ type: "dependency_added", source: "adapter", target: "domain" }] },
+      null,
+      2,
+    )}\n`,
+  );
 });
 
 /**
@@ -555,6 +567,19 @@ const MATRIX = {
   rules: {
     ok: { world: "world", argv: ["rules", "list", "--format", "json"], exit: EXIT.error },
     refused: { world: "world", argv: ["rules"], exit: EXIT.usage },
+  },
+  scenario: {
+    ok: {
+      world: "world",
+      argv: () => ["scenario", "domain", "--scenario-file", scenarioFile],
+      exit: EXIT.ok,
+    },
+    refused: {
+      world: "world",
+      argv: ["scenario", "domain"],
+      exit: EXIT.usage,
+      stderrContains: "scenario requires --scenario-file",
+    },
   },
 };
 

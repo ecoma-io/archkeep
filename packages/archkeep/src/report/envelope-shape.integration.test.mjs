@@ -159,7 +159,7 @@ let baseline;
 let deltaBaseline;
 let changeIntent;
 let firstCommit;
-
+let scenarioFile;
 /** A git command in the fixture, with an identity that does not read the machine's. */
 const git = (...args) =>
   spawnSync("git", args, {
@@ -315,6 +315,16 @@ beforeAll(async () => {
       2,
     )}\n`,
   );
+  // `scenario` needs a scenario JSON file describing a hypothetical change.
+  scenarioFile = join(root, "scenario.json");
+  writeFileSync(
+    scenarioFile,
+    `${JSON.stringify(
+      { changes: [{ type: "dependency_added", source: "adapter", target: "domain" }] },
+      null,
+      2,
+    )}\n`,
+  );
 }, SPAWN_TEST_BUDGET_MS);
 
 afterAll(() => {
@@ -398,6 +408,7 @@ function argvForEveryCommand() {
     decisions: ["decisions", "0001-layers", "--format", "json"],
     adr: ["adr", "--format", "json"],
     rules: ["rules", "list", "--format", "json"],
+    scenario: ["scenario", "domain", "--scenario-file", scenarioFile, "--format", "json"],
   };
 }
 

@@ -41,6 +41,7 @@ import { computeImpactConstraints } from "./edge-constraints.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatImpactReport } from "../report/impact-text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import { composeImpactStatement } from "./impact-statement.mjs";
 
 /**
  * Computes the impact set: every project that transitively depends on
@@ -204,6 +205,7 @@ export function impactCommand(projectName, commandContext, config = null) {
       config.depConstraints,
     );
   }
+  result.impactStatement = composeImpactStatement(projectName, commandContext, config);
 
   const envelope = jsonEnvelope({
     command: "impact",
