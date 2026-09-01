@@ -65,7 +65,7 @@ A new reader should find these capabilities described as present, not promised.
   the same answer. ([reference/exit-codes.md](../reference/exit-codes.md))
 - **24 commands — `check`, `change`, `graph`, `diff`, `delta`, `discover`,
   `drift`, `reconcile`, `waivers`, `fitness`, `history`, `trajectory`,
-  `evolution`, `health`, `report`, `debt`, `impact`, `explain`, `context`,
+  `evolution`, `health`, `report`, `debt`, `impact`, `scenario`, `explain`, `context`,
   `provenance`, `decisions`, `adr`, `rules`** — each with
   output a script or an agent can consume without parsing prose.
   `history` records the
