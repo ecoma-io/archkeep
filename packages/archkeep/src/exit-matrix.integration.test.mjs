@@ -572,27 +572,6 @@ const MATRIX = {
   scenario: {
     ok: {
       world: "world",
-      argv: () => ["scenario", "domain", "--scenario-file", join(world, "scenario.json")],
-      exit: EXIT.ok,
-    },
-    refused: {
-      world: "world",
-      argv: () => [
-        "scenario",
-        "domain",
-        "--scenario-file",
-        join(artifactsDir, "no-such-scenario.json"),
-      ],
-      exit: EXIT.usage,
-    },
-  },
-  rules: {
-    ok: { world: "world", argv: ["rules", "list", "--format", "json"], exit: EXIT.error },
-    refused: { world: "world", argv: ["rules"], exit: EXIT.usage },
-  },
-  scenario: {
-    ok: {
-      world: "world",
       argv: () => ["scenario", "domain", "--scenario-file", scenarioFile],
       exit: EXIT.ok,
     },
@@ -602,6 +581,10 @@ const MATRIX = {
       exit: EXIT.usage,
       stderrContains: "scenario requires --scenario-file",
     },
+  },
+  rules: {
+    ok: { world: "world", argv: ["rules", "list", "--format", "json"], exit: EXIT.error },
+    refused: { world: "world", argv: ["rules"], exit: EXIT.usage },
   },
 };
 
