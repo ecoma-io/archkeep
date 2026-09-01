@@ -56,6 +56,54 @@ describe("originViolations — shape", () => {
   });
 });
 
+describe("originViolations — error-path", () => {
+  it("rejects null origin — a null origin is not 'no claim', it is a misread", () => {
+    expect(originViolations(null)[0]).toContain("origin must be an object");
+  });
+
+  it("rejects undefined origin — an absent origin is the caller's bug, not a fact", () => {
+    expect(originViolations(undefined)[0]).toContain("origin must be an object");
+  });
+
+  it("rejects a number origin — a plain number cannot be an object", () => {
+    expect(originViolations(42)[0]).toContain("origin must be an object");
+  });
+
+  it("rejects a boolean origin — true is not a governance record", () => {
+    expect(originViolations(true)[0]).toContain("origin must be an object");
+  });
+
+  it("rejects an origin with only `by` — tool is mandatory", () => {
+    expect(originViolations({ by: "jane@example.com" })[0]).toContain("origin.tool");
+  });
+
+  it("rejects an origin with only `tool` — by is mandatory", () => {
+    expect(originViolations({ tool: "archkeep:v1" })[0]).toContain("origin.by");
+  });
+
+  it("rejects an origin with null by — null is not a string", () => {
+    expect(originViolations({ by: null, tool: "archkeep:v1" })[0]).toContain("origin.by");
+  });
+
+  it("rejects an origin with null tool — null is not a string", () => {
+    expect(originViolations({ by: "jane", tool: null })[0]).toContain("origin.tool");
+  });
+
+  it("rejects an origin with a number tool — the tool name must be a string", () => {
+    expect(originViolations({ by: "jane", tool: 7 })[0]).toContain("origin.tool");
+  });
+
+  it("rejects an origin with multiple unknown keys — every unknown is named", () => {
+    const messages = originViolations({ by: "jane", tool: "l", extra: "x", reason: "y" });
+    expect(messages.some((m) => m.includes("extra"))).toBe(true);
+    expect(messages.some((m) => m.includes("reason"))).toBe(true);
+  });
+
+  it("rejects an origin where `on` is an empty string — a committed date that reads empty is a lie", () => {
+    expect(originViolations({ by: "jane", tool: "l", on: "" })[0]).toContain("origin.on");
+  });
+});
+
 describe("originViolations — null-prototype safety", () => {
   it("rejects a crafted __proto__ key as unknown rather than polluting", () => {
     // JSON.parse of '{"by":"jane","tool":"l","__proto__":{"polluted":true}}'
@@ -89,6 +137,42 @@ describe("originViolations — null-prototype safety", () => {
   it("rejects an on that is a crafted object", () => {
     const crafted = JSON.parse('{"by":"jane","tool":"l","on":{"__proto__":{}}}');
     expect(originViolations(crafted)[0]).toContain("origin.on");
+  });
+});
+
+describe("validateOrigin — error-path", () => {
+  it("throws for null input — null is not a valid origin", () => {
+    expect(() => validateOrigin(null)).toThrow(/origin must be an object/);
+  });
+
+  it("throws for undefined input — an absent origin cannot be validated", () => {
+    expect(() => validateOrigin(undefined)).toThrow(/origin must be an object/);
+  });
+
+  it("throws for an origin with only `tool` — by is mandatory even at read time", () => {
+    expect(() => validateOrigin({ tool: "archkeep:v1" })).toThrow(/origin.by/);
+  });
+
+  it("throws with a user-supplied `at` prefix naming the exact path", () => {
+    expect(() => validateOrigin({}, {}, "policy.depConstraints[0].origin")).toThrow(
+      /policy\.depConstraints\[0\]\.origin\.by/,
+    );
+  });
+});
+
+describe("validateOrigin — determinism", () => {
+  it("is byte-identical across 10 calls with the same valid input", () => {
+    const input = { by: "jane@example.com", tool: "archkeep:v1" };
+    const results = Array.from({ length: 10 }, () => validateOrigin(input));
+    const first = JSON.stringify(results[0]);
+    for (let i = 1; i < results.length; i++) {
+      expect(JSON.stringify(results[i])).toBe(first);
+    }
+  });
+
+  it("returns the same object reference — validateOrigin does not clone", () => {
+    const input = { by: "jane@example.com", tool: "archkeep:v1" };
+    expect(validateOrigin(input)).toBe(input);
   });
 });
 
@@ -325,5 +409,51 @@ describe("recordDecisionLifecycle — the decision-lifecycle write surface", () 
       "supersession",
       "bindings-change",
     ]);
+  });
+});
+
+describe("recordOrigin — 10-run determinism", () => {
+  it("produces byte-identical output across 10 consecutive calls with the same inputs", () => {
+    const args = { by: "jane@example.com", tool: "archkeep:v1", clock: clock() };
+    const results = Array.from({ length: 10 }, () => recordOrigin({ ...args }));
+    const first = JSON.stringify(results[0]);
+    for (let i = 1; i < results.length; i++) {
+      expect(JSON.stringify(results[i])).toBe(first);
+    }
+  });
+
+  it("the first and tenth calls produce the exact same object keys", () => {
+    const make = () =>
+      recordOrigin({ by: "jane@example.com", tool: "archkeep:v1", clock: clock() });
+    const results = Array.from({ length: 10 }, make);
+    const firstKeys = Object.keys(results[0]);
+    const lastKeys = Object.keys(results[results.length - 1]);
+    expect(firstKeys).toEqual(lastKeys);
+  });
+});
+
+describe("recordDecisionLifecycle — 10-run determinism", () => {
+  const event = () => ({
+    kind: /** @type {const} */ ("status-transition"),
+    decisionId: "0003-one-contract-four-spellings",
+    from: /** @type {const} */ ("proposed"),
+    to: /** @type {const} */ ("accepted"),
+    origin: { by: "jane@example.com", tool: "archkeep:v1" },
+    clock: clock(),
+  });
+
+  it("produces byte-identical output across 10 consecutive calls with the same inputs", () => {
+    const results = Array.from({ length: 10 }, () => recordDecisionLifecycle(event()));
+    const first = JSON.stringify(results[0]);
+    for (let i = 1; i < results.length; i++) {
+      expect(JSON.stringify(results[i])).toBe(first);
+    }
+  });
+
+  it("the first and tenth calls produce the exact same object shape", () => {
+    const results = Array.from({ length: 10 }, () => recordDecisionLifecycle(event()));
+    const firstKeys = Object.keys(results[0]);
+    const lastKeys = Object.keys(results[results.length - 1]);
+    expect(firstKeys).toEqual(lastKeys);
   });
 });

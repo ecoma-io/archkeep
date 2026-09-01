@@ -327,6 +327,16 @@ beforeAll(async () => {
       2,
     )}\n`,
   );
+  // `scenario` needs a scenario JSON file describing a hypothetical change.
+  scenarioInput = join(root, "scenario.json");
+  writeFileSync(
+    scenarioInput,
+    `${JSON.stringify(
+      { changes: [{ type: "dependency_added", source: "adapter", target: "domain" }] },
+      null,
+      2,
+    )}\n`,
+  );
 }, SPAWN_TEST_BUDGET_MS);
 
 afterAll(() => {

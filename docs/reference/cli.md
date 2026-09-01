@@ -4,37 +4,36 @@ All commands, all flags, all exit codes in one page. Source: `packages/archkeep/
 
 ## Commands
 
-| command      | positional args                  | summary                                                                                                                   | finds violations |
-| ------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| `check`      | `[<path>...]`                    | Check imports against the boundary rules                                                                                  | yes -- exits 1   |
-| `graph`      | (none)                           | Print the project graph as a deterministic snapshot                                                                       | no               |
-| `diff`       | `<baseline>`                     | Compare two graph snapshots edge by edge                                                                                  | no               |
-| `delta`      | `<baseline>` \| `--capture`      | Classify how boundary violations moved between a captured baseline and head                                               | yes -- exits 1   |
-| `change`     | `<baseline> --intent <file>`     | Reconcile a declared change intent against the architectural delta                                                        | yes -- exits 1   |
-| `drift`      | (none)                           | Compare the observed architecture to the declared intent                                                                  | no               |
-| `discover`   | (none)                           | Report observed facts, and optionally propose candidates                                                                  | no               |
-| `reconcile`  | (none)                           | Score the declared intent against the observed architecture, with proposed edits under `--propose`                        | no               |
-| `fitness`    | (none)                           | Judge every declared fitness function against the workspace; exits 1 on a failing function                                | no*              |
-| `waivers`    | (none)                           | List the boundary waivers and permanent suppressions on the table                                                         | no               |
-| `history`    | `<dir>`                          | Describe how the architecture evolved across snapshots                                                                    | no               |
-| `trajectory` | `<dir>`                          | Aggregate the deterministic drift trajectory across snapshots                                                             | no               |
-| `evolution`  | (none)                           | Describe how the architecture evolved across a Git revision range                                                         | no               |
-| `health`     | `[<snapshot-dir>]`               | Describe architecture health metrics and trends                                                                           | no               |
-| `report`     | `[<snapshot-dir>]`               | One governance document: how healthy the architecture is, and why                                                         | no               |
-| `debt`       | `<dir>`                          | Print the architecture-debt ledger across snapshots                                                                       | no               |
-| `impact`     | `<project>`                      | List projects that depend on the named project                                                                            | no               |
-| `explain`    | `<file:line:column>`             | Explain the judgment for one import site                                                                                  | no               |
-| `context`    | `<project> [--plan [<path>...]]` | Show the architecture constraints that apply to a project                                                                 | no               |
-| `provenance` | (none)                           | Describe where this run's facts came from and which rows carry an origin                                                  | no               |
-| `decisions`  | `<id>`                           | Walk the full chain behind one recorded decision — decision to bound rows, projects, findings, and its verification level | no               |
-| `adr`        | `[<id>]`                         | List recorded architecture decisions and what each binds                                                                  | no               |
-| `rules`      | `<list                           | info                                                                                                                      | verify           | add> [<rule-name>]` | List official rules, show details, verify catalog integrity, or add a rule | no* |
-| `scenario`   | `<file>`                         | Evaluate a hypothetical change against the current architecture                                                           | no               |
-
-\* `fitness` reports no boundary violation, but it is a verdict command, not a
-descriptive one: a declared function that `fail`s makes it exit 1 (and an
-undetermined one, 3) — see the prose below. `rules verify` also exits 1 when
-catalog integrity finds violations.
+| command                                                                        | positional args                  | summary                                                                                                                   | finds violations |
+| ------------------------------------------------------------------------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| `check`                                                                        | `[<path>...]`                    | Check imports against the boundary rules                                                                                  | yes -- exits 1   |
+| `graph`                                                                        | (none)                           | Print the project graph as a deterministic snapshot                                                                       | no               |
+| `diff`                                                                         | `<baseline>`                     | Compare two graph snapshots edge by edge                                                                                  | no               |
+| `delta`                                                                        | `<baseline>` \| `--capture`      | Classify how boundary violations moved between a captured baseline and head                                               | yes -- exits 1   |
+| `change`                                                                       | `<baseline> --intent <file>`     | Reconcile a declared change intent against the architectural delta                                                        | yes -- exits 1   |
+| `drift`                                                                        | (none)                           | Compare the observed architecture to the declared intent                                                                  | no               |
+| `discover`                                                                     | (none)                           | Report observed facts, and optionally propose candidates                                                                  | no               |
+| `reconcile`                                                                    | (none)                           | Score the declared intent against the observed architecture, with proposed edits under `--propose`                        | no               |
+| `fitness`                                                                      | (none)                           | Judge every declared fitness function against the workspace; exits 1 on a failing function                                | no*              |
+| `waivers`                                                                      | (none)                           | List the boundary waivers and permanent suppressions on the table                                                         | no               |
+| `history`                                                                      | `<dir>`                          | Describe how the architecture evolved across snapshots                                                                    | no               |
+| `trajectory`                                                                   | `<dir>`                          | Aggregate the deterministic drift trajectory across snapshots                                                             | no               |
+| `evolution`                                                                    | (none)                           | Describe how the architecture evolved across a Git revision range                                                         | no               |
+| `health`                                                                       | `[<snapshot-dir>]`               | Describe architecture health metrics and trends                                                                           | no               |
+| `report`                                                                       | `[<snapshot-dir>]`               | One governance document: how healthy the architecture is, and why                                                         | no               |
+| `debt`                                                                         | `<dir>`                          | Print the architecture-debt ledger across snapshots                                                                       | no               |
+| `impact`                                                                       | `<project>`                      | List projects that depend on the named project                                                                            | no               |
+| `scenario`                                                                     | `<project>`                      | Evaluate a hypothetical change against the current workspace                                                              | no               |
+| `explain`                                                                      | `<file:line:column>`             | Explain the judgment for one import site                                                                                  | no               |
+| `context`                                                                      | `<project> [--plan [<path>...]]` | Show the architecture constraints that apply to a project                                                                 | no               |
+| `provenance`                                                                   | (none)                           | Describe where this run's facts came from and which rows carry an origin                                                  | no               |
+| `decisions`                                                                    | `<id>`                           | Walk the full chain behind one recorded decision — decision to bound rows, projects, findings, and its verification level | no               |
+| `adr`                                                                          | `[<id>]`                         | List recorded architecture decisions and what each binds                                                                  | no               |
+| `rules`                                                                        | `<list                           | info                                                                                                                      | verify           | add> [<rule-name>]` | List official rules, show details, verify catalog integrity, or add a rule | no* |
+| \* `fitness` reports no boundary violation, but it is a verdict command, not a |
+| descriptive one: a declared function that `fail`s makes it exit 1 (and an      |
+| undetermined one, 3) — see the prose below. `rules verify` also exits 1 when   |
+| catalog integrity finds violations.                                            |
 
 `archkeep --help` prints the help text and exits 0. `archkeep --version` (or
 `-v`) prints the tool name and version and exits 0. An omitted command name is a
@@ -142,8 +141,6 @@ and let `check` do the failing. A boundary or row side that matched no observed
 project so the comparison cannot be completed exits 3 with a loud message —
 "cannot verify" must never read as "no drift".
 
-### `health`
-
 | flag       | argument       | default                  | meaning                                                                     |
 | ---------- | -------------- | ------------------------ | --------------------------------------------------------------------------- |
 | `--format` | `text`\|`json` | `text`                   | Terminal report or the versioned JSON envelope.                             |
@@ -232,6 +229,21 @@ The project name is a single positional argument. An empty `dependents` list is
 a claim ("nothing depends on this"), not a shrug. When a boundary config is
 available, the report includes a constraint-context section showing which
 constraint rows govern each dependent's edge and whether it violates them.
+
+### `scenario`
+
+| flag              | argument       | default                  | meaning                                                                                                                                            |
+| ----------------- | -------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--format`        | `text`\|`json` | `text`                   | Terminal report (default) or the versioned JSON envelope.                                                                                          |
+| `--output`        | `<file>`       | stdout                   | Write the report to a file instead of stdout.                                                                                                      |
+| `--config`        | `<file>`       | (from workspace options) | Read the boundary law from here instead of the workspace's configured file. Constraint-impact analysis depends on which boundary law is in effect. |
+| `--scenario-file` | `<file>`       | (required)               | Path to the scenario JSON file describing the hypothetical changes to evaluate.                                                                    |
+
+The project name is a single positional argument. `--scenario-file` is required.
+A scenario is descriptive: it evaluates what-if changes without claiming a
+violation, so it exits 0 when it completes. A malformed scenario file, an
+unreadable file, incomplete coverage, or an unregistered-plugin graph gap is a
+no-verdict run (exit 3), never a clean evaluation.
 
 ### `explain`
 
@@ -422,7 +434,7 @@ counts but no rule ever judged, and that is enough to withhold the verdict.
 
 A descriptive command (`graph`, `diff`, `drift`, `discover`, `reconcile`,
 `waivers`, `history`, `trajectory`, `evolution`, `health`, `report`, `debt`,
-`impact`, `explain`, `context`, `provenance`, `adr`, `decisions`) exits 0 when
+`impact`, `scenario`, `explain`, `context`, `provenance`, `adr`, `decisions`) exits 0 when
 it completes, 3 when coverage is incomplete or a metric is `unknown`, and 2
 on usage error. None exits 1, because a descriptive result is never a finding.
 `decisions` names its gap loudly: a walk whose every hop resolves exits 0; an
@@ -636,22 +648,25 @@ boundaries, constraints, and decisions). A `decisionRef` that does not resolve
 is reported in `unresolvedDecisionRefs`, never silently dropped. See
 [json-output.md](json-output.md) for the full schema. Descriptive.
 
-### `scenario <project> --scenario-file <path>`
+### `scenario <project>`
 
-Evaluates a hypothetical change to the dependency graph and reports what would
-change for the named project. The scenario input is a JSON file (see
-[json-output.md](json-output.md) for the schema) describing one or more
-dependency additions or removals.
+Evaluates a hypothetical change against the current workspace and reports the
+current-versus-scenario comparison. The project name is a single positional
+argument. The hypothetical change is described in a JSON file passed via
+`--scenario-file`; the supported change types are `dependency_added` and
+`dependency_removed`, each naming a `source` and `target` project.
 
-The output compares the **current** impact against the **scenario** impact:
-which dependents would be added or removed, whether constraint-impact rows
-would change, and how the decision governance would align. Every result is
-marked `virtual` and `notAuthoritative` — this is a what-if projection, never
-an authoritative verdict.
+The evaluation is **virtual** — it never mutates the workspace, never writes to
+canonical history, and never emits an `EvolutionEvent`. Every output field
+carries a `virtual: true` / `notAuthoritative` marker. The scenario's would-be
+state is derived by applying the changes to the current graph and re-running
+the deterministic impact path, then compared against the current state.
 
-`--format json` produces a full structured envelope with current, scenario,
-and delta sections. See [json-output.md](json-output.md) for the envelope
-schema. Descriptive.
+When a boundary config is available, the report includes constraint-impact and
+decision-impact analysis for both the current and scenario states, plus a delta
+showing which dependents, constraints and decisions would change. Per-edge
+verdicts cover only `depConstraints` (3 of 15 violation types).
+Descriptive — it never exits 1.
 
 ### `explain <file:line:column>`
 

@@ -1,5 +1,5 @@
 /**
- * The MCP server: eight tools, each one adapter from `./engine.mjs` registered
+ * The MCP server: nine tools, each one adapter from `./engine.mjs` registered
  * on the reference SDK's high-level server.
  *
  * This module holds no architecture decision of its own. What it owns is the
@@ -18,7 +18,7 @@
  *   prepended so an agent can tell a retypable mistake from a workspace
  *   refusal without pattern-matching message text.
  *
- * The eight tools are the whole surface. The CLI's other verbs (`diff`,
+ * The nine tools are the whole surface. The CLI's other verbs (`diff`,
  * `delta`, `debt`, `health`, `report`, `waivers`, `fitness`, `provenance`,
  * …) are deliberately NOT tools: a capability face answers the questions an
  * agent asks mid-change — context, verdict, impact, drift, explanation,
@@ -35,8 +35,7 @@
  *   `check`, a scoped run widening to the workspace (the safe direction), but
  *   for `context`, a narrowing that leaves no trace at all. `z.strictObject`
  *   turns every unknown key into a validation error that names it, before
- *   the engine is reached.
- * - **Every tool announces `readOnlyHint: true`.** All eight compose the
+ * - **Every tool announces `readOnlyHint: true`.** All nine compose the
  *   engine's read and propose surfaces; a host uses the hint to trim
  *   permission prompts, and the authority boundary the propose tool's
  *   description argues is the fact the annotation rests on.
@@ -57,6 +56,7 @@ import {
   historyTool,
   impactTool,
   proposeTool,
+  scenarioTool,
 } from "./engine.mjs";
 
 /** The server's own name, as a client sees it in `initialize`. */
@@ -131,9 +131,8 @@ function asHandler(adapter, io) {
     }
   };
 }
-
 /**
- * Builds the Archkeep MCP server: eight tools over the engine's command
+ * Builds the Archkeep MCP server: nine tools over the engine's command
  * layer, no resources, no prompts. Not connected to any transport — the
  * caller owns how the server is reached (`../mcp.mjs` wires stdio; a test
  * wires an in-memory pair).
@@ -369,6 +368,42 @@ export function createServer(io = {}) {
       }),
     },
     asHandler(proposeTool, io),
+  );
+
+  server.registerTool(
+    "archkeep_scenario",
+    {
+      title: "Evaluate a hypothetical dependency change",
+      description:
+        "Evaluates a 'what-if' scenario of dependency changes without modifying the " +
+        "workspace: add, remove, or modify dependencies between projects and see what " +
+        "the workspace would look like after those changes, including new or resolved " +
+        "violations, compared against the current state. The scenario is a JSON object " +
+        "describing one or more changes (see scenario-evaluation.mjs for the schema). " +
+        "The evaluation is read-only — every output field carries a `virtual: true` " +
+        "marker. Equivalent to `archkeep scenario <project> --scenario-file <file> " +
+        "--format json`.",
+      annotations: { readOnlyHint: true },
+      inputSchema: z.strictObject({
+        workspaceRoot: workspaceRootField,
+        projectName: z
+          .string()
+          .min(1)
+          .describe(
+            "Name of the project to evaluate the scenario against (a node of the " +
+              "project graph — `archkeep_graph` lists them).",
+          ),
+        scenarioJson: z
+          .string()
+          .min(1)
+          .describe(
+            "The scenario description as a JSON string. Must be a valid JSON object " +
+              "with a `changes` array. Each change describes a hypothetical dependency " +
+              "modification (e.g. add, remove, or retarget an edge between projects).",
+          ),
+      }),
+    },
+    asHandler(scenarioTool, io),
   );
 
   return server;

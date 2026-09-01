@@ -13,6 +13,7 @@ import { resolveProvenance } from "./provenance.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { evaluateScenario, parseScenarioInput } from "./scenario-evaluation.mjs";
+export { parseScenarioInput } from "./scenario-evaluation.mjs";
 
 /**
  * Runs the `scenario` command: parses the scenario input, evaluates it, and

@@ -477,4 +477,45 @@ describe("analyzeJava — #419 whole-file failure", () => {
     );
     expect(failures).toEqual([]);
   });
+
+  describe("Java — determinism", () => {
+    // Intentional limitation: the analyzer is a pure function of its inputs —
+    // recomputing the same workspace must yield byte-for-byte the same result.
+    // The whole-file failure from a truncated import must also be stable across
+    // runs (#419).
+    it("produces the same result when run twice on the same input", () => {
+      const truncated = "package com.acme;\n\nimport com.acme.core.\n";
+      const workspace = baseWorkspace();
+      const first = analyzeIn(
+        workspace,
+        "packages/acme/src/main/java/com/acme/app/App.java",
+        truncated,
+      );
+      const second = analyzeIn(
+        workspace,
+        "packages/acme/src/main/java/com/acme/app/App.java",
+        truncated,
+      );
+      expect(first).toEqual(second);
+    });
+  });
+
+  describe("Java — silent direction", () => {
+    // Intentional limitation: an empty .java file has no `import` statements.
+    // The analyzer reads 0 imports, produces 0 failures.
+    it("produces no failures for an empty file", () => {
+      const { imports, failures } = analyzeJava({
+        sourceFile: "empty/Empty.java",
+        text: "",
+        workspace: {
+          root: "/workspace",
+          projects: [{ name: "empty", root: "empty" }],
+          filesOf: () => ["empty/Empty.java"],
+          readFile: () => null,
+        },
+      });
+      expect(imports).toEqual([]);
+      expect(failures).toEqual([]);
+    });
+  });
 });

@@ -2523,4 +2523,165 @@ export const ARCHITECTURE_CORPUS = [
     // and a `no-verdict` case asserts the refusal, not a violation.
     probes: [],
   },
+  {
+    id: "single-file-no-imports",
+    style: "monolith",
+    languages: ["go"],
+    intent:
+      "A file with no imports cannot cross a boundary (near-miss), paired with " +
+      "a crossing from the same project into a project the constraint forbids " +
+      "(positive) — the silence is a verdict about the policy, not the engine.",
+    projects: [
+      { name: "standalone", root: "libs/standalone", tags: ["scope:standalone"] },
+      { name: "depot", root: "libs/depot", tags: ["scope:depot"] },
+    ],
+    depConstraints: [
+      { sourceTag: "scope:standalone", onlyDependOnLibsWithTags: ["scope:standalone"] },
+    ],
+    files: {
+      "libs/standalone/go.mod": "module example.test/standalone\n\ngo 1.24\n",
+      "libs/standalone/main.go": "package main\n\nfunc main() {}\n",
+      "libs/standalone/cross.go":
+        'package main\n\nimport "example.test/depot"\n\nvar D = depot.Depot\n',
+      "libs/depot/go.mod": "module example.test/depot\n\ngo 1.24\n",
+      "libs/depot/depot.go": "package depot\n\nvar Depot = 1\n",
+    },
+    probes: [
+      {
+        file: "libs/standalone/main.go",
+        imports: 0,
+        reports: [],
+        denyAll: 0,
+        why: "A file with no imports cannot cross a boundary — silence is the only correct verdict.",
+      },
+      {
+        file: "libs/standalone/cross.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "onlyTagsConstraintViolation",
+            specifier: "example.test/depot",
+            target: "depot",
+          },
+        ],
+        denyAll: 1,
+        why: "The constraint allows only scope:standalone, so an import of depot (scope:depot) is a violation.",
+      },
+    ],
+  },
+  {
+    id: "cyclic-direct-dependencies",
+    style: "layered (relaxed)",
+    languages: ["go"],
+    intent:
+      "Two projects that import each other must be detected as a cycle. " +
+      "`noCircularDependencies` fires before tag-level constraints, so the " +
+      "violation is a cycle, not a tag violation. A clean file in alpha " +
+      "provides the near-miss probe the corpus requires.",
+    projects: [
+      { name: "alpha", root: "libs/alpha", tags: ["scope:alpha"] },
+      { name: "beta", root: "libs/beta", tags: ["scope:beta"] },
+    ],
+    depConstraints: [
+      { sourceTag: "scope:alpha", onlyDependOnLibsWithTags: ["*"] },
+      { sourceTag: "scope:beta", onlyDependOnLibsWithTags: ["*"] },
+    ],
+    files: {
+      "libs/alpha/go.mod": "module example.test/alpha\n\ngo 1.24\n",
+      "libs/alpha/alpha.go": 'package alpha\n\nimport "example.test/beta"\n\nvar A = beta.B\n',
+      "libs/alpha/clean.go": "package alpha\n\nvar Clean = 1\n",
+      "libs/beta/go.mod": "module example.test/beta\n\ngo 1.24\n",
+      "libs/beta/beta.go": 'package beta\n\nimport "example.test/alpha"\n\nvar B = alpha.A\n',
+    },
+    probes: [
+      {
+        file: "libs/alpha/alpha.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "noCircularDependencies",
+            specifier: "example.test/beta",
+            target: "beta",
+          },
+        ],
+        denyAll: 1,
+        why:
+          "Alpha imports Beta — the cycle report is on the first edge that completes it. " +
+          "The messageId is `noCircularDependencies` rather than a tag violation.",
+      },
+      {
+        file: "libs/beta/beta.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "noCircularDependencies",
+            specifier: "example.test/alpha",
+            target: "alpha",
+          },
+        ],
+        denyAll: 1,
+        why:
+          "Beta imports Alpha — the cycle is reported at both ends since both " +
+          "edges participate in the cycle.",
+      },
+      {
+        file: "libs/alpha/clean.go",
+        imports: 0,
+        reports: [],
+        denyAll: 0,
+        why:
+          "A file that imports nothing is unaffected by the cycle — its silence shows " +
+          "the cycle detection does not corrupt the rest of the analysis.",
+      },
+    ],
+  },
+  {
+    id: "untagged-project-imports-tagged",
+    style: "layered",
+    languages: ["go"],
+    intent:
+      "A project with no tags that imports from a tagged project triggers " +
+      "`projectWithoutTagsCannotHaveDependencies` — a project outside every " +
+      "constraint row is an error, not a permission. A clean file in the " +
+      "tagged project provides the near-miss probe.",
+    projects: [
+      { name: "untagged", root: "libs/untagged", tags: [] },
+      { name: "tagged", root: "libs/tagged", tags: ["scope:tagged"] },
+    ],
+    depConstraints: [{ sourceTag: "scope:tagged", onlyDependOnLibsWithTags: ["scope:tagged"] }],
+    files: {
+      "libs/untagged/go.mod": "module example.test/untagged\n\ngo 1.24\n",
+      "libs/untagged/import.go":
+        'package untagged\n\nimport "example.test/tagged"\n\nvar T = tagged.Tagged\n',
+      "libs/tagged/go.mod": "module example.test/tagged\n\ngo 1.24\n",
+      "libs/tagged/tagged.go": "package tagged\n\nvar Tagged = 1\n",
+      "libs/tagged/clean.go": "package tagged\n\nvar Clean = 1\n",
+    },
+    probes: [
+      {
+        file: "libs/untagged/import.go",
+        imports: 1,
+        reports: [
+          {
+            messageId: "projectWithoutTagsCannotHaveDependencies",
+            specifier: "example.test/tagged",
+            target: "tagged",
+          },
+        ],
+        denyAll: 1,
+        why:
+          "A project with no tags cannot import anything — no constraint row matches it, " +
+          "so every dependency is an error.",
+      },
+      {
+        file: "libs/tagged/clean.go",
+        imports: 0,
+        reports: [],
+        denyAll: 0,
+        why:
+          "A file in the tagged project with no imports is clean — silence from the " +
+          "only matched project shows the violation is about the untagged project, not the tag system.",
+      },
+    ],
+  },
 ];

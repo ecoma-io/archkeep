@@ -114,3 +114,178 @@ describe("buildDecision", () => {
     ).toEqual({ verdict: "pass", sampleTime: "t0" });
   });
 });
+
+describe("buildDecision — additional silent-direction invariants", () => {
+  it("refuses a verdict that contradicts status — status wins", () => {
+    // The uncovered branch at line 92 of evidence.mjs: explicit verdict "pass"
+    // with status "findings" must throw rather than trust the verdict verb.
+    expect(() =>
+      buildDecision({
+        verdict: "pass",
+        status: "findings",
+        coverageComplete: true,
+        findings: 3,
+      }),
+    ).toThrow(/verdict.*contradicts status/);
+  });
+
+  it("refuses 'pass' verdict with 'no-verdict' status — the cardinal rule at the boundary", () => {
+    expect(() =>
+      buildDecision({
+        verdict: "pass",
+        status: "no-verdict",
+        coverageComplete: false,
+        findings: 0,
+      }),
+    ).toThrow(/verdict.*contradicts status/);
+  });
+
+  it("refuses 'unknown' verdict with 'ok' status — cannot shrink a clean run", () => {
+    expect(() =>
+      buildDecision({
+        verdict: "unknown",
+        status: "ok",
+        coverageComplete: true,
+        findings: 0,
+        reason: "something went wrong",
+      }),
+    ).toThrow(/verdict.*contradicts status/);
+  });
+
+  it("refuses explicit 'pass' verdict over incomplete coverage — same as I1", () => {
+    // Using explicit verdict (no status) — the pass check fires regardless.
+    expect(() =>
+      buildDecision({
+        verdict: "pass",
+        coverageComplete: false,
+        findings: 0,
+      }),
+    ).toThrow(/refusing to emit a "pass" decision over incomplete coverage/);
+  });
+
+  it("refuses explicit 'fail' verdict with zero findings — same as I2", () => {
+    expect(() =>
+      buildDecision({
+        verdict: "fail",
+        coverageComplete: true,
+        findings: 0,
+      }),
+    ).toThrow(/refusing to emit a "fail" decision with no findings/);
+  });
+});
+
+describe("buildDecision — determinism", () => {
+  it("produces byte-identical output across 10 calls with status-based input", () => {
+    const input = /** @type {{ status: "ok", coverageComplete: true, findings: 0 }} */ ({
+      status: "ok",
+      coverageComplete: true,
+      findings: 0,
+    });
+    const results = Array.from({ length: 10 }, () => buildDecision(input));
+    const first = JSON.stringify(results[0]);
+    for (let i = 1; i < results.length; i++) {
+      expect(JSON.stringify(results[i])).toBe(first);
+    }
+  });
+
+  it("produces byte-identical output across 10 calls with explicit verdict", () => {
+    const input = /** @type {{ verdict: "fail", coverageComplete: true, findings: 3 }} */ ({
+      verdict: "fail",
+      coverageComplete: true,
+      findings: 3,
+    });
+    const results = Array.from({ length: 10 }, () => buildDecision(input));
+    const first = JSON.stringify(results[0]);
+    for (let i = 1; i < results.length; i++) {
+      expect(JSON.stringify(results[i])).toBe(first);
+    }
+  });
+
+  it("produces byte-identical output across 10 calls with unknown verdict", () => {
+    const input = /** @type {{ status: "no-verdict", coverageComplete: false, findings: 0 }} */ ({
+      status: "no-verdict",
+      coverageComplete: false,
+      findings: 0,
+    });
+    const results = Array.from({ length: 10 }, () => buildDecision(input));
+    const first = JSON.stringify(results[0]);
+    for (let i = 1; i < results.length; i++) {
+      expect(JSON.stringify(results[i])).toBe(first);
+    }
+  });
+
+  it("produces byte-identical output across 10 calls with not_applicable verdict", () => {
+    const input =
+      /** @type {{ verdict: "not_applicable", coverageComplete: true, findings: 0, notApplicableReason: string }} */ ({
+        verdict: "not_applicable",
+        coverageComplete: true,
+        findings: 0,
+        notApplicableReason: "this workspace declares no fitness functions",
+      });
+    const results = Array.from({ length: 10 }, () => buildDecision(input));
+    const first = JSON.stringify(results[0]);
+    for (let i = 1; i < results.length; i++) {
+      expect(JSON.stringify(results[i])).toBe(first);
+    }
+  });
+});
+
+describe("buildDecision — error-path", () => {
+  it("refuses a null status — the builder cannot derive a verdict from nothing", () => {
+    expect(() => buildDecision({ status: null, coverageComplete: true, findings: 0 })).toThrow(
+      /has no verdict/,
+    );
+  });
+
+  it("refuses an empty run object — missing both status and verdict", () => {
+    expect(() => buildDecision(/** @type {any} */ ({}))).toThrow(
+      /needs either a status or an explicit verdict/,
+    );
+  });
+
+  it("refuses a run with unknown status string — no silent default to 'unknown'", () => {
+    expect(() =>
+      buildDecision(
+        /** @type {any} */ ({ status: "pending", coverageComplete: true, findings: 0 }),
+      ),
+    ).toThrow(/has no verdict/);
+  });
+
+  it("refuses undefined findings — cannot count violations from absence", () => {
+    expect(() =>
+      buildDecision({ status: "ok", coverageComplete: true, findings: undefined }),
+    ).toThrow(/findings must be a non-negative number/);
+  });
+
+  it("refuses a non-numeric findings value — a string cannot be a count", () => {
+    expect(() =>
+      buildDecision(
+        /** @type {any} */ ({ status: "findings", coverageComplete: true, findings: "three" }),
+      ),
+    ).toThrow(/findings must be a non-negative number/);
+  });
+
+  it("refuses explicit 'pass' verdict with negative findings — impossible count", () => {
+    expect(() => buildDecision({ verdict: "pass", coverageComplete: true, findings: -1 })).toThrow(
+      /findings must be a non-negative number/,
+    );
+  });
+
+  it("refuses null findings — null is not a count", () => {
+    expect(() => buildDecision({ status: "ok", coverageComplete: true, findings: null })).toThrow(
+      /findings must be a non-negative number/,
+    );
+  });
+
+  it("refuses NaN findings — not-a-number cannot be a count", () => {
+    expect(() => buildDecision({ status: "ok", coverageComplete: true, findings: NaN })).toThrow(
+      /findings must be a non-negative number/,
+    );
+  });
+
+  it("refuses Infinity findings — infinite is not a count", () => {
+    expect(() =>
+      buildDecision({ status: "ok", coverageComplete: true, findings: Infinity }),
+    ).toThrow(/findings must be a non-negative number/);
+  });
+});

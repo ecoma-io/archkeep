@@ -1156,6 +1156,45 @@ export function parsePythonImportSites(pythonText) {
 }
 
 /**
+ * Python malformation detection: an `import` or `from` keyword whose name
+ * never resolves before EOF, on a line that doesn't continue, is a
+ * whole-file failure — without it, a file truncated inside an import
+ * statement would parse as importing nothing, with no failure record and a
+ * clean verdict over the hole (#419).
+ *
+ * @param {string} pythonText Raw file contents.
+ * @returns {string[]} Reasons, at most one per malformation kind.
+ */
+export function pythonImportMalformations(pythonText) {
+  /** @type {string[]} */
+  const reasons = [];
+  // A bare `import` or `from` at the end of the file, or on a line with
+  // nothing after the keyword, is the common truncation pattern.
+  const TRUNCATED_IMPORT = /^[ \t]*(?:import[ \t]*$|from[ \t]*$)/m;
+  if (TRUNCATED_IMPORT.test(pythonText)) {
+    const m = TRUNCATED_IMPORT.exec(pythonText);
+    const lineStart = pythonText.lastIndexOf("\n", m.index) + 1;
+    const lineNumber = pythonText.slice(0, lineStart).split("\n").length;
+    reasons.push(
+      "an `import` or `from` statement is truncated — the file is malformed, " +
+        `so its imports cannot be read (line ${lineNumber})`,
+    );
+  }
+  // Also detect a `from ... import` that ends without naming what to import.
+  const TRUNCATED_FROM_IMPORT = /^[ \t]*from[ \t]+[\w.]+[ \t]+import[ \t]*$/m;
+  if (TRUNCATED_FROM_IMPORT.test(pythonText)) {
+    const m = TRUNCATED_FROM_IMPORT.exec(pythonText);
+    const lineStart = pythonText.lastIndexOf("\n", m.index) + 1;
+    const lineNumber = pythonText.slice(0, lineStart).split("\n").length;
+    reasons.push(
+      "a `from ... import` statement has no imported names — the file is malformed, " +
+        `so its imports cannot be read (line ${lineNumber})`,
+    );
+  }
+  return reasons;
+}
+
+/**
  * Analyzes one `.py` file.
  *
  * @param {{ sourceFile: string, text: string, workspace: object }} request
@@ -1170,92 +1209,104 @@ export function analyzePython({ sourceFile, text, workspace }) {
       ? ownPackageOf(sourceFile, owner.root, directoriesOf.get(owner.name) ?? [])
       : null;
 
-    for (const site of parsePythonImportSites(text)) {
-      const { line, column } = positionAt(text, site.offset);
-      const record = {
-        sourceFile,
-        line,
-        column,
-        specifier: site.specifier,
-        kind: site.kind,
-        spelling: { path: false, relative: isRelativeImport(site.specifier), namesOnly: true },
-        resolved: null,
-      };
-      result.imports.push(record);
-      const fail = (reason) => result.failures.push({ sourceFile, line, column, reason });
-
-      if (site.continuation) {
-        fail(
-          `'${site.specifier}' looks like a \`from\`/\`import\` statement continued across a ` +
-            `backslash-joined line, but does not parse as one once its continuation lines are ` +
-            `joined — this reader cannot say what it imports`,
-        );
-        continue;
-      }
-      if (!site.literal) {
-        fail(
-          `dynamic import of '${site.specifier}' has a non-literal argument, ` +
-            `so its target is not knowable statically`,
-        );
-        continue;
-      }
-
-      let absolute = site.specifier;
-      if (site.specifier.startsWith(".")) {
-        if (ownPackage === null) {
-          fail(
-            `relative import '${site.specifier}' cannot be resolved: '${sourceFile}' is not on any import root`,
-          );
-          continue;
-        }
-        absolute = resolveRelativeModule(site.specifier, ownPackage);
-        if (absolute === null) {
-          fail(
-            `relative import '${site.specifier}' climbs past the top-level package of '${sourceFile}', ` +
-              `which leaves the project's import root — Python rejects it the same way`,
-          );
-          continue;
-        }
-      }
-
-      const resolution = resolveModuleName(absolute, byModule);
-      if (resolution === null) {
-        // Reaching no project is only evidence of a PyPI package when every
-        // project's packages are where this reader can see them. Otherwise the
-        // honest answer is that the name is unplaceable — asserting `external`
-        // here is what let a first-party import cross a tag boundary silently.
-        if (unmodelled.length > 0) {
-          fail(
-            `'${site.specifier}' reaches no project, and this reader cannot conclude it is ` +
-              `external — ${unmodelled
-                .map(
-                  (entry) =>
-                    `project '${entry.project}' may place its packages where this reader ` +
-                    `cannot look: ${entry.reason}`,
-                )
-                .join("; ")}. A first-party package put there would look exactly like this.`,
-          );
-          continue;
-        }
-        record.resolved = {
-          target: null,
-          file: null,
-          external: true,
-          packageName: absolute.split(".")[0],
+    // A file truncated inside an `import` or `from` statement used to parse as
+    // importing nothing — the clean verdict over it was the bug (#419). The
+    // whole-file failure is what turns the verdict loud: `check` counts the
+    // file toward `unchecked` and refuses to call the run complete.
+    const malformations = [...pythonImportMalformations(text)];
+    for (const reason of malformations) {
+      result.failures.push(fileFailure(sourceFile, reason));
+    }
+    // When the file is truncated inside an import statement, no imports at all
+    // can be reliably extracted — a whole-file failure is the only honest answer.
+    if (malformations.length === 0) {
+      for (const site of parsePythonImportSites(text)) {
+        const { line, column } = positionAt(text, site.offset);
+        const record = {
+          sourceFile,
+          line,
+          column,
+          specifier: site.specifier,
+          kind: site.kind,
+          spelling: { path: false, relative: isRelativeImport(site.specifier), namesOnly: true },
+          resolved: null,
         };
-      } else if (resolution.ambiguous) {
-        fail(
-          `'${site.specifier}' resolves through the namespace package '${resolution.prefix}', which ` +
-            `${resolution.ambiguous.join(" and ")} both contribute to — Python picks by sys.path order, ` +
-            `which no static reader can know`,
-        );
-      } else {
-        record.resolved = {
-          target: resolution.owner.project,
-          file: resolution.owner.file,
-          external: false,
-          packageName: null,
-        };
+        result.imports.push(record);
+        const fail = (reason) => result.failures.push({ sourceFile, line, column, reason });
+
+        if (site.continuation) {
+          fail(
+            `'${site.specifier}' looks like a \`from\`/\`import\` statement continued across a ` +
+              `backslash-joined line, but does not parse as one once its continuation lines are ` +
+              `joined — this reader cannot say what it imports`,
+          );
+          continue;
+        }
+        if (!site.literal) {
+          fail(
+            `dynamic import of '${site.specifier}' has a non-literal argument, ` +
+              `so its target is not knowable statically`,
+          );
+          continue;
+        }
+
+        let absolute = site.specifier;
+        if (site.specifier.startsWith(".")) {
+          if (ownPackage === null) {
+            fail(
+              `relative import '${site.specifier}' cannot be resolved: '${sourceFile}' is not on any import root`,
+            );
+            continue;
+          }
+          absolute = resolveRelativeModule(site.specifier, ownPackage);
+          if (absolute === null) {
+            fail(
+              `relative import '${site.specifier}' climbs past the top-level package of '${sourceFile}', ` +
+                `which leaves the project's import root — Python rejects it the same way`,
+            );
+            continue;
+          }
+        }
+
+        const resolution = resolveModuleName(absolute, byModule);
+        if (resolution === null) {
+          // Reaching no project is only evidence of a PyPI package when every
+          // project's packages are where this reader can see them. Otherwise the
+          // honest answer is that the name is unplaceable — asserting `external`
+          // here is what let a first-party import cross a tag boundary silently.
+          if (unmodelled.length > 0) {
+            fail(
+              `'${site.specifier}' reaches no project, and this reader cannot conclude it is ` +
+                `external — ${unmodelled
+                  .map(
+                    (entry) =>
+                      `project '${entry.project}' may place its packages where this reader ` +
+                      `cannot look: ${entry.reason}`,
+                  )
+                  .join("; ")}. A first-party package put there would look exactly like this.`,
+            );
+            continue;
+          }
+          record.resolved = {
+            target: null,
+            file: null,
+            external: true,
+            packageName: absolute.split(".")[0],
+          };
+        } else if (resolution.ambiguous) {
+          fail(
+            `'${site.specifier}' resolves through the namespace package '${resolution.prefix}', which ` +
+              `${resolution.ambiguous.join(" and ")} both contribute to — Python picks by sys.path order, ` +
+              `which no static reader can know`,
+          );
+        } else {
+          record.resolved = {
+            target: resolution.owner.project,
+            file: resolution.owner.file,
+            external: false,
+            packageName: null,
+          };
+        }
       }
     }
   } catch (cause) {

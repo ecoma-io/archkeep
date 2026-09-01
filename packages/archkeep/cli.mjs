@@ -3202,7 +3202,6 @@ const IMPACT_FLAG_HELP = Object.freeze([
     ]),
   }),
 ]);
-
 /**
  * `scenario`'s flags: text or JSON envelope, optional file output, and
  * `--scenario-file` to specify the scenario input (required). The project

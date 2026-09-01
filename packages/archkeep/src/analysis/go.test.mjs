@@ -1177,4 +1177,66 @@ describe("analyzeGo", () => {
   it("reports no manifest failure for a workspace whose go.mod files all read", () => {
     expect(goManifestFailures(bomWorkspace)).toEqual([]);
   });
+
+  describe("Go — determinism", () => {
+    // Intentional limitation: the analyzer is a pure function of its inputs —
+    // recomputing the same workspace must yield byte-for-byte the same result.
+    // The whole-file failure from an unterminated import block must also be
+    // stable across runs (#419).
+    it("produces the same result when run twice on the same input", () => {
+      const truncated = 'package main\n\nimport (\n\t"fmt"\n\t"example.com/acme/beta/pkg"\n';
+      const workspace = {
+        root: "/workspace",
+        projects: [{ name: "gamma", root: "acme/apps/gamma" }],
+        filesOf: () => ["acme/apps/gamma/main.go"],
+        readFile: () => null,
+      };
+      const first = analyzeGo({
+        sourceFile: "acme/apps/gamma/main.go",
+        text: truncated,
+        workspace,
+      });
+      const second = analyzeGo({
+        sourceFile: "acme/apps/gamma/main.go",
+        text: truncated,
+        workspace,
+      });
+      expect(first).toEqual(second);
+    });
+  });
+
+  describe("Go — silent direction", () => {
+    // Intentional limitation: an empty .go file has no package declaration and
+    // no imports. The analyzer reads 0 imports, produces 0 failures — it
+    // cannot distinguish "deliberately empty" from "unreachable", which is a
+    // caller-level concern.
+    it("produces no failures for an empty file", () => {
+      const { imports, failures } = analyzeGo({
+        sourceFile: "empty/main.go",
+        text: "",
+        workspace: {
+          root: "/workspace",
+          projects: [{ name: "empty", root: "empty" }],
+          filesOf: () => ["empty/main.go"],
+          readFile: () => null,
+        },
+      });
+      expect(imports).toEqual([]);
+      expect(failures).toEqual([]);
+    });
+  });
+
+  describe("Go — empty workspace edge case", () => {
+    // Evidence gap: a workspace with zero go.mod files across all projects
+    // must yield no manifest failures — there is nothing to fail on.
+    it("produces no manifest failures when no go.mod files exist", () => {
+      const failures = goManifestFailures({
+        root: "/workspace",
+        projects: [{ name: "lib", root: "lib" }],
+        filesOf: () => [],
+        readFile: () => null,
+      });
+      expect(failures).toEqual([]);
+    });
+  });
 });

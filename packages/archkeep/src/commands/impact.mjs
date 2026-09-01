@@ -205,6 +205,7 @@ export function impactCommand(projectName, commandContext, config = null) {
       config.depConstraints,
     );
   }
+  result.impactStatement = composeImpactStatement(projectName, commandContext, config);
 
   // Full impact statement: when a boundary config is available, compose the
   // enriched statement that includes decision impact and evolution alignment

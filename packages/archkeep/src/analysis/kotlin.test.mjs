@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { analyzeKotlin, parseKotlinImportSites, resolveKotlinDependencies } from "./kotlin.mjs";
+import {
+  analyzeKotlin,
+  kotlinImportMalformations,
+  parseKotlinImportSites,
+  resolveKotlinDependencies,
+} from "./kotlin.mjs";
 
 const positionOf = (source, needle) => {
   const offset = source.indexOf(needle);
@@ -296,5 +301,72 @@ describe("resolveKotlinDependencies", () => {
     expect(() => resolveKotlinDependencies(ws)).toThrow(
       /packages\/acme\/src\/main\/kotlin\/com\/acme\/app\/App\.kt/,
     );
+  });
+});
+
+describe("Kotlin — malformed input edge cases", () => {
+  // Bug: before adding kotlinImportMalformations, a truncated import silently
+  // produced 0 imports with no failure — byte-for-byte identical to a clean
+  // file with no imports (#419).
+  it("flags an import truncated at EOF as a malformation", () => {
+    const reasons = kotlinImportMalformations("package com.acme\n\nimport com.acme.");
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/truncated/);
+  });
+
+  // Bug: an import and `{` on the same line is not valid Kotlin, but was
+  // silently dropped before the malformation detection was added.
+  it("flags an import and `{` sharing a line as a malformation", () => {
+    const reasons = kotlinImportMalformations("import com.acme.Kernel class App {");
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/share a line/);
+  });
+});
+
+describe("Kotlin — determinism", () => {
+  // Intentional limitation: the analyzer is a pure function of its inputs —
+  // recomputing the same workspace must yield byte-for-byte the same result.
+  it("produces the same result when run twice on the same input", () => {
+    const text = "package com.acme.app\n\nimport com.acme.core.Kernel\n\nclass App {}";
+    const workspace = {
+      root: "/workspace",
+      projects: [{ name: "acme", root: "packages/acme" }],
+      filesOf: () => ["packages/acme/src/main/kotlin/com/acme/app/App.kt"],
+      readFile: () => null,
+    };
+    const first = analyzeKotlin({
+      sourceFile: "packages/acme/src/main/kotlin/com/acme/app/App.kt",
+      text,
+      workspace,
+    });
+    const second = analyzeKotlin({
+      sourceFile: "packages/acme/src/main/kotlin/com/acme/app/App.kt",
+      text,
+      workspace,
+    });
+    expect(first).toEqual(second);
+  });
+});
+
+describe("Kotlin — silent direction", () => {
+  // Bug: before adding kotlinImportMalformations, a file truncated inside an
+  // import parsed as importing nothing with no failure — the verdict was
+  // indistinguishable from a clean file (#419).
+  it("produces a whole-file failure for an import truncated at EOF", () => {
+    const workspace = {
+      root: "/workspace",
+      projects: [{ name: "acme", root: "packages/acme" }],
+      filesOf: () => ["packages/acme/src/main/kotlin/com/acme/app/App.kt"],
+      readFile: () => null,
+    };
+    const { imports, failures } = analyzeKotlin({
+      sourceFile: "packages/acme/src/main/kotlin/com/acme/app/App.kt",
+      text: "package com.acme.app\n\nimport com.acme.core.",
+      workspace,
+    });
+    expect(imports).toEqual([]);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].line).toBeNull();
+    expect(failures[0].reason).toMatch(/truncated/);
   });
 });

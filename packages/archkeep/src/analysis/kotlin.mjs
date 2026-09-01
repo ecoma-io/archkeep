@@ -96,6 +96,58 @@ export function parseKotlinImportSites(kotlinText) {
 const importableNameOf = (name) => (name.endsWith(".*") ? name.slice(0, -2) : name);
 
 /**
+ * Kotlin malformation detection: an `import` keyword whose body never reaches
+ * its terminator before a `{` (on the same line) or EOF is a whole-file
+ * failure — without it, a file truncated inside an import would parse as
+ * importing nothing, with no failure record and a clean verdict over the hole
+ * (#419, the same pattern as `javaImportMalformations` adapted for Kotlin's
+ * newline-terminated imports).
+ *
+ * Kotlin imports are terminated by `\n`, `;`, `}`, or EOF — unlike Java where
+ * every import MUST end with `;`. So the scan includes `\n` as a valid
+ * terminator: a `{` is only a malformation when it arrives on the same line
+ * as the import head, before any newline does.
+ *
+ * @param {string} kotlinText Raw file contents.
+ * @returns {string[]} Reasons, at most one per malformation kind.
+ */
+export function kotlinImportMalformations(kotlinText) {
+  const source = maskKotlinComments(kotlinText);
+  const KOTLIN_IMPORT_HEAD = /(?:^\uFEFF?|[\n;])[ \t]*(?:import[ \t]+)/gu;
+  /** @type {string[]} */
+  const reasons = [];
+  // `\n`, `;`, and `{` ascend with the text, so one shared cursor walks all
+  // three in a single pass — the same shape the Java scan uses, but with `\n`
+  // included because Kotlin's import syntax allows newline termination.
+  const terminators = [...source.matchAll(/[\n;{]/g)];
+  let cursor = 0;
+  for (const m of source.matchAll(KOTLIN_IMPORT_HEAD)) {
+    const at = m.index + m[0].length;
+    while (cursor < terminators.length && terminators[cursor].index < at) cursor += 1;
+    const next = terminators[cursor];
+    // A `{` before any `\n` or `;` means the import and a body opener share a
+    // line, which is never valid Kotlin. No terminator at all (EOF) is also a
+    // truncation. A `\n` or `;` is a clean terminator.
+    if (next === undefined) {
+      const importOffset = m.index + m[0].indexOf("import");
+      reasons.push(
+        "an `import` never reaches its terminator — the file is truncated or malformed, " +
+          `so its imports cannot be read (line ${positionAt(kotlinText, importOffset).line})`,
+      );
+      break;
+    }
+    if (next[0] === "{") {
+      const importOffset = m.index + m[0].indexOf("import");
+      reasons.push(
+        "an `import` and a `{` share a line — the file is malformed, " +
+          `so its imports cannot be read (line ${positionAt(kotlinText, importOffset).line})`,
+      );
+      break;
+    }
+  }
+  return reasons;
+}
+/**
  * Analyzes one `.kt`/`.kts` file. Ambiguity resolves to null WITH a
  * positioned failure naming every claimant, exactly as Java's does — the
  * split-package rule cannot know which compiler unit order would win, and
@@ -113,6 +165,14 @@ export function analyzeKotlin({ sourceFile, text, workspace }) {
   try {
     const { byName: index } = jvmPackageIndex(workspace);
     const owner = projectOwning(workspace.projects, sourceFile);
+    // A file truncated inside an import used to parse as importing nothing,
+    // with no failure beside the empty result — the clean verdict over it was
+    // the bug (#419). The whole-file shape is what turns the verdict loud:
+    // `check` counts the file toward `unchecked` and refuses to call the run
+    // complete, instead of reporting a hole as a clean file.
+    for (const reason of kotlinImportMalformations(text)) {
+      result.failures.push(fileFailure(sourceFile, reason));
+    }
     for (const site of parseKotlinImportSites(text)) {
       const { line, column } = positionAt(text, site.offset);
       const resolved = resolveJvmSpecifier(site.importableName, { language: "kotlin" }, index);

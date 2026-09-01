@@ -54,4 +54,6 @@ export {
   rulesVerifyCommand,
 } from "./src/commands/rules.mjs";
 
+export { parseScenarioInput, scenarioCommand } from "./src/commands/scenario.mjs";
+
 export { UsageError } from "./src/errors.mjs";

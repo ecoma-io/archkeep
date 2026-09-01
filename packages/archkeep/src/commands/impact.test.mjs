@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { UsageError } from "../errors.mjs";
+import { composeImpactStatement } from "./impact-statement.mjs";
 import { computeImpact, impactCommand } from "./impact.mjs";
 
 /**
@@ -45,6 +47,18 @@ describe("computeImpact", () => {
     expect(result.transitive).toEqual([]);
     expect(result.dependents).toEqual([]);
   });
+  it("returns arrays (not null or undefined) when no project depends on the target", () => {
+    const graph = {
+      nodes: { a: { name: "a" }, b: { name: "b" } },
+      dependencies: {
+        a: [{ target: "b", type: "static" }],
+      },
+    };
+    const result = computeImpact("a", graph);
+    expect(Array.isArray(result.direct)).toBe(true);
+    expect(Array.isArray(result.transitive)).toBe(true);
+    expect(Array.isArray(result.dependents)).toBe(true);
+  });
 
   it("throws when the project is not in the graph", () => {
     const graph = {
@@ -60,6 +74,20 @@ describe("computeImpact", () => {
       dependencies: {},
     };
     expect(() => computeImpact("missing", graph)).toThrow(/available projects: alpha, beta/);
+  });
+  it("throws UsageError (not a generic Error) when the project is not in the graph", () => {
+    const graph = {
+      nodes: { a: { name: "a" } },
+      dependencies: {},
+    };
+    let thrown = null;
+    try {
+      computeImpact("nonexistent", graph);
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).toBeInstanceOf(UsageError);
+    expect(thrown).toBeInstanceOf(Error);
   });
 
   it("deduplicates direct dependents when multiple edges exist between the same pair", () => {
@@ -187,6 +215,121 @@ describe("computeImpact", () => {
     };
     const result = computeImpact("d", graph);
     expect(result.transitive).toEqual(["a", "x"]);
+  });
+  it("handles a graph with a cycle without infinite looping or incorrect results", () => {
+    // a depends on b, b depends on a — a cycle. The BFS visited set
+    // must prevent infinite looping. In a cyclic graph the target
+    // itself ("a") can appear in the transitive set because the
+    // reverse walk reaches it through the cycle.
+    const graph = {
+      nodes: { a: { name: "a" }, b: { name: "b" }, c: { name: "c" } },
+      dependencies: {
+        b: [{ target: "a", type: "static" }],
+        a: [{ target: "b", type: "static" }],
+        c: [{ target: "b", type: "static" }],
+      },
+    };
+    // Impact of a: who depends on a? b (directly), and through the
+    // cycle a is reachable from itself, plus c through b.
+    const result = computeImpact("a", graph);
+    expect(result.project).toBe("a");
+    expect(result.direct).toEqual(["b"]);
+    // a appears in transitive through the reverse cycle (b→a)
+    expect(result.transitive).toEqual(["a", "c"]);
+    expect(result.dependents).toEqual(["a", "b", "c"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// composeImpactStatement
+// ---------------------------------------------------------------------------
+
+describe("composeImpactStatement", () => {
+  it("returns the expected shape with evolutionAlignment when no config is provided", () => {
+    const graph = {
+      nodes: { a: { name: "a" }, b: { name: "b" } },
+      dependencies: {
+        b: [{ target: "a", type: "static" }],
+      },
+    };
+    const commandContext = {
+      root: "/workspace",
+      graph,
+      analysis: { analyzed: 2, imports: [], failures: [], analyzedFiles: [] },
+      provider: "native",
+      marker: "archkeep.json",
+    };
+    const statement = composeImpactStatement("a", commandContext);
+
+    expect(statement.project).toBe("a");
+    expect(statement.impact).toEqual({
+      direct: ["b"],
+      transitive: [],
+      dependents: ["b"],
+    });
+    // evolutionAlignment is always present
+    expect(statement.evolutionAlignment).toEqual({
+      projects: ["a", "b"],
+      boundaries: [],
+      constraints: [],
+      decisions: [],
+    });
+    expect(statement.complete).toBe(true);
+    expect(statement.notes).toEqual([]);
+    // No config, so no constraintImpact or decisionImpact
+    expect(statement).not.toHaveProperty("constraintImpact");
+    expect(statement).not.toHaveProperty("decisionImpact");
+  });
+
+  it("returns decisionImpact and constraintImpact when boundary config is provided", () => {
+    const graph = {
+      nodes: {
+        alpha: {
+          name: "alpha",
+          type: "lib",
+          data: { root: "libs/alpha", tags: ["layer:domain"] },
+        },
+        beta: {
+          name: "beta",
+          type: "lib",
+          data: { root: "libs/beta", tags: ["layer:app"] },
+        },
+      },
+      dependencies: {
+        beta: [{ target: "alpha", type: "static" }],
+      },
+    };
+    const commandContext = {
+      root: "/workspace",
+      graph,
+      analysis: { analyzed: 2, imports: [], failures: [], analyzedFiles: [] },
+      provider: "native",
+      marker: "archkeep.json",
+    };
+    const config = {
+      depConstraints: [
+        {
+          sourceTag: "layer:app",
+          onlyDependOnLibsWithTags: ["layer:domain", "layer:app"],
+        },
+      ],
+    };
+    const statement = composeImpactStatement("alpha", commandContext, config);
+
+    expect(statement.project).toBe("alpha");
+    expect(statement.impact.dependents).toEqual(["beta"]);
+    // constraintImpact is present because config.depConstraints exists
+    expect(statement.constraintImpact).toBeDefined();
+    expect(Array.isArray(statement.constraintImpact)).toBe(true);
+    expect(statement.constraintImpact).toHaveLength(1);
+    // decisionImpact is present (though decisions will be empty since no decisionRef)
+    expect(statement.decisionImpact).toBeDefined();
+    expect(statement.decisionImpact.decisions).toEqual([]);
+    expect(statement.decisionImpact.unresolvedDecisionRefs).toEqual([]);
+    // evolutionAlignment includes the constraint labels
+    expect(statement.evolutionAlignment.projects).toEqual(["alpha", "beta"]);
+    expect(statement.evolutionAlignment.constraints).toContain("sourceTag:layer:app");
+    expect(statement.complete).toBe(true);
   });
 });
 

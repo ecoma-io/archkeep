@@ -9,6 +9,7 @@ import {
   pythonImportRoots,
   pythonModuleIndex,
   pythonPackageLayout,
+  pythonImportMalformations,
   resolvePythonDependencies,
 } from "./python.mjs";
 
@@ -1290,5 +1291,73 @@ describe("analyzePython", () => {
     ].join("\n");
     const { imports } = analyze(docstring);
     expect(imports.map((record) => record.specifier)).toContain("beta.store");
+  });
+});
+
+describe("Python — malformed input edge cases", () => {
+  // Bug: before adding pythonImportMalformations, a file ending with `import `
+  // silently produced 0 imports with no failure — byte-for-byte identical to a
+  // clean file with no imports (#419).
+  it("flags a bare `import` at EOF as a malformation", () => {
+    const reasons = pythonImportMalformations("import os\n\nimport ");
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/truncated/);
+  });
+
+  // Bug: a `from ... import` that ends without naming what to import was
+  // silently dropped.
+  it("flags a `from ... import` with no imported names as a malformation", () => {
+    const reasons = pythonImportMalformations("from os import ");
+    expect(reasons).toHaveLength(1);
+    expect(reasons[0]).toMatch(/has no imported names/);
+  });
+});
+
+describe("Python — determinism", () => {
+  // Intentional limitation: the analyzer is a pure function of its inputs.
+  it("produces the same result when run twice on the same input", () => {
+    const text = "import os\n";
+    const first = analyzePython({
+      sourceFile: "empty/__init__.py",
+      text,
+      workspace: {
+        root: "/workspace",
+        projects: [{ name: "empty", root: "empty" }],
+        filesOf: () => ["empty/__init__.py"],
+        readFile: () => null,
+      },
+    });
+    const second = analyzePython({
+      sourceFile: "empty/__init__.py",
+      text,
+      workspace: {
+        root: "/workspace",
+        projects: [{ name: "empty", root: "empty" }],
+        filesOf: () => ["empty/__init__.py"],
+        readFile: () => null,
+      },
+    });
+    expect(first).toEqual(second);
+  });
+});
+
+describe("Python — silent direction", () => {
+  // Bug: before adding pythonImportMalformations, a file truncated inside an
+  // `import` statement parsed as importing nothing with no failure.
+  it("produces a whole-file failure for an import truncated at EOF", () => {
+    const { imports, failures } = analyzePython({
+      sourceFile: "empty/__init__.py",
+      text: "import os\n\nimport ",
+      workspace: {
+        root: "/workspace",
+        projects: [{ name: "empty", root: "empty" }],
+        filesOf: () => ["empty/__init__.py"],
+        readFile: () => null,
+      },
+    });
+    expect(imports).toEqual([]);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].line).toBeNull();
+    expect(failures[0].reason).toMatch(/truncated/);
   });
 });

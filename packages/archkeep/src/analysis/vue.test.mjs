@@ -224,3 +224,27 @@ describe("analyzeVue — order", () => {
     expect(imports.map((record) => record.column)).toEqual([1, 9]);
   });
 });
+
+describe("Vue — determinism", () => {
+  // Intentional limitation: the analyzer is a pure function of its inputs.
+  it("produces the same result when run twice on the same input", () => {
+    const SFC = "<template><div /></template>\n<script>\nimport a from 'x';\n</scr" + "ipt>\n";
+    const first = analyze(SFC);
+    const second = analyze(SFC);
+    expect(first).toEqual(second);
+  });
+});
+describe("Vue — silent direction", () => {
+  // Intentional limitation: an empty file has no template, no script, no
+  // imports. The analyzer reads 0 imports, but compiler-sfc requires at
+  // least a <template> or <script>, so it produces a parse error.
+  it("produces a parse error for an empty file", () => {
+    const { imports, failures } = analyze("");
+    expect(imports).toEqual([]);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].reason).toContain("Vue SFC parse error");
+    expect(failures[0].sourceFile).toBe("libs/ui/src/Comp.vue");
+    expect(failures[0].line).toBeNull();
+    expect(failures[0].column).toBeNull();
+  });
+});

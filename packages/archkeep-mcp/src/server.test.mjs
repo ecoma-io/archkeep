@@ -19,7 +19,7 @@ import { createServer, SERVER_NAME } from "./server.mjs";
 const require2 = createRequire(import.meta.url);
 const VERSION = require2("../package.json").version;
 
-/** The eight tools, in the order the server registers them. */
+/** The nine tools, in the order the server registers them. */
 const TOOL_NAMES = [
   "archkeep_context",
   "archkeep_check",
@@ -29,6 +29,7 @@ const TOOL_NAMES = [
   "archkeep_graph",
   "archkeep_history",
   "archkeep_propose",
+  "archkeep_scenario",
 ];
 
 /** One connected client–server pair; `io` is the injectable engine seams. */
@@ -110,9 +111,8 @@ describe("initialization", () => {
     await server.close();
   });
 });
-
 describe("tools/list — the whole surface, exactly", () => {
-  it("registers the eight tools and nothing else", async () => {
+  it("registers the nine tools and nothing else", async () => {
     const { server, client } = await connectedSession();
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name)).toEqual(TOOL_NAMES);
@@ -188,7 +188,7 @@ describe("input schema validation", () => {
     // on: no tool writes, so a host need not prompt for one.
     const { server, client } = await connectedSession();
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(8);
+    expect(tools.length).toBe(9);
     for (const tool of tools) {
       expect(tool.annotations?.readOnlyHint).toBe(true);
     }

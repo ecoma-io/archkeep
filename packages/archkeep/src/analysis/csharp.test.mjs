@@ -528,4 +528,41 @@ describe("analyzeCSharp — #419 whole-file failure", () => {
     });
     expect(failures).toEqual([]);
   });
+
+  describe("CSharp — determinism", () => {
+    // Intentional limitation: the analyzer is a pure function of its inputs.
+    it("produces the same result when run twice on the same input", () => {
+      const truncated = "using Shop.Domain.\n";
+      const first = analyzeCSharp({
+        sourceFile: "libs/shop/app/Service.cs",
+        text: truncated,
+        workspace: WORKSPACE,
+      });
+      const second = analyzeCSharp({
+        sourceFile: "libs/shop/app/Service.cs",
+        text: truncated,
+        workspace: WORKSPACE,
+      });
+      expect(first).toEqual(second);
+    });
+  });
+
+  describe("CSharp — silent direction", () => {
+    // Intentional limitation: an empty .cs file has no `using` directives.
+    // The analyzer reads 0 imports, produces 0 failures.
+    it("produces no failures for an empty file", () => {
+      const { imports, failures } = analyzeCSharp({
+        sourceFile: "empty/Empty.cs",
+        text: "",
+        workspace: {
+          root: "/workspace",
+          projects: [{ name: "empty", root: "empty" }],
+          filesOf: () => ["empty/Empty.cs"],
+          readFile: () => null,
+        },
+      });
+      expect(imports).toEqual([]);
+      expect(failures).toEqual([]);
+    });
+  });
 });

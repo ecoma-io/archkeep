@@ -1194,3 +1194,24 @@ describe("a declined-extension alias target reaches the constraint table", () =>
     ).toEqual([]);
   });
 });
+
+describe("TypeScript — determinism", () => {
+  // Intentional limitation: the analyzer is a pure function of its inputs.
+  it("produces the same result when run twice on the same input", () => {
+    const text = 'import { helper } from "./utils";';
+    const first = analyze(text);
+    const second = analyze(text);
+    expect(first.imports).toEqual(second.imports);
+    expect(first.failures).toEqual(second.failures);
+  });
+});
+
+describe("TypeScript — silent direction", () => {
+  // Intentional limitation: an empty .ts file has no import statements.
+  // TypeScript's createSourceFile handles empty input gracefully.
+  it("produces no failures for an empty file", () => {
+    const { imports, failures } = analyze("");
+    expect(imports).toEqual([]);
+    expect(failures).toEqual([]);
+  });
+});

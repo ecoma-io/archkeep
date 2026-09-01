@@ -1175,4 +1175,51 @@ describe("unterminated `use` — the #419 malformation", () => {
     });
     expect(failures).toEqual([]);
   });
+
+  describe("Rust — determinism", () => {
+    // Intentional limitation: the analyzer is a pure function of its inputs —
+    // recomputing the same workspace must yield byte-for-byte the same result.
+    // The whole-file failure from an unterminated `use` must also be stable
+    // across runs (#419).
+    it("produces the same result when run twice on the same input", () => {
+      const truncated = "use engine_core::task::\n";
+      const workspace = {
+        root: "/workspace",
+        projects: [{ name: "shell", root: "acme/apps/shell" }],
+        filesOf: () => ["acme/apps/shell/src/main.rs"],
+        readFile: () => null,
+      };
+      const first = analyzeRust({
+        sourceFile: "acme/apps/shell/src/main.rs",
+        text: truncated,
+        workspace,
+      });
+      const second = analyzeRust({
+        sourceFile: "acme/apps/shell/src/main.rs",
+        text: truncated,
+        workspace,
+      });
+      expect(first).toEqual(second);
+    });
+  });
+
+  describe("Rust — silent direction", () => {
+    // Intentional limitation: an empty .rs file has no `use` statements. The
+    // analyzer reads 0 imports, produces 0 failures — it cannot distinguish
+    // "deliberately empty" from "unreachable", which is a caller-level concern.
+    it("produces no failures for an empty file", () => {
+      const { imports, failures } = analyzeRust({
+        sourceFile: "empty/lib.rs",
+        text: "",
+        workspace: {
+          root: "/workspace",
+          projects: [{ name: "empty", root: "empty" }],
+          filesOf: () => ["empty/lib.rs"],
+          readFile: () => null,
+        },
+      });
+      expect(imports).toEqual([]);
+      expect(failures).toEqual([]);
+    });
+  });
 });

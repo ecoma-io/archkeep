@@ -198,4 +198,154 @@ describe("reconcileCommand", () => {
       key: "ghost",
     });
   });
+
+  it("handles boundaries whose names are not project names but whose match resolves — graceful boundary naming", async () => {
+    const context = commandContext({
+      graph: {
+        nodes: {
+          core: { name: "core", data: { root: "libs/core", tags: ["type-package"] } },
+        },
+        dependencies: {},
+      },
+    });
+    const result = await reconcileCommand(
+      context,
+      ioWithIntent(
+        intent({
+          boundaries: [{ name: "packages", match: ["tag:type-package"] }],
+          projects: {
+            required: [{ name: "core", tags: ["type-package"] }],
+          },
+        }),
+      ),
+    );
+    // The boundary name "packages" is not a project name, but its match
+    // resolves to "core" — the command must not refuse and must report
+    // the match correctly. A boundary name that differs from any project
+    // name is normal (e.g. "packages", "apps", "libs") — graceful handling.
+    expect(result.status).toBe("ok");
+    expect(result.report.text).toContain("✔ no divergence");
+  });
+
+  it("produces byte-identical output across two runs — deterministic reconcile", async () => {
+    const context = commandContext({
+      graph: {
+        nodes: {
+          core: { name: "core", data: { root: "libs/core", tags: ["type-package"] } },
+        },
+        dependencies: {},
+      },
+    });
+    const io = ioWithIntent(
+      intent({
+        projects: { required: [{ name: "core", tags: ["type-package"] }] },
+      }),
+    );
+    const first = await reconcileCommand(context, io);
+    const second = await reconcileCommand(context, io);
+    // The JSON envelope must be byte-identical between runs over the same
+    // graph and intent — no Date.now(), no Math.random(), no localeCompare.
+    expect(first.report.json).toBe(second.report.json);
+  });
+
+  it("succeeds with an explicit empty boundaries array — edge case", async () => {
+    const context = commandContext({
+      graph: {
+        nodes: {
+          core: { name: "core", data: { root: "libs/core", tags: ["type-package"] } },
+        },
+        dependencies: {},
+      },
+    });
+    const result = await reconcileCommand(
+      context,
+      ioWithIntent(
+        intent({
+          boundaries: [],
+          projects: { required: [{ name: "core", tags: ["type-package"] }] },
+        }),
+      ),
+    );
+    expect(result.status).toBe("ok");
+    expect(result.report.text).toContain("✔ no divergence");
+  });
+
+  it("succeeds with forbidden rows and no boundaries declared — edge case", async () => {
+    const context = commandContext({
+      graph: {
+        nodes: {
+          core: { name: "core", data: { root: "libs/core", tags: ["type-package"] } },
+          app: { name: "app", data: { root: "apps/app", tags: ["type-application"] } },
+        },
+        dependencies: {
+          app: [{ source: "app", target: "core", type: "static" }],
+        },
+      },
+    });
+    const result = await reconcileCommand(
+      context,
+      ioWithIntent(
+        intent({
+          boundaries: [],
+          projects: { forbidden: [{ name: "core" }] },
+        }),
+      ),
+    );
+    expect(result.status).toBe("ok");
+    // The forbidden project "core" exists in the observed graph — divergence.
+    expect(result.report.text).toContain("divergence");
+    const projectStates = result.reconcile.scores.projects.map((p) => p.classification).sort();
+    expect(projectStates).toContain("projectPresent");
+  });
+
+  it("refuses when a from/to side references a boundary name that does not exist in boundaries — treated as inline selector matching no project", async () => {
+    await expect(
+      reconcileCommand(
+        commandContext({
+          graph: {
+            nodes: {
+              core: { name: "core", data: { root: "libs/core", tags: ["type-package"] } },
+            },
+            dependencies: {},
+          },
+        }),
+        ioWithIntent(
+          intent({
+            boundaries: [],
+            forbidden: [{ from: "nonexistent-boundary", to: "core" }],
+          }),
+        ),
+      ),
+    ).rejects.toThrow(/cannot compare the observed architecture/);
+  });
+
+  it("produces a meaningful non-empty report when there is no divergence — silent direction guard", async () => {
+    const context = commandContext({
+      graph: {
+        nodes: {
+          core: { name: "core", data: { root: "libs/core", tags: ["type-package"] } },
+        },
+        dependencies: {},
+      },
+    });
+    const result = await reconcileCommand(
+      context,
+      ioWithIntent(
+        intent({
+          projects: { required: [{ name: "core", tags: ["type-package"] }] },
+        }),
+      ),
+    );
+    // The invariant: an empty result is a claim, not a shrug. Even when
+    // nothing diverges, the report must state what it inspected and
+    // conclude with a meaningful message — never an empty string or
+    // a bare "0 divergences".
+    expect(result.report.text).toBeTruthy();
+    expect(result.report.text.length).toBeGreaterThan(0);
+    expect(result.report.text).toContain("✔ no divergence");
+    expect(result.report.text).toContain("intent");
+    expect(result.report.text).toContain("observed");
+    // The summary must include the actual inspected counts, not a placeholder.
+    expect(result.report.text).toContain("1 project and 0 edges");
+  });
 });
