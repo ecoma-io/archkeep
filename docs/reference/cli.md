@@ -29,6 +29,7 @@ All commands, all flags, all exit codes in one page. Source: `packages/archkeep/
 | `decisions`  | `<id>`                           | Walk the full chain behind one recorded decision — decision to bound rows, projects, findings, and its verification level | no               |
 | `adr`        | `[<id>]`                         | List recorded architecture decisions and what each binds                                                                  | no               |
 | `rules`      | `<list                           | info                                                                                                                      | verify           | add> [<rule-name>]` | List official rules, show details, verify catalog integrity, or add a rule | no* |
+| `scenario`   | `<file>`                         | Evaluate a hypothetical change against the current architecture                                                           | no               |
 
 \* `fitness` reports no boundary violation, but it is a verdict command, not a
 descriptive one: a declared function that `fail`s makes it exit 1 (and an
