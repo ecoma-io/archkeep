@@ -625,6 +625,23 @@ direct from transitive dependents. When a boundary config is available, also
 shows which constraint rows govern each dependent's edge and whether it
 violates them. Descriptive.
 
+### `scenario <project> --scenario-file <path>`
+
+Evaluates a hypothetical change to the dependency graph and reports what would
+change for the named project. The scenario input is a JSON file (see
+[json-output.md](json-output.md) for the schema) describing one or more
+dependency additions or removals.
+
+The output compares the **current** impact against the **scenario** impact:
+which dependents would be added or removed, whether constraint-impact rows
+would change, and how the decision governance would align. Every result is
+marked `virtual` and `notAuthoritative` — this is a what-if projection, never
+an authoritative verdict.
+
+`--format json` produces a full structured envelope with current, scenario,
+and delta sections. See [json-output.md](json-output.md) for the envelope
+schema. Descriptive.
+
 ### `explain <file:line:column>`
 
 Explains the judgment for one import site: which constraint row matched, which

@@ -129,6 +129,7 @@ import { reportCommand } from "./src/commands/report.mjs";
 import { debtCommand } from "./src/commands/debt.mjs";
 import { explainCommand } from "./src/commands/explain.mjs";
 import { impactCommand } from "./src/commands/impact.mjs";
+import { scenarioCommand } from "./src/commands/scenario.mjs";
 import { provenanceCommand } from "./src/commands/provenance-command.mjs";
 import {
   rulesAddCommand,
@@ -1545,6 +1546,72 @@ async function runImpact(options, { cwd, env }) {
   }
 
   // Impact is descriptive: 0 when it completes, never 1.
+  return EXIT.ok;
+}
+/**
+ * `scenario`'s `run`: resolves the command context, reads the scenario file,
+ * drives `scenarioCommand`, writes the report, and returns the exit code.
+ *
+ * The project name is the single positional argument. `--scenario-file` names
+ * the JSON scenario description. `--config` is accepted, same as `check`,
+ * because the constraint-impact analysis depends on which boundary law is in
+ * effect.
+ *
+ * @param {{format: string, output: string|null, config: string|null, scenarioFile: string|null, paths: string[]}} options
+ * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
+ * @returns {Promise<number>}
+ */
+async function runScenario(options, { cwd, env }) {
+  if (options.paths.length !== 1) {
+    env.err(
+      `archkeep: scenario takes exactly one positional argument (the project name); ` +
+        `got ${options.paths.length}`,
+    );
+    return EXIT.usage;
+  }
+
+  if (!options.scenarioFile) {
+    env.err("archkeep: scenario requires --scenario-file <file>");
+    return EXIT.usage;
+  }
+
+  const projectName = options.paths[0];
+  const scenarioFilePath = resolve(cwd, options.scenarioFile);
+
+  let scenarioJson;
+  try {
+    scenarioJson = readFileSync(scenarioFilePath, "utf-8");
+  } catch (error) {
+    env.err(`archkeep: cannot read scenario file "${options.scenarioFile}": ${error.message}`);
+    return EXIT.usage;
+  }
+
+  let result;
+  try {
+    const commandContext = resolveCommandContext(
+      { cwd },
+      { readGraph: env.readGraph, listFiles: env.listFiles },
+    );
+
+    const { config } = await resolvePolicy(options, commandContext, cwd);
+
+    result = scenarioCommand(projectName, scenarioJson, commandContext, config);
+  } catch (error) {
+    const usageError = error instanceof UsageError;
+    env.err(String(error?.message ?? error));
+    return usageError ? EXIT.usage : EXIT.error;
+  }
+
+  const report = options.format === "json" ? result.report.json : result.report.text;
+
+  if (options.output) {
+    if (!writeOutputReport(options.output, report, env, cwd, options.config)) return EXIT.error;
+    env.err(`archkeep: scenario for "${projectName}" complete → ${options.output}`);
+  } else {
+    env.out(report);
+  }
+
+  // Scenario is descriptive: 0 when it completes, never 1.
   return EXIT.ok;
 }
 
@@ -3110,6 +3177,49 @@ const IMPACT_FLAG_HELP = Object.freeze([
 ]);
 
 /**
+ * `scenario`'s flags: text or JSON envelope, optional file output, and
+ * `--scenario-file` to specify the scenario input (required). The project
+ * name is positional.
+ *
+ * @type {readonly FlagHelp[]}
+ */
+const SCENARIO_FLAG_HELP = Object.freeze([
+  Object.freeze({
+    flag: "--format",
+    key: "format",
+    arg: "text|json",
+    describe: Object.freeze([
+      "Terminal report (default) or the versioned JSON envelope",
+      "docs/reference/json-output.md documents",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--output",
+    key: "output",
+    arg: "<file>",
+    describe: Object.freeze(["Write the report to a file instead of stdout"]),
+  }),
+  Object.freeze({
+    flag: "--config",
+    key: "config",
+    arg: "<file>",
+    describe: Object.freeze([
+      "Read the boundary law from here instead of",
+      "<workspace root>/module-boundaries.config.mjs",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--scenario-file",
+    key: "scenarioFile",
+    arg: "<file>",
+    describe: Object.freeze([
+      "Path to the scenario JSON file describing the",
+      "hypothetical changes to evaluate",
+    ]),
+  }),
+]);
+
+/**
  * `explain`'s flags: text or JSON envelope, optional file output.
  * The site argument is positional. `--config` overrides the boundary law,
  * same as `check`, because the judgment depends on which rules are in effect.
@@ -3512,6 +3622,16 @@ const COMMANDS = Object.freeze({
     defaults: Object.freeze({ format: "text", output: null, config: null }),
     formats: DESCRIBABLE_FORMATS,
     run: runImpact,
+  }),
+  scenario: Object.freeze({
+    name: "scenario",
+    args: "<project>",
+    summary: "Evaluate a hypothetical change against the current workspace",
+    flagHelp: SCENARIO_FLAG_HELP,
+    flags: Object.freeze(Object.fromEntries(SCENARIO_FLAG_HELP.map((f) => [f.flag, f.key]))),
+    defaults: Object.freeze({ format: "text", output: null, config: null, scenarioFile: null }),
+    formats: DESCRIBABLE_FORMATS,
+    run: runScenario,
   }),
   explain: Object.freeze({
     name: "explain",

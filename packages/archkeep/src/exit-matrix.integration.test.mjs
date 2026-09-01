@@ -195,6 +195,11 @@ writeTree(world, {
   "libs/adapter/adapter.go": 'package adapter\n\nconst Name = "adapter"\n',
   "docs/adr/0001-layers.md": LAYERS_ADR,
 });
+writeTree(world, {
+  "scenario.json": JSON.stringify({
+    changes: [{ type: "dependency_added", source: "domain", target: "adapter" }],
+  }),
+});
 
 // The broken world: a boundary law that cannot LOAD. Every command that
 // resolves the workspace's policy meets it and must refuse loudly rather
@@ -550,6 +555,23 @@ const MATRIX = {
       argv: ["decisions", "0000-nope"],
       exit: EXIT.error,
       stderrContains: "does not resolve",
+    },
+  },
+  scenario: {
+    ok: {
+      world: "world",
+      argv: () => ["scenario", "domain", "--scenario-file", join(world, "scenario.json")],
+      exit: EXIT.ok,
+    },
+    refused: {
+      world: "world",
+      argv: () => [
+        "scenario",
+        "domain",
+        "--scenario-file",
+        join(artifactsDir, "no-such-scenario.json"),
+      ],
+      exit: EXIT.usage,
     },
   },
   rules: {
