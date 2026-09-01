@@ -67,9 +67,11 @@ export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "depende
 /**
  * @typedef {object} ScenarioEvaluation
  * @property {boolean} virtual Always true — a scenario is never authoritative.
+ * @property {boolean} notAuthoritative Always true — mirrors `virtual`.
  * @property {string} project The target project being evaluated.
  * @property {object} base The base graph information.
  * @property {string[]} changes The change descriptions that were applied.
+ * @property {string[]|undefined} refused Changes that could not be applied, if any.
  * @property {object} current The current impact for the target project.
  * @property {object} scenario The would-be impact after applying the changes.
  * @property {object} delta What would change.

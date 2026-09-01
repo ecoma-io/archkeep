@@ -30,6 +30,20 @@ function makeCommandContext(graph) {
   };
 }
 
+/**
+ * Creates a `ScenarioInput` with properly typed changes.
+ * TypeScript needs literal types for `type` to match `DependencyChange`,
+ * which a plain object literal widens to `string`.
+ *
+ * @param {"dependency_added"|"dependency_removed"} type
+ * @param {string} source
+ * @param {string} target
+ * @returns {import("./scenario-evaluation.mjs").DependencyChange}
+ */
+function change(type, source, target) {
+  return { type, source, target };
+}
+
 // ---------------------------------------------------------------------------
 // parseScenarioInput
 // ---------------------------------------------------------------------------
@@ -37,7 +51,7 @@ function makeCommandContext(graph) {
 describe("parseScenarioInput", () => {
   it("parses a valid scenario with dependency_added", () => {
     const input = JSON.stringify({
-      changes: [{ type: "dependency_added", source: "x", target: "y" }],
+      changes: [change("dependency_added", "x", "y")],
     });
     const result = parseScenarioInput(input);
     expect(result.changes).toHaveLength(1);
@@ -50,7 +64,7 @@ describe("parseScenarioInput", () => {
 
   it("parses a scenario with dependency_removed", () => {
     const input = JSON.stringify({
-      changes: [{ type: "dependency_removed", source: "x", target: "y" }],
+      changes: [change("dependency_removed", "x", "y")],
     });
     const result = parseScenarioInput(input);
     expect(result.changes[0].type).toBe("dependency_removed");
@@ -59,7 +73,7 @@ describe("parseScenarioInput", () => {
   it("extracts the optional base field", () => {
     const input = JSON.stringify({
       base: "abc123",
-      changes: [{ type: "dependency_added", source: "x", target: "y" }],
+      changes: [change("dependency_added", "x", "y")],
     });
     const result = parseScenarioInput(input);
     expect(result.base).toBe("abc123");
@@ -67,7 +81,7 @@ describe("parseScenarioInput", () => {
 
   it("defaults base to undefined when absent", () => {
     const input = JSON.stringify({
-      changes: [{ type: "dependency_added", source: "x", target: "y" }],
+      changes: [change("dependency_added", "x", "y")],
     });
     const result = parseScenarioInput(input);
     expect(result.base).toBeUndefined();
@@ -136,7 +150,7 @@ describe("evaluateScenario — determinism and labels", () => {
       ],
     );
     const input = {
-      changes: [{ type: "dependency_added", source: "c", target: "b" }],
+      changes: [change("dependency_added", "c", "b")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.virtual).toBe(true);
@@ -152,7 +166,7 @@ describe("evaluateScenario — determinism and labels", () => {
       ],
     );
     const input = {
-      changes: [{ type: "dependency_added", source: "c", target: "b" }],
+      changes: [change("dependency_added", "c", "b")],
     };
     const ctx = makeCommandContext(graph);
     const r1 = evaluateScenario("a", ctx, input);
@@ -163,7 +177,7 @@ describe("evaluateScenario — determinism and labels", () => {
   it("includes a note that this is not authoritative", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
-      changes: [{ type: "dependency_added", source: "b", target: "a" }],
+      changes: [change("dependency_added", "b", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.notes).toEqual(
@@ -188,7 +202,7 @@ describe("evaluateScenario — dependency_added", () => {
       ],
     );
     const input = {
-      changes: [{ type: "dependency_added", source: "c", target: "b" }],
+      changes: [change("dependency_added", "c", "b")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     // Current: b, c depend on a directly
@@ -205,7 +219,7 @@ describe("evaluateScenario — dependency_added", () => {
     // a ← b. Add c → a. Now c also depends on a directly.
     const graph = makeGraph(["a", "b", "c"], [["b", ["a"]]]);
     const input = {
-      changes: [{ type: "dependency_added", source: "c", target: "a" }],
+      changes: [change("dependency_added", "c", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.current.impact.dependents).toEqual(["b"]);
@@ -216,7 +230,7 @@ describe("evaluateScenario — dependency_added", () => {
   it("records the change in the changes list", () => {
     const graph = makeGraph(["a", "b"], []);
     const input = {
-      changes: [{ type: "dependency_added", source: "b", target: "a" }],
+      changes: [change("dependency_added", "b", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.changes).toEqual(
@@ -227,7 +241,7 @@ describe("evaluateScenario — dependency_added", () => {
   it("refuses when source project does not exist", () => {
     const graph = makeGraph(["a"], []);
     const input = {
-      changes: [{ type: "dependency_added", source: "nonexistent", target: "a" }],
+      changes: [change("dependency_added", "nonexistent", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.refused).toBeDefined();
@@ -237,7 +251,7 @@ describe("evaluateScenario — dependency_added", () => {
   it("refuses when target project does not exist", () => {
     const graph = makeGraph(["a"], []);
     const input = {
-      changes: [{ type: "dependency_added", source: "a", target: "nonexistent" }],
+      changes: [change("dependency_added", "a", "nonexistent")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.refused).toBeDefined();
@@ -246,7 +260,7 @@ describe("evaluateScenario — dependency_added", () => {
   it("skips duplicate edges without error", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
-      changes: [{ type: "dependency_added", source: "b", target: "a" }],
+      changes: [change("dependency_added", "b", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     // The edge already exists, so it's noted as already present
@@ -272,7 +286,7 @@ describe("evaluateScenario — dependency_removed", () => {
       ],
     );
     const input = {
-      changes: [{ type: "dependency_removed", source: "b", target: "a" }],
+      changes: [change("dependency_removed", "b", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.current.impact.dependents).toEqual(["b", "c"]);
@@ -283,7 +297,7 @@ describe("evaluateScenario — dependency_removed", () => {
   it("refuses when the edge does not exist", () => {
     const graph = makeGraph(["a", "b"], []);
     const input = {
-      changes: [{ type: "dependency_removed", source: "b", target: "a" }],
+      changes: [change("dependency_removed", "b", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.refused).toBeDefined();
@@ -308,10 +322,7 @@ describe("evaluateScenario — multiple changes", () => {
       ],
     );
     const input = {
-      changes: [
-        { type: "dependency_added", source: "c", target: "b" },
-        { type: "dependency_removed", source: "d", target: "c" },
-      ],
+      changes: [change("dependency_added", "c", "b"), change("dependency_removed", "d", "c")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     // Current dependents of a: b (direct), c (direct), d (transitive via c)
@@ -337,7 +348,7 @@ describe("evaluateScenario — delta correctness", () => {
       ],
     );
     const input = {
-      changes: [{ type: "dependency_added", source: "d", target: "a" }],
+      changes: [change("dependency_added", "d", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     // Current: b depends on a
@@ -349,7 +360,7 @@ describe("evaluateScenario — delta correctness", () => {
   it("reports constraint impact changes when config is provided", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
-      changes: [{ type: "dependency_added", source: "b", target: "a" }],
+      changes: [change("dependency_added", "b", "a")],
     };
     const config = {
       depConstraints: [
@@ -372,7 +383,7 @@ describe("evaluateScenario — delta correctness", () => {
   it("reports no constraint impact when config is null", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
-      changes: [{ type: "dependency_added", source: "b", target: "a" }],
+      changes: [change("dependency_added", "b", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input, null);
     expect(result.current.constraintImpact).toBeNull();
@@ -388,7 +399,7 @@ describe("evaluateScenario — edge cases", () => {
   it("handles self-referential scenarios gracefully", () => {
     const graph = makeGraph(["a"], []);
     const input = {
-      changes: [{ type: "dependency_added", source: "a", target: "a" }],
+      changes: [change("dependency_added", "a", "a")],
     };
     // Self-referential: a depends on itself. This adds an edge, but
     // computeImpact should handle it (a project doesn't count as its own
@@ -417,7 +428,7 @@ describe("evaluateScenario — edge cases", () => {
       ],
     );
     const input = {
-      changes: [{ type: "dependency_removed", source: "b", target: "a" }],
+      changes: [change("dependency_removed", "b", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     // Current dependents of a: b (direct), c (direct), d (transitive)
@@ -430,7 +441,7 @@ describe("evaluateScenario — edge cases", () => {
   it("includes complete flag", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
-      changes: [{ type: "dependency_added", source: "b", target: "a" }],
+      changes: [change("dependency_added", "b", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.complete).toBe(true);
@@ -440,7 +451,7 @@ describe("evaluateScenario — edge cases", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
       base: "abc123def",
-      changes: [{ type: "dependency_added", source: "b", target: "a" }],
+      changes: [change("dependency_added", "b", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.base.revision).toBe("abc123def");
@@ -450,7 +461,7 @@ describe("evaluateScenario — edge cases", () => {
   it("outputs current workspace when no base provided", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
-      changes: [{ type: "dependency_added", source: "b", target: "a" }],
+      changes: [change("dependency_added", "b", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.base.revision).toBe("(current workspace)");
@@ -465,7 +476,7 @@ describe("evaluateScenario — evolution alignment", () => {
   it("builds evolution alignment for the current state", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
-      changes: [{ type: "dependency_added", source: "b", target: "a" }],
+      changes: [change("dependency_added", "b", "a")],
     };
     const config = {
       depConstraints: [
