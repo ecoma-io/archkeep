@@ -3246,49 +3246,6 @@ const SCENARIO_FLAG_HELP = Object.freeze([
 ]);
 
 /**
- * `scenario`'s flags: text or JSON envelope, optional file output, and
- * `--scenario-file` to specify the scenario input (required). The project
- * name is positional.
- *
- * @type {readonly FlagHelp[]}
- */
-const SCENARIO_FLAG_HELP = Object.freeze([
-  Object.freeze({
-    flag: "--format",
-    key: "format",
-    arg: "text|json",
-    describe: Object.freeze([
-      "Terminal report (default) or the versioned JSON envelope",
-      "docs/reference/json-output.md documents",
-    ]),
-  }),
-  Object.freeze({
-    flag: "--output",
-    key: "output",
-    arg: "<file>",
-    describe: Object.freeze(["Write the report to a file instead of stdout"]),
-  }),
-  Object.freeze({
-    flag: "--config",
-    key: "config",
-    arg: "<file>",
-    describe: Object.freeze([
-      "Read the boundary law from here instead of",
-      "<workspace root>/module-boundaries.config.mjs",
-    ]),
-  }),
-  Object.freeze({
-    flag: "--scenario-file",
-    key: "scenarioFile",
-    arg: "<file>",
-    describe: Object.freeze([
-      "Path to the scenario JSON file describing the",
-      "hypothetical changes to evaluate",
-    ]),
-  }),
-]);
-
-/**
  * `explain`'s flags: text or JSON envelope, optional file output.
  * The site argument is positional. `--config` overrides the boundary law,
  * same as `check`, because the judgment depends on which rules are in effect.
