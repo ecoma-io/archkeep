@@ -336,8 +336,8 @@ disposition:
   partition axis rather than a layer axis, where the violation is between peers
   and no layer ordering exists to decide it.
 
-**27 fixture workspaces, 108 probes, 101 projects**, carrying 60 labeled findings
-and 54 near-miss probes that must produce nothing.
+**30 fixture workspaces, 115 probes, 107 projects**, carrying 64 labeled findings
+and 57 near-miss probes that must produce nothing.
 
 ### How it runs, and why it runs the whole command
 
@@ -386,13 +386,13 @@ moves:
 
 | messageId                                    |  Go | Rust | Python | TypeScript | Java | Kotlin |  C# |
 | -------------------------------------------- | --: | ---: | -----: | ---------: | ---: | -----: | --: |
-| `onlyTagsConstraintViolation`                |  15 |    3 |      4 |          1 |    3 |      2 |   1 |
+| `onlyTagsConstraintViolation`                |  16 |    3 |      4 |          1 |    3 |      2 |   1 |
 | `notTagsConstraintViolation`                 |   0 |    2 |      0 |          0 |    0 |      0 |   0 |
 | `emptyOnlyTagsConstraintViolation`           |   0 |    0 |      1 |          0 |    0 |      0 |   0 |
-| `projectWithoutTagsCannotHaveDependencies`   |   1 |    0 |      2 |          0 |    2 |      2 |   1 |
+| `projectWithoutTagsCannotHaveDependencies`   |   2 |    0 |      2 |          0 |    2 |      2 |   1 |
 | `bannedExternalImportsViolation`             |   1 |    1 |      0 |          0 |    2 |      2 |   1 |
 | `noTransitiveDependencies`                   |   2 |    0 |      0 |          0 |    0 |      0 |   0 |
-| `noCircularDependencies`                     |   0 |    0 |      2 |          0 |    2 |      2 |   0 |
+| `noCircularDependencies`                     |   2 |    0 |      2 |          0 |    2 |      2 |   0 |
 | `noSelfCircularDependencies`                 |   0 |    0 |      1 |          0 |    0 |      0 |   0 |
 | `noImportsOfApps`                            |   1 |    0 |      0 |          0 |    0 |      0 |   0 |
 | `noImportsOfE2e`                             |   1 |    0 |      0 |          0 |    0 |      0 |   0 |

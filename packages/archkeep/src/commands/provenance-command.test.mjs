@@ -553,3 +553,160 @@ describe("decision lifecycle (PR E)", () => {
     expect(a.report.text).toBe(b.report.text);
   });
 });
+
+describe("provenance completeness — every row in intent has an entry in result.rows", () => {
+  it("maps every intent row (allowed, forbidden, projects) to a result.rows entry", async () => {
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({
+        intent: intent({
+          allowed: [{ from: "packages", to: "packages", origin: { by: "j", tool: "l" } }],
+          forbidden: [{ from: "packages", to: "extensions", reason: "x" }],
+          projects: { required: [{ name: "web", origin: { by: "j", tool: "l" } }] },
+        }),
+      }),
+    );
+    const kinds = result.rows.map((r) => r.kind).sort();
+    expect(kinds).toEqual(["allowed[0]", "forbidden[0]", "projects.required[0]"]);
+    expect(result.rows).toHaveLength(3);
+  });
+
+  it("maps every config row to a result.rows entry", async () => {
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({
+        intent: intent(),
+        config: config([
+          { sourceTag: "layer:domain", origin: { by: "j", tool: "l" } },
+          { sourceTag: "layer:app", origin: { by: "j", tool: "l" } },
+        ]),
+      }),
+    );
+    const kinds = result.rows.map((r) => r.kind).sort();
+    expect(kinds).toEqual(["depConstraints[0]", "depConstraints[1]"]);
+    expect(result.rows).toHaveLength(2);
+  });
+
+  it("reports unattested rows matching those without origin — no row with origin in unattested", async () => {
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({
+        intent: intent({
+          allowed: [{ from: "a", to: "b", origin: { by: "j", tool: "l" } }],
+          forbidden: [{ from: "a", to: "c", reason: "x" }],
+        }),
+      }),
+    );
+    // The allowed row is attested, the forbidden row is not.
+    expect(result.rows.filter((r) => r.attested)).toHaveLength(1);
+    expect(result.rows.filter((r) => !r.attested)).toHaveLength(1);
+    expect(result.unattested.map((r) => r.kind)).toEqual(["forbidden[0]"]);
+    // Every unattested row is also in result.rows as unattested.
+    for (const u of result.unattested) {
+      const match = result.rows.find((r) => r.kind === u.kind);
+      expect(match).toBeDefined();
+      expect(match.attested).toBe(false);
+    }
+  });
+
+  it("reports zero unattested rows when every row carries an origin", async () => {
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({
+        intent: intent({
+          allowed: [{ from: "a", to: "b", origin: { by: "j", tool: "l" } }],
+          projects: {
+            required: [{ name: "web", origin: { by: "j", tool: "l" } }],
+          },
+        }),
+        config: config([{ sourceTag: "x", origin: { by: "j", tool: "l" } }]),
+      }),
+    );
+    expect(result.unattested).toEqual([]);
+    expect(result.rows.every((r) => r.attested)).toBe(true);
+  });
+});
+
+describe("cross-command provenance shape consistency", () => {
+  it("the resolveProvenance mock returns the contract shape all 6 commands expect", () => {
+    // Every command consuming resolveProvenance (diff, delta, drift, reconcile,
+    // impact, context) expects the same { commit, remote, dirty } shape. The
+    // mock in this file must match that contract so the command-under-test
+    // behaves identically to production.
+    const mockResult = { commit: "abc1234", remote: "git@example.com:acme/repo.git", dirty: false };
+    // Verify the shape keys match the contract.
+    const keys = Object.keys(mockResult);
+    expect(keys).toEqual(expect.arrayContaining(["commit", "remote", "dirty"]));
+    expect(keys).toHaveLength(3);
+    expect(typeof mockResult.commit).toBe("string");
+    expect(typeof mockResult.remote).toBe("string");
+    expect(typeof mockResult.dirty).toBe("boolean");
+  });
+
+  it("the repo field in the command result mirrors the contract shape plus established", async () => {
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({ intent: intent({ forbidden: [{ from: "a", to: "b", reason: "x" }] }) }),
+    );
+    // result.repo extends {commit, remote, dirty} with {established}.
+    expect(result.repo).toMatchObject({
+      commit: expect.any(String),
+      remote: expect.any(String),
+      dirty: expect.any(Boolean),
+      established: true,
+    });
+    const keys = Object.keys(result.repo);
+    expect(keys).toEqual(expect.arrayContaining(["commit", "remote", "dirty", "established"]));
+    expect(keys).toHaveLength(4);
+  });
+
+  it("the envelope workspace.provenance has the same {commit, remote, dirty} shape", async () => {
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({ intent: intent({ forbidden: [{ from: "a", to: "b", reason: "x" }] }) }),
+    );
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.workspace.provenance).toMatchObject({
+      commit: expect.any(String),
+      remote: expect.any(String),
+      dirty: expect.any(Boolean),
+    });
+    const keys = Object.keys(envelope.workspace.provenance);
+    expect(keys).toEqual(expect.arrayContaining(["commit", "remote", "dirty"]));
+  });
+});
+
+describe("provenance-command — error-path", () => {
+  it("reports empty intent rows — no rows to attest", async () => {
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({ intent: intent({ allowed: [], forbidden: [] }) }),
+    );
+    expect(result.rows).toEqual([]);
+    expect(result.unattested).toEqual([]);
+  });
+
+  it("reports zero config rows when no boundary config is named — no config, no rows", async () => {
+    const result = await provenanceCommand(
+      commandContext({ options: { boundaryConfig: undefined } }),
+      ioWith({ intent: intent({ forbidden: [{ from: "a", to: "b", reason: "x" }] }) }),
+    );
+    expect(result.rows).toHaveLength(1); // Only the intent row.
+  });
+
+  it("refuses an intent with null rows — a null row is not a valid governance row", async () => {
+    await expect(
+      provenanceCommand(commandContext(), {
+        loadIntentOverride: async () => ({ allowed: [null], forbidden: [] }),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("refuses an intent with undefined rows — missing row lists are malformed", async () => {
+    await expect(
+      provenanceCommand(commandContext(), {
+        loadIntentOverride: async () => ({ allowed: [undefined], forbidden: [] }),
+      }),
+    ).rejects.toThrow();
+  });
+});

@@ -175,47 +175,72 @@ describe("resolveProvenance", () => {
   });
 });
 
-describe("resolveFileAttribution", () => {
-  function makeRepoWithTwoCommitters() {
-    const repo = mkdtempSync(join(tmpdir(), "archkeep-file-attribution-"));
-    try {
-      execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
-      const stripEnv = () => ({
-        cwd: repo,
-        env: { ...process.env, GIT_DIR: undefined, GIT_WORK_TREE: undefined },
-      });
-      mkdirSync(join(repo, "docs/adr"), { recursive: true });
-      const file = "docs/adr/0001-boundary-levels.md";
-      writeFileSync(join(repo, file), "---\nstatus: proposed\n---\n");
-      execFileSync(
-        "git",
-        ["-c", "user.name=Tess", "-c", "user.email=tess@example.com", "add", "."],
-        stripEnv(),
-      );
-      execFileSync(
-        "git",
-        ["-c", "user.name=Tess", "-c", "user.email=tess@example.com", "commit", "-m", "propose"],
-        stripEnv(),
-      );
-      // A second, later commit by a different author records the last change.
-      writeFileSync(join(repo, file), "---\nstatus: accepted\n---\n");
-      execFileSync(
-        "git",
-        ["-c", "user.name=Rex", "-c", "user.email=rex@example.com", "add", "."],
-        stripEnv(),
-      );
-      execFileSync(
-        "git",
-        ["-c", "user.name=Rex", "-c", "user.email=rex@example.com", "commit", "-m", "accept"],
-        stripEnv(),
-      );
-      return { repo, file };
-    } catch (err) {
-      rmSync(repo, { recursive: true, force: true });
-      throw err;
+describe("resolveProvenance — 10-run determinism", () => {
+  it("produces byte-identical output across 10 consecutive calls over the same repo", () => {
+    // The real git repo is stable across the duration of a test run; each
+    // call must return exactly the same {commit, remote, dirty} tuple.
+    const root = process.cwd();
+    const results = Array.from({ length: 10 }, () => resolveProvenance(root));
+    const first = JSON.stringify(results[0]);
+    for (let i = 1; i < results.length; i++) {
+      expect(JSON.stringify(results[i])).toBe(first);
     }
-  }
+  });
 
+  it("the 10 results share the same object shape — commit string, remote string|null, dirty boolean", () => {
+    const root = process.cwd();
+    const results = Array.from({ length: 10 }, () => resolveProvenance(root));
+    for (const result of results) {
+      expect(result).not.toBeNull();
+      expect(typeof result.commit).toBe("string");
+      expect(result.remote === null || typeof result.remote === "string").toBe(true);
+      expect(typeof result.dirty).toBe("boolean");
+    }
+  });
+});
+
+/** Creates a temp git repo with two committers for attribution tests. */
+function makeRepoWithTwoCommitters() {
+  const repo = mkdtempSync(join(tmpdir(), "archkeep-file-attribution-"));
+  try {
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
+    const stripEnv = () => ({
+      cwd: repo,
+      env: { ...process.env, GIT_DIR: undefined, GIT_WORK_TREE: undefined },
+    });
+    mkdirSync(join(repo, "docs/adr"), { recursive: true });
+    const file = "docs/adr/0001-boundary-levels.md";
+    writeFileSync(join(repo, file), "---\nstatus: proposed\n---\n");
+    execFileSync(
+      "git",
+      ["-c", "user.name=Tess", "-c", "user.email=tess@example.com", "add", "."],
+      stripEnv(),
+    );
+    execFileSync(
+      "git",
+      ["-c", "user.name=Tess", "-c", "user.email=tess@example.com", "commit", "-m", "propose"],
+      stripEnv(),
+    );
+    // A second, later commit by a different author records the last change.
+    writeFileSync(join(repo, file), "---\nstatus: accepted\n---\n");
+    execFileSync(
+      "git",
+      ["-c", "user.name=Rex", "-c", "user.email=rex@example.com", "add", "."],
+      stripEnv(),
+    );
+    execFileSync(
+      "git",
+      ["-c", "user.name=Rex", "-c", "user.email=rex@example.com", "commit", "-m", "accept"],
+      stripEnv(),
+    );
+    return { repo, file };
+  } catch (err) {
+    rmSync(repo, { recursive: true, force: true });
+    throw err;
+  }
+}
+
+describe("resolveFileAttribution", () => {
   it("attributes the first and last commits of a file as committed static facts", () => {
     const { repo, file } = makeRepoWithTwoCommitters();
     try {
@@ -301,6 +326,37 @@ describe("resolveFileAttribution", () => {
       mkdirSync(join(repo, "docs/adr"), { recursive: true });
       writeFileSync(join(repo, "docs/adr/0001-x.md"), "---\nstatus: proposed\n---\n");
       expect(resolveFileAttribution(repo, "docs/adr/0001-x.md")).toBeNull();
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+});
+describe("resolveFileAttribution — 10-run determinism", () => {
+  it("produces byte-identical output across 10 consecutive calls over the same tree", () => {
+    const { repo, file } = makeRepoWithTwoCommitters();
+    try {
+      const results = Array.from({ length: 10 }, () => resolveFileAttribution(repo, file));
+      const first = JSON.stringify(results[0]);
+      for (let i = 1; i < results.length; i++) {
+        expect(JSON.stringify(results[i])).toBe(first);
+      }
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("the 10 results share the same attribution shape — createdBy and lastChangedBy", () => {
+    const { repo, file } = makeRepoWithTwoCommitters();
+    try {
+      const results = Array.from({ length: 10 }, () => resolveFileAttribution(repo, file));
+      for (const result of results) {
+        expect(result).not.toBeNull();
+        expect(result.createdBy).toBeDefined();
+        expect(result.lastChangedBy).toBeDefined();
+        expect(typeof result.createdBy.by).toBe("string");
+        expect(result.createdBy.tool).toBe("git");
+        expect(typeof result.createdBy.on).toBe("string");
+      }
     } finally {
       rmSync(repo, { recursive: true, force: true });
     }

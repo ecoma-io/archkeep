@@ -97,6 +97,19 @@ export function buildDecision(run) {
     );
   }
 
+  // The `findings` count is the cardinal evidence number — a non-negative
+  // integer that the I1–I5 invariants all rely on. A missing, non-numeric, or
+  // negative value would silently falsify every comparison (`undefined > 0` is
+  // `false`), producing a clean verdict over a run whose counts were never set
+  // or are logically impossible — the exact silent direction this module exists
+  // to refuse.
+  if (typeof run.findings !== "number" || !Number.isFinite(run.findings) || run.findings < 0) {
+    throw new Error(
+      `archkeep: refusing to build a decision where findings is ${JSON.stringify(run.findings)} ` +
+        `— findings must be a non-negative number, or the verdict invariants cannot be enforced. ` +
+        `This is a bug in the command that built the decision.`,
+    );
+  }
   if (verdict === "pass") {
     if (run.coverageComplete !== true) {
       throw new Error(
