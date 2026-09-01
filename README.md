@@ -372,29 +372,14 @@ Read it in this order, or jump to what you need:
 
 Full index: [**docs/**](docs/README.md).
 
-## Status: crossing into 1.0
+## Real-world usage
 
-Everything described on this page ships today. The release in flight is
-**1.0.0-rc.1** — the release candidate for the compatibility contract, not
-yet stable 1.0 and not yet a claim that the contract is finished. Stable 1.0
-is the same contract once the project's four measured readiness conditions
-hold — consecutive green weekly differentials on real trees, an external
-workspace running `check` as a blocking gate, fifty quiet commits since the
-last breaking change, releases that land unattended — and `pnpm readiness`
-reports each as `met`, `not met` or honestly `unmeasured`
-([roadmap](docs/doctrine/roadmap.md)). From the candidate onward, `main`
-keeps that contract on a single development line: a change that alters what
-an unchanged workspace is told is a breaking change, and it lands only as a
-maintainer-authorized exception
-([which branch a change lands on](CONTRIBUTING.md#which-branch-a-change-lands-on)).
-The VS Code extension ships as a `.vsix` today; its marketplace listing
-starts at the stable cut, because the marketplace carries no prerelease
-versions. Capabilities beyond the deterministic core — architectural impact
-analysis, scenario evaluation, and an evidence-grounded advisor — are
-documented as a gated direction, not promises, and none of them is an
-autonomous architect
-([roadmap](docs/doctrine/roadmap.md),
-[architecture authority](docs/doctrine/architecture-authority.md)).
+Archkeep is actively dogfooded within the Ecoma ecosystem:
+
+- **[ecoma-io/loom](https://github.com/ecoma-io/loom)** — a TypeScript/Vue monorepo using Moonrepo, where Archkeep enforces module-boundary constraints through `module-boundaries.config.mjs` and runs as part of `lint`, with mutation-based tests verifying violations are caught.
+- **[ecoma-io/action-agents](https://github.com/ecoma-io/action-agents)** — a GitHub Actions and automation repository with a native workspace, where Archkeep validates project boundaries via `archkeep.json` and `module-boundaries.config.mjs`, and runs `archkeep check` as a blocking CI gate.
+
+Both consume Archkeep as a pinned dependency.
 
 ## Contributing
 
