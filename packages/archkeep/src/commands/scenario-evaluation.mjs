@@ -36,7 +36,7 @@ import { computeImpactConstraints } from "./edge-constraints.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { hasAuthority, resolveDecisionRef, stripAdrPrefix } from "../governance/adr-registry.mjs";
 import { isComboDepConstraint } from "../rules/tags.mjs";
-import { execSync } from "node:child_process";
+import { resolveProvenance } from "./provenance.mjs";
 
 // ---------------------------------------------------------------------------
 // Scenario types
@@ -103,11 +103,19 @@ export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "depende
 /**
  * Deep-clones the graph's nodes and dependencies for mutation.
  *
+ * Both `nodes` and `dependencies` are deep-cloned so the scenario evaluation
+ * never mutates the original graph — the scenario is read-only by contract.
+ * Each node is cloned via structuredClone (they carry only plain data: tags,
+ * root, type, name). Each dependency edge is spread into a new object.
+ *
  * @param {object} graph The project graph: `{nodes, dependencies}`.
  * @returns {{nodes: object, dependencies: object}}
  */
 function cloneGraph(graph) {
-  const nodes = { ...graph.nodes };
+  const nodes = {};
+  for (const [name, node] of Object.entries(graph.nodes)) {
+    nodes[name] = structuredClone(node);
+  }
   const dependencies = {};
   for (const [source, edges] of Object.entries(graph.dependencies)) {
     dependencies[source] = edges.map((e) => ({ ...e }));
@@ -173,6 +181,14 @@ function applyChanges(graph, changes) {
         continue;
       }
       existing.splice(idx, 1);
+
+      // Clean up empty arrays so the cloned graph stays consistent — a source
+      // with no edges should not carry a dangling empty array that
+      // `computeImpact` would iterate over (wasteful but not incorrect).
+      if (existing.length === 0) {
+        delete cloned.dependencies[change.source];
+      }
+
       applied.push(`removed dependency: ${change.source} → ${change.target}`);
     }
   }
@@ -331,45 +347,67 @@ function computeDelta(current, scenario) {
  * Resolves the base revision for a scenario evaluation.
  *
  * When the user provides a `base` string, it is used as-is and marked as
- * attributed. When no base is provided, we attempt to resolve from
- * `git rev-parse HEAD`. If that fails, we report the gap rather than
+ * attributed. When no base is provided, we attempt to resolve from git via
+ * `resolveProvenance`. If that fails, we report the gap rather than
  * fabricating a revision.
+ *
+ * Cross-validates the user-provided base against the workspace's actual git
+ * state when git is available — a mismatch is noted in the provenance label
+ * but does not refuse the evaluation (the user may be targeting a different
+ * revision).
  *
  * @param {string} root The workspace root.
  * @param {string|undefined} userBase The user-provided base (optional).
  * @returns {{revision: string, attributed: boolean, provenance: string}}
  */
 function resolveBaseRevision(root, userBase) {
+  // Resolve git provenance once — reused for both auto-resolution and
+  // cross-validation.
+  let gitProvenance = null;
+  try {
+    gitProvenance = resolveProvenance(root);
+  } catch {
+    // resolveProvenance throws for an unborn HEAD — the workspace has a .git
+    // but no commits. Fall through to unattributed.
+  }
+
   if (typeof userBase === "string" && userBase.length > 0) {
+    // User-provided base: cross-validate against git when available.
+    if (gitProvenance && gitProvenance.commit === userBase) {
+      return {
+        revision: userBase,
+        attributed: true,
+        provenance: "user-provided (matches HEAD)",
+      };
+    }
+    if (gitProvenance) {
+      return {
+        revision: userBase,
+        attributed: true,
+        provenance: `user-provided (differs from HEAD: ${gitProvenance.commit})`,
+      };
+    }
     return {
       revision: userBase,
       attributed: true,
-      provenance: "user-provided",
+      provenance: "user-provided (git unavailable for cross-validation)",
     };
   }
 
-  // Attempt to resolve from git
-  try {
-    const revision = execSync("git rev-parse HEAD", {
-      cwd: root,
-      encoding: "utf8",
-      timeout: 5000,
-    }).trim();
-    if (revision && revision.length === 40) {
-      return {
-        revision,
-        attributed: true,
-        provenance: "auto-resolved: git rev-parse HEAD",
-      };
-    }
-  } catch {
-    // Fall through to unverifiable
+  // Auto-resolve from git provenance
+  if (gitProvenance) {
+    return {
+      revision: gitProvenance.commit,
+      attributed: true,
+      provenance: "auto-resolved: git rev-parse HEAD",
+    };
   }
 
+  // No git available — unattributed
   return {
     revision: "(unattributed workspace)",
     attributed: false,
-    provenance: "unverifiable — git rev-parse HEAD failed or not a git repository",
+    provenance: "unverifiable — resolveProvenance returned null or threw",
   };
 }
 
@@ -488,25 +526,59 @@ export function evaluateScenario(
   };
 
   // Step 9: Evaluate governance impact on scenario (hypothetical re-evaluation)
+  // Re-evaluates findings and debt against the hypothetical graph's edges and
+  // affected projects — not just a project-name filter. A finding about a
+  // specific edge (source → target) should only carry to the scenario state
+  // if that edge still exists in the hypothetical graph AND at least one of
+  // the two projects is affected by the scenario.
   const scenarioAffectedProjects = [projectName, ...scenarioImpact.dependents];
+  const scenarioAffectedSet = new Set(scenarioAffectedProjects);
+  const scenarioGraphDeps = scenarioGraph.dependencies;
   let scenarioFindings = null;
   let scenarioDebt = null;
+
   if (availableFindings) {
-    // Re-filter findings for the hypothetical graph's affected projects
-    const affectedSet = new Set(scenarioAffectedProjects);
     scenarioFindings = availableFindings.filter((f) => {
       const source = f.source ?? f.project ?? "";
       const target = f.target ?? "";
-      return affectedSet.has(source) || affectedSet.has(target);
+
+      // Findings with both source and target describe an edge — carry forward
+      // only if that edge still exists in the hypothetical graph AND at least
+      // one side is an affected project.
+      if (source && target) {
+        if (!(scenarioAffectedSet.has(source) || scenarioAffectedSet.has(target))) {
+          return false;
+        }
+        const edges = scenarioGraphDeps[source];
+        if (!edges) return false;
+        return edges.some((e) => e.target === target);
+      }
+
+      // Findings with only a source project — carry forward if the source is
+      // still an affected project in the scenario.
+      if (source && !target) {
+        return scenarioAffectedSet.has(source);
+      }
+
+      // Findings with neither — carry forward if either side is affected.
+      return scenarioAffectedSet.has(source) || scenarioAffectedSet.has(target);
     });
   }
+
   if (availableDebt) {
-    const affectedSet = new Set(scenarioAffectedProjects);
     scenarioDebt = availableDebt.filter((d) => {
       if (d.kind === "drift" || d.kind === "unresolved") {
-        return affectedSet.has(d.source ?? "");
+        const source = d.source ?? "";
+        if (!source) return false;
+        // Drift/unresolved debt: only carry forward if the source project
+        // is still affected by the scenario.
+        return scenarioAffectedSet.has(source);
       }
-      return false;
+      // Non-drift debt (waiver, aspirational-gap): carry forward unchanged.
+      // Previously this returned false (silently dropping non-drift kinds),
+      // but these are project-level decisions and direction gaps that should
+      // persist across graph topology changes — they aren't edge-dependent.
+      return true;
     });
   }
 
