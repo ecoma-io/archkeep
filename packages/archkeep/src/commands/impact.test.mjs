@@ -274,7 +274,7 @@ describe("composeImpactStatement", () => {
       constraints: [],
       decisions: [],
     });
-    expect(statement.complete).toBe(true);
+    expect(statement.complete).toBe(false); // no governance data
     expect(statement.notes).toEqual([
       "finding impact not evaluated — no findings data provided to impact statement. " +
         "Pass findings data for complete governance evaluation.",
@@ -344,7 +344,7 @@ describe("composeImpactStatement", () => {
     // evolutionAlignment includes the constraint labels
     expect(statement.evolutionAlignment.projects).toEqual(["alpha", "beta"]);
     expect(statement.evolutionAlignment.constraints).toContain("sourceTag:layer:app");
-    expect(statement.complete).toBe(true);
+    expect(statement.complete).toBe(false); // no governance data
   });
 });
 

@@ -501,6 +501,20 @@ export function composeImpactStatement(projectName, commandContext, config = nul
         "Pass debt data for complete governance evaluation.",
     );
   }
+  // Step 8: Determine multi-level completeness
+  const executionComplete = true; // reached this point without throwing
+  const graphComplete = true; // reverse reachability always completes
+  const constraintComplete = config !== null && config.depConstraints !== undefined;
+  const boundaryComplete = config !== null;
+  const decisionComplete = config !== null;
+  const governanceComplete = findingsImpact.evaluated && debtImpact.evaluated;
+  const overallComplete =
+    executionComplete &&
+    graphComplete &&
+    (config === null || constraintComplete) &&
+    (config === null || boundaryComplete) &&
+    (config === null || decisionComplete) &&
+    governanceComplete;
 
   const statement = {
     project: impact.project,
@@ -513,7 +527,16 @@ export function composeImpactStatement(projectName, commandContext, config = nul
     findingsImpact,
     debtImpact,
     boundaryImpact,
-    complete: true,
+    completeness: {
+      executionComplete,
+      graphComplete,
+      constraintComplete,
+      boundaryComplete,
+      decisionComplete,
+      governanceComplete,
+      overallComplete,
+    },
+    complete: overallComplete,
     notes,
   };
 

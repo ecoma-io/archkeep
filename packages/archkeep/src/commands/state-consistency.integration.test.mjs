@@ -355,11 +355,13 @@ describe("cross-command state consistency — impact ↔ scenario", () => {
     ]);
     expect(scenario.exitCode).toBe(EXIT.ok);
 
-    // The envelope carries result.complete and coverage.complete
-    expect(scenario.envelope.result.complete).toBe(true);
+    // The envelope carries result.complete and coverage.complete.
+    // result.complete is false because the temp workspace has no base revision
+    // attribution (not a git repo) and no governance data (findings/debt).
+    // coverage.complete is true because all files were analyzed successfully.
+    expect(scenario.envelope.result.complete).toBe(false);
     expect(scenario.envelope.coverage.complete).toBe(true);
   });
-
   it("impact coverage.complete is true on a complete analysis", async () => {
     const impact = await envelopeFor(["impact", "domain", "--format", "json"]);
     expect(impact.exitCode).toBe(EXIT.ok);

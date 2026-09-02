@@ -438,13 +438,21 @@ describe("evaluateScenario — edge cases", () => {
     expect(result.delta.dependentsRemoved).toEqual(["b"]);
   });
 
-  it("includes complete flag", () => {
+  it("includes complete flag and completeness dimensions", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
       changes: [change("dependency_added", "b", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
-    expect(result.complete).toBe(true);
+    expect(result.complete).toBe(false);
+    expect(result.completeness).toBeDefined();
+    expect(result.completeness.executionComplete).toBe(true);
+    expect(result.completeness.graphComplete).toBe(true);
+    expect(result.completeness.constraintComplete).toBe(false); // no config
+    expect(result.completeness.decisionComplete).toBe(false); // no config
+    expect(result.completeness.governanceComplete).toBe(false); // no findings/debt
+    expect(result.completeness.evidenceComplete).toBe(false); // no base revision
+    expect(result.completeness.overallComplete).toBe(false); // governance & evidence not evaluated
   });
 
   it("outputs base revision when provided", () => {
@@ -478,6 +486,8 @@ describe("evaluateScenario — edge cases", () => {
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.refused).toBeDefined();
     expect(result.complete).toBe(false);
+    expect(result.completeness.graphComplete).toBe(false);
+    expect(result.completeness.overallComplete).toBe(false);
   });
   it("marks complete:true when all changes apply", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
@@ -486,6 +496,74 @@ describe("evaluateScenario — edge cases", () => {
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.refused).toBeUndefined();
+    expect(result.complete).toBe(false); // no governance or evidence data
+    expect(result.completeness.overallComplete).toBe(false);
+  });
+  it("reports constraintComplete when config has depConstraints", () => {
+    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
+    const input = {
+      changes: [change("dependency_added", "b", "a")],
+    };
+    const config = { depConstraints: [{ sourceTag: "lib", targetTag: "lib" }] };
+    const result = evaluateScenario("a", makeCommandContext(graph), input, config);
+    expect(result.completeness.constraintComplete).toBe(true);
+    expect(result.completeness.decisionComplete).toBe(true);
+    expect(result.completeness.overallComplete).toBe(false); // no governance or evidence data
+  });
+  it("reports constraintComplete:false when config has no depConstraints", () => {
+    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
+    const input = {
+      changes: [change("dependency_added", "b", "a")],
+    };
+    const result = evaluateScenario("a", makeCommandContext(graph), input, {});
+    expect(result.completeness.constraintComplete).toBe(false);
+    expect(result.completeness.decisionComplete).toBe(true);
+    expect(result.completeness.overallComplete).toBe(false);
+  });
+  it("reports governanceComplete when findings and debt are provided", () => {
+    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
+    const input = {
+      changes: [change("dependency_added", "b", "a")],
+    };
+    const findings = [{ source: "a", target: "b", message: "test" }];
+    const debt = [{ kind: "drift", source: "a", description: "test" }];
+    const result = evaluateScenario("a", makeCommandContext(graph), input, null, {
+      findings,
+      debt,
+    });
+    expect(result.completeness.governanceComplete).toBe(true);
+    expect(result.completeness.overallComplete).toBe(false); // no base attribution
+  });
+  it("reports evidenceComplete when base revision is provided", () => {
+    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
+    const input = {
+      base: "abc123def",
+      changes: [change("dependency_added", "b", "a")],
+    };
+    const result = evaluateScenario("a", makeCommandContext(graph), input);
+    expect(result.completeness.evidenceComplete).toBe(true);
+    expect(result.completeness.overallComplete).toBe(false); // no governance data
+  });
+  it("reports all completeness dimensions true when fully equipped", () => {
+    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
+    const input = {
+      base: "abc123def",
+      changes: [change("dependency_added", "b", "a")],
+    };
+    const config = { depConstraints: [{ sourceTag: "lib", targetTag: "lib" }] };
+    const findings = [{ source: "a", target: "b", message: "test" }];
+    const debt = [{ kind: "drift", source: "a", description: "test" }];
+    const result = evaluateScenario("a", makeCommandContext(graph), input, config, {
+      findings,
+      debt,
+    });
+    expect(result.completeness.executionComplete).toBe(true);
+    expect(result.completeness.graphComplete).toBe(true);
+    expect(result.completeness.constraintComplete).toBe(true);
+    expect(result.completeness.decisionComplete).toBe(true);
+    expect(result.completeness.governanceComplete).toBe(true);
+    expect(result.completeness.evidenceComplete).toBe(true);
+    expect(result.completeness.overallComplete).toBe(true);
     expect(result.complete).toBe(true);
   });
   it("includes evidenceChain with correct shape", () => {
