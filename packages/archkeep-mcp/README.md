@@ -48,16 +48,17 @@ Example client registration (Claude Code):
 
 ## The nine tools
 
-| tool               | answers                                                   |
-| ------------------ | --------------------------------------------------------- |
-| `archkeep_context` | the deterministic facts to read before changing a project |
-| `archkeep_check`   | the authoritative verdict — `pass` / `fail` / `unknown`   |
-| `archkeep_impact`  | who transitively depends on this project                  |
-| `archkeep_drift`   | has reality diverged from the declared intent             |
-| `archkeep_explain` | why one finding's judgment is what it is                  |
-| `archkeep_graph`   | the project graph, for structural exploration             |
-| `archkeep_history` | ADR decisions, and evolution across graph snapshots       |
-| `archkeep_propose` | a NON-AUTHORITATIVE proposal (`requiresApproval: true`)   |
+| tool                | answers                                                     |
+| ------------------- | ----------------------------------------------------------- |
+| `archkeep_context`  | the deterministic facts to read before changing a project   |
+| `archkeep_check`    | the authoritative verdict — `pass` / `fail` / `unknown`     |
+| `archkeep_impact`   | who transitively depends on this project                    |
+| `archkeep_drift`    | has reality diverged from the declared intent               |
+| `archkeep_explain`  | why one finding's judgment is what it is                    |
+| `archkeep_graph`    | the project graph, for structural exploration               |
+| `archkeep_history`  | ADR decisions, and evolution across graph snapshots         |
+| `archkeep_propose`  | a NON-AUTHORITATIVE proposal (`requiresApproval: true`)     |
+| `archkeep_scenario` | evaluate a hypothetical change — virtual, not authoritative |
 
 No tool writes. `archkeep_propose` drafts candidates with their evidence and
 marks every one `notAuthoritative`; adopting one is a reviewed pull request,

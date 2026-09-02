@@ -14,6 +14,14 @@ import { isComboDepConstraint } from "../rules/tags.mjs";
 import { computeDecisionProvenance } from "../governance/provenance-graph.mjs";
 import { resolveFileAttribution } from "./provenance.mjs";
 
+import {
+  buildCompleteness,
+  buildGovernanceCompleteness,
+  evaluationStatus,
+  EVALUATION_STATUS,
+} from "./completeness.mjs";
+import { computeImpact } from "./impact.mjs";
+import { computeImpactConstraints } from "./edge-constraints.mjs";
 // ---------------------------------------------------------------------------
 // Decision resolution
 // ---------------------------------------------------------------------------
@@ -164,6 +172,256 @@ export function buildDecisionImpact(root, constraintImpact, config) {
   return {
     decisions: decisions.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
     unresolvedDecisionRefs: [...new Set(unresolvedDecisionRefs)].sort(),
+  };
+}
+// ---------------------------------------------------------------------------
+// Evaluation helpers (shared between Impact Statement and Scenario Evaluation)
+// ---------------------------------------------------------------------------
+
+/**
+ * Evaluates findings impact: which findings affect the impacted projects.
+ *
+ * @param {string[]} affectedProjects The projects affected by the change.
+ * @param {object[]|null} availableFindings Pre-computed findings, or null when
+ *   not available.
+ * @returns {{evaluated: boolean, findings: object[], count: number}}
+ */
+export function evaluateFindingsImpact(affectedProjects, availableFindings) {
+  if (!availableFindings || availableFindings.length === 0) {
+    return { evaluated: false, findings: [], count: 0 };
+  }
+
+  const entries = availableFindings.filter((f) =>
+    affectedProjects.includes(f.project ?? f.target ?? ""),
+  );
+
+  return {
+    evaluated: true,
+    findings: entries,
+    count: entries.length,
+  };
+}
+
+/**
+ * Evaluates debt impact: which debt entries affect the impacted projects.
+ *
+ * @param {string[]} affectedProjects The projects affected by the change.
+ * @param {object[]|null} availableDebt Pre-computed debt entries, or null when
+ *   not available.
+ * @param {Function|null} resolveProject Optional function to resolve a debt
+ *   entry's associated project.
+ * @returns {{evaluated: boolean, debt: object[], count: number}}
+ */
+export function evaluateDebtImpact(affectedProjects, availableDebt, resolveProject = null) {
+  if (!availableDebt || availableDebt.length === 0) {
+    return { evaluated: false, debt: [], count: 0 };
+  }
+
+  const entries = availableDebt.filter((d) => {
+    const project = resolveProject ? resolveProject(d) : (d.project ?? d.id ?? "");
+    return affectedProjects.includes(project);
+  });
+
+  return {
+    evaluated: true,
+    debt: entries,
+    count: entries.length,
+  };
+}
+
+/**
+ * Evaluates boundary impact: which boundary tags/layers are crossed by the
+ * affected edges.
+ *
+ * @param {object} graph The project graph.
+ * @param {object[]|null} constraintImpact Per-dependent constraint analysis.
+ * @param {string} targetProject The target of the impact analysis.
+ * @returns {{boundaries: object[], evaluated: boolean}}
+ */
+export function evaluateBoundaryImpact(graph, constraintImpact, targetProject) {
+  if (!constraintImpact || constraintImpact.length === 0) {
+    return { boundaries: [], evaluated: false };
+  }
+
+  const targetNode = graph.nodes[targetProject];
+  const targetTags = targetNode?.data?.tags ?? [];
+  const boundaries = [];
+
+  for (const entry of constraintImpact) {
+    const sourceTags = graph.nodes[entry.project]?.data?.tags ?? [];
+
+    for (const edge of entry.edges) {
+      // Determine if this edge crosses a layer boundary
+      const sourceLayer = sourceTags.find((t) => t.startsWith("layer:"));
+      const targetLayer = targetTags.find((t) => t.startsWith("layer:"));
+      const crossesLayer = sourceLayer && targetLayer && sourceLayer !== targetLayer;
+
+      // Determine if this edge crosses a scope boundary
+      const sourceScope = sourceTags.find((t) => t.startsWith("scope:"));
+      const targetScope = targetTags.find((t) => t.startsWith("scope:"));
+      const crossesScope = sourceScope && targetScope && sourceScope !== targetScope;
+
+      // Determine if any constraint row governs this edge
+      const violated = entry.violations?.length > 0;
+      const governingRowCount = entry.constraintRows?.length ?? 0;
+
+      boundaries.push({
+        source: entry.project,
+        target: edge.target,
+        type: edge.type,
+        crossesLayer,
+        crossesScope,
+        violated,
+        governingConstraintRows: governingRowCount,
+      });
+    }
+  }
+
+  return { boundaries, evaluated: true };
+}
+
+// ---------------------------------------------------------------------------
+// Canonical Architecture Evaluation
+// ---------------------------------------------------------------------------
+
+/**
+ * Evaluates the complete architecture state for a target project.
+ *
+ * This is the canonical evaluation function that composes all evaluation
+ * dimensions (structural, constraint, boundary, decision, governance) into a
+ * @param {object} params
+ * @param {object} params.graph The project graph.
+ * @param {object|null} params.config The loaded boundary config.
+ * @param {string} params.projectName The target project.
+ * @param {object[]|null} [params.findings] Pre-computed findings.
+ * @param {object[]|null} [params.debt] Pre-computed debt entries.
+ * @returns {object} The complete evaluation result with all domains and
+ *   completeness.
+ */
+export function evaluateArchitectureState({
+  graph,
+  config,
+  projectName,
+  findings = null,
+  debt = null,
+}) {
+  // Step 1: Reverse reachability
+  const impact = computeImpact(projectName, graph);
+
+  // Step 2: Edge and constraint impact
+  let constraintImpact = null;
+  if (config && config.depConstraints) {
+    constraintImpact = computeImpactConstraints(
+      projectName,
+      impact.dependents,
+      graph.nodes,
+      graph.dependencies,
+      config.depConstraints,
+    );
+  }
+
+  // Step 3: Decision impact
+  let decisionImpact = null;
+  if (constraintImpact) {
+    decisionImpact = buildDecisionImpact(projectName, constraintImpact, config);
+  }
+
+  // Step 4: Evolution alignment
+  const resolvedDecisions = decisionImpact ? decisionImpact.decisions.map((d) => d.id) : [];
+  const evolutionAlignment = buildEvolutionAlignment(
+    projectName,
+    impact,
+    constraintImpact,
+    resolvedDecisions,
+  );
+
+  // Step 5: Boundary impact
+  const boundaryImpact = evaluateBoundaryImpact(graph, constraintImpact, projectName);
+
+  // Step 6: Findings and Debt impact
+  const affectedProjects = [projectName, ...impact.dependents];
+  const findingsImpact = evaluateFindingsImpact(affectedProjects, findings);
+  const debtImpact = evaluateDebtImpact(affectedProjects, debt);
+
+  // Step 7: Build completeness
+  const hasConfig = config !== null;
+
+  const structuralStatus = evaluationStatus({ evaluated: true });
+  const constraintStatus = evaluationStatus({
+    evaluated: hasConfig && config.depConstraints !== undefined,
+    notEvaluated: !hasConfig || config.depConstraints === undefined,
+  });
+  const boundaryStatus = evaluationStatus({
+    evaluated: hasConfig,
+    notEvaluated: !hasConfig,
+  });
+  const decisionStatus = evaluationStatus({
+    evaluated: hasConfig,
+    notEvaluated: !hasConfig,
+  });
+
+  const governanceResult = buildGovernanceCompleteness({
+    findingsStatus: findingsImpact.evaluated
+      ? EVALUATION_STATUS.EVALUATED
+      : EVALUATION_STATUS.NOT_EVALUATED,
+    debtStatus: debtImpact.evaluated
+      ? EVALUATION_STATUS.EVALUATED
+      : EVALUATION_STATUS.NOT_EVALUATED,
+    findingsCount: findingsImpact.count,
+    debtCount: debtImpact.count,
+  });
+
+  const completeness = buildCompleteness({
+    structural: {
+      status: structuralStatus,
+      evaluated: true,
+      partial: false,
+      notEvaluated: false,
+      unsupported: false,
+      refused: false,
+      note: "",
+    },
+    constraint: {
+      status: constraintStatus,
+      evaluated: hasConfig && config.depConstraints !== undefined,
+      partial: false,
+      notEvaluated: !hasConfig || config.depConstraints === undefined,
+      unsupported: false,
+      refused: false,
+      note: "",
+    },
+    boundary: {
+      status: boundaryStatus,
+      evaluated: hasConfig,
+      partial: false,
+      notEvaluated: !hasConfig,
+      unsupported: false,
+      refused: false,
+      note: "",
+    },
+    decision: {
+      status: decisionStatus,
+      evaluated: hasConfig,
+      partial: false,
+      notEvaluated: !hasConfig,
+      unsupported: false,
+      refused: false,
+      note: "",
+    },
+    governance: governanceResult.domain,
+  });
+
+  return {
+    project: projectName,
+    impact,
+    constraintImpact,
+    decisionImpact,
+    evolutionAlignment,
+    boundaryImpact,
+    findingsImpact,
+    debtImpact,
+    completeness,
+    affectedProjects,
   };
 }
 

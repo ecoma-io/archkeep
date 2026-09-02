@@ -58,20 +58,21 @@ Other hosts take the same shape: run `archkeep-mcp` (the package's `bin`) with
 stdio, in the workspace. Every tool also accepts an absolute `workspaceRoot`
 argument for callers that cannot start the server in the workspace.
 
-## The eight tools
+## The nine tools
 
-| tool               | answers                                                   | the CLI verb beside it                      |
-| ------------------ | --------------------------------------------------------- | ------------------------------------------- |
-| `archkeep_context` | the deterministic facts to read before changing a project | `context <project> --plan`                  |
-| `archkeep_check`   | the authoritative verdict — `pass` / `fail` / `unknown`   | `check`                                     |
-| `archkeep_impact`  | who transitively depends on this project                  | `impact <project>`                          |
-| `archkeep_drift`   | has reality diverged from the declared intent             | `drift`                                     |
-| `archkeep_explain` | why one finding's judgment is what it is                  | `explain <file>:<line>:<column>`            |
-| `archkeep_graph`   | the project graph, for structural exploration             | `graph`                                     |
-| `archkeep_history` | ADR decisions, and evolution across graph snapshots       | `adr`, `history <dir>`                      |
-| `archkeep_propose` | a NON-AUTHORITATIVE proposal                              | `discover --propose`, `reconcile --propose` |
+| tool                | answers                                                     | the CLI verb beside it                      |
+| ------------------- | ----------------------------------------------------------- | ------------------------------------------- |
+| `archkeep_context`  | the deterministic facts to read before changing a project   | `context <project> --plan`                  |
+| `archkeep_check`    | the authoritative verdict — `pass` / `fail` / `unknown`     | `check`                                     |
+| `archkeep_impact`   | who transitively depends on this project                    | `impact <project>`                          |
+| `archkeep_drift`    | has reality diverged from the declared intent               | `drift`                                     |
+| `archkeep_explain`  | why one finding's judgment is what it is                    | `explain <file>:<line>:<column>`            |
+| `archkeep_graph`    | the project graph, for structural exploration               | `graph`                                     |
+| `archkeep_history`  | ADR decisions, and evolution across graph snapshots         | `adr`, `history <dir>`                      |
+| `archkeep_propose`  | a NON-AUTHORITATIVE proposal                                | `discover --propose`, `reconcile --propose` |
+| `archkeep_scenario` | evaluate a hypothetical change — virtual, not authoritative | `scenario <project> --scenario-file <file>` |
 
-Eight, deliberately. The CLI's other verbs (`diff`, `delta`, `debt`, `health`,
+Nine, deliberately. The CLI's other verbs (`diff`, `delta`, `debt`, `health`,
 `report`, `waivers`, `fitness`, `provenance`) are not tools: a capability face
 answers the questions an agent asks mid-change, and everything else stays
 where a human or a pipeline reads it. Growing the surface is a decision, not
@@ -157,8 +158,8 @@ who can speak to the server can point it at any readable tree.
 
 ## The authority boundary
 
-**No tool writes.** The seven read tools are read-only by construction — they
-compose the engine's descriptive commands. The eighth holds the line the
+**No tool writes.** The eight read tools are read-only by construction — they
+compose the engine's descriptive commands. The ninth holds the line the
 whole design turns on:
 
 `archkeep_propose` returns `requiresApproval: true`, `authoritative: false`,

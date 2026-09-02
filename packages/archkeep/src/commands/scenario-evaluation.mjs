@@ -35,6 +35,11 @@ import { computeImpact } from "./impact.mjs";
 import { computeImpactConstraints } from "./edge-constraints.mjs";
 import { buildDecisionImpact, buildEvolutionAlignment } from "./evaluation-primitives.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import {
+  buildScenarioCompleteness,
+  buildGovernanceCompleteness,
+  evaluationStatus,
+} from "./completeness.mjs";
 
 // ---------------------------------------------------------------------------
 // Scenario types
@@ -78,6 +83,16 @@ export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "depende
  * @property {object} current The current impact for the target project.
  * @property {object} scenario The would-be impact after applying the changes.
  * @property {object} delta What would change.
+ * @property {object} delta.structuralDelta Structured delta for dependency changes.
+ * @property {string[]} delta.structuralDelta.dependentsAdded Dependents added in the scenario.
+ * @property {string[]} delta.structuralDelta.dependentsRemoved Dependents removed in the scenario.
+ * @property {object} delta.governanceDelta Governance-level delta.
+ * @property {boolean} delta.governanceDelta.findingsChanged Whether findings changed.
+ * @property {boolean} delta.governanceDelta.debtChanged Whether debt changed.
+ * @property {object} delta.evidenceDelta Evidence-level delta metadata.
+ * @property {string} delta.evidenceDelta.baseRevision The revision used as base.
+ * @property {number} delta.evidenceDelta.changesApplied Number of changes applied.
+ * @property {number} delta.evidenceDelta.changesRefused Number of changes refused.
  * @property {object} [evidenceChain] The provenance chain: base → changes → re-evaluated → delta.
  * @property {string} evidenceChain.baseRevision The revision the scenario started from.
  * @property {string[]} evidenceChain.appliedChanges The changes applied to the base.
@@ -90,9 +105,11 @@ export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "depende
  * @property {boolean} governanceImpact.governanceComplete Whether all governance data was provided.
  * @property {number} governanceImpact.scenarioFindingsCount Number of findings in the scenario state.
  * @property {number} governanceImpact.scenarioDebtCount Number of debt entries in the scenario state.
- * @property {boolean} complete Whether the evaluation could be fully completed.
+ * @property {string} governanceImpact.findingsStatus EVALUATION_STATUS for findings.
+ * @property {string} governanceImpact.debtStatus EVALUATION_STATUS for debt.
+ * @property {object} completeness Structured completeness from buildScenarioCompleteness.
+ * @property {boolean} complete Backward-compat shorthand: whether all changes were applied (refused.length === 0).
  * @property {string[]} notes Caveats about the evaluation.
- */
 
 // ---------------------------------------------------------------------------
 // Graph manipulation
@@ -147,11 +164,13 @@ function applyChanges(graph, changes) {
       }
 
       // Add the edge
+      // Canonical edge identity: source+target. For production, add type matching.
       if (!cloned.dependencies[change.source]) {
         cloned.dependencies[change.source] = [];
       }
       cloned.dependencies[change.source].push({
         target: change.target,
+        // type is set to "static" for newly added edges as scenario edges have no real type data
         type: "static",
         source: change.source,
       });
@@ -160,6 +179,8 @@ function applyChanges(graph, changes) {
 
     if (change.type === "dependency_removed") {
       const existing = cloned.dependencies[change.source] ?? [];
+      // Uses findIndex with target-only matching — ambiguous when multiple edges share the same
+      // target but is acceptable for the MVP where all edges have unique target+type combinations
       const idx = existing.findIndex((e) => e.target === change.target);
       if (idx === -1) {
         refused.push(
@@ -186,10 +207,19 @@ function applyChanges(graph, changes) {
  *
  * @param {object} current Current impact.
  * @param {object} scenario Scenario impact.
+ * @param {object} [extra] Additional context for structured delta sections.
+ * @param {string} [extra.baseRevision] The base revision used.
+ * @param {number} [extra.changesApplied] Number of changes applied.
+ * @param {number} [extra.changesRefused] Number of changes refused.
+ * @param {boolean} [extra.findingsChanged] Whether findings changed.
+ * @param {boolean} [extra.debtChanged] Whether debt changed.
  * @returns {{dependentsAdded: string[], dependentsRemoved: string[],
- *   constraintsChanged: boolean, decisionsChanged: boolean}}
+ *   constraintsChanged: boolean, decisionsChanged: boolean,
+ *   structuralDelta: {dependentsAdded: string[], dependentsRemoved: string[]},
+ *   governanceDelta: {findingsChanged: boolean, debtChanged: boolean},
+ *   evidenceDelta: {baseRevision: string, changesApplied: number, changesRefused: number}}}
  */
-function computeDelta(current, scenario) {
+function computeDelta(current, scenario, extra = {}) {
   const currentDeps = new Set(current.impact.dependents ?? []);
   const scenarioDeps = new Set(scenario.impact.dependents ?? []);
 
@@ -208,6 +238,19 @@ function computeDelta(current, scenario) {
     dependentsRemoved,
     constraintsChanged,
     decisionsChanged,
+    structuralDelta: {
+      dependentsAdded,
+      dependentsRemoved,
+    },
+    governanceDelta: {
+      findingsChanged: extra.findingsChanged ?? false,
+      debtChanged: extra.debtChanged ?? false,
+    },
+    evidenceDelta: {
+      baseRevision: extra.baseRevision ?? "(unknown)",
+      changesApplied: extra.changesApplied ?? 0,
+      changesRefused: extra.changesRefused ?? 0,
+    },
   };
 }
 
@@ -360,7 +403,13 @@ export function evaluateScenario(
     constraintImpact: scenarioConstraintImpact,
     decisionImpact: scenarioDecisionImpact,
   };
-  const delta = computeDelta(currentState, scenarioState);
+  const delta = computeDelta(currentState, scenarioState, {
+    baseRevision: base.revision,
+    changesApplied: applied.length,
+    changesRefused: refused.length,
+    findingsChanged: availableFindings !== null,
+    debtChanged: availableDebt !== null,
+  });
 
   // Step 8: Build evidence chain
   const evidenceChain = {
@@ -373,6 +422,9 @@ export function evaluateScenario(
       dependentsRemoved: delta.dependentsRemoved,
       constraintsChanged: delta.constraintsChanged,
       decisionsChanged: delta.decisionsChanged,
+      structuralDelta: delta.structuralDelta,
+      governanceDelta: delta.governanceDelta,
+      evidenceDelta: delta.evidenceDelta,
     },
   };
 
@@ -443,7 +495,25 @@ export function evaluateScenario(
   // completed. `governanceComplete` tracks whether governance dimensions
   // were fully evaluated.
   const governanceComplete = availableFindings !== null && availableDebt !== null;
-  const isComplete = refused.length === 0;
+
+  // Compute evaluation statuses for governance domains
+  const findingsStatus = evaluationStatus({ evaluated: availableFindings !== null });
+  const debtStatus = evaluationStatus({ evaluated: availableDebt !== null });
+
+  // Build governance completeness
+  const governanceCompleteness = buildGovernanceCompleteness({
+    findingsStatus,
+    debtStatus,
+    findingsCount: scenarioFindings?.length ?? 0,
+    debtCount: scenarioDebt?.length ?? 0,
+  });
+
+  // Build overall scenario completeness
+  const scenarioCompleteness = buildScenarioCompleteness({
+    changesComplete: refused.length === 0,
+    baseAttributed: base.attributed,
+    governance: governanceCompleteness,
+  });
 
   return {
     virtual: true,
@@ -483,9 +553,12 @@ export function evaluateScenario(
       governanceComplete,
       scenarioFindingsCount: scenarioFindings?.length ?? 0,
       scenarioDebtCount: scenarioDebt?.length ?? 0,
+      findingsStatus,
+      debtStatus,
     },
     delta,
-    complete: isComplete,
+    completeness: scenarioCompleteness,
+    complete: refused.length === 0,
     notes,
   };
 }
