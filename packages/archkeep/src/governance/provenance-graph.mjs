@@ -373,7 +373,10 @@ export function buildProvenanceGraph({
   });
 
   // ── Causal chains ─────────────────────────────────────────────────────
-  // For each row that has a decisionRef, BFS through decision → lineage
+  // For each row that has a decisionRef, BFS through decision → lineage.
+  // Each chain walks from the row through the decision lineage, creating
+  // one hop per decision. The first hop connects the row to its referenced
+  // decision; subsequent hops follow supersedes links forward.
   const causalChains = [];
 
   for (const { rowId, row } of rowEntries) {
@@ -389,7 +392,9 @@ export function buildProvenanceGraph({
     const chainEdges = [];
     const visited = new Set();
     const queue = [decisionId];
+    /** @type {Map<string, string|null>} parent of each decision id; null means root (row-linked) */
     const parentMap = new Map();
+    parentMap.set(decisionId, null);
 
     while (queue.length > 0) {
       const currentId = queue.shift();
@@ -399,39 +404,46 @@ export function buildProvenanceGraph({
       const record = byId.get(currentId);
       if (record === undefined) continue;
 
-      // Build evidence for this hop
-      const hopEvidence = [];
-
-      // Row origin evidence on the first hop
-      if (currentId === decisionId && row.origin) {
-        hopEvidence.push({ kind: "origin", detail: `row origin: by=${str(row.origin.by)}` });
-      }
-
-      // Decision attribution evidence
-      const lc = lifecycleById.get(currentId);
-      if (lc?.attested && lc?.attribution) {
-        hopEvidence.push({
-          kind: "file-attribution",
-          detail: `decision attributed: ${str(lc.attribution.createdBy?.by)}`,
-        });
-      } else {
-        hopEvidence.push({ kind: "file-attribution", detail: "decision not attributed" });
-      }
-
-      // Supersedes links
+      // Enqueue supersedes children
       for (const nextId of sortedArray(record.supersedes)) {
         if (!visited.has(nextId)) {
           queue.push(nextId);
           parentMap.set(nextId, currentId);
-          hopEvidence.push({ kind: "supersedes", detail: `supersedes ${nextId}` });
         }
       }
 
       const nodeId = `decision:${currentId}`;
       chainNodes.push(nodeId);
 
+      // Create edge from parent → current
+      // parentMap always has currentId after initialization above
       if (parentMap.has(currentId)) {
         const parent = parentMap.get(currentId);
+
+        // Build evidence for this hop
+        const hopEvidence = [];
+
+        // Row origin evidence on the first hop (parent === null means root)
+        if (parent === null && row.origin) {
+          hopEvidence.push({ kind: "origin", detail: `row origin: by=${str(row.origin.by)}` });
+        }
+
+        // Supersedes evidence — this edge exists because currentId supersedes parent
+        if (parent !== null) {
+          hopEvidence.push({ kind: "supersedes", detail: `supersedes ${parent}` });
+        }
+
+        // Decision attribution evidence
+        const lc = lifecycleById.get(currentId);
+        if (lc?.attested && lc?.attribution) {
+          hopEvidence.push({
+            kind: "file-attribution",
+            detail: `decision attributed: ${str(lc.attribution.createdBy?.by)}`,
+          });
+        } else {
+          hopEvidence.push({ kind: "file-attribution", detail: "decision not attributed" });
+        }
+
         chainEdges.push({
           fromNode: parent !== null ? `decision:${parent}` : rowId,
           toNode: nodeId,

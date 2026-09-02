@@ -355,7 +355,6 @@ export async function provenanceCommand(commandContext, io = {}) {
     records: adrContext.records,
     byId: adrContext.byId,
     knownFitness: declaredFitnessNames(loadedConfig),
-    fileAttribution: (path) => attributor(root, path),
     decisionLifecycle,
   });
 

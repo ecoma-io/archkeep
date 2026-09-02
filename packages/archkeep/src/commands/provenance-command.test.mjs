@@ -622,7 +622,7 @@ describe("decision lifecycle (PR E)", () => {
     // Also has a "chain" example line
     const chainLine = lines.find((l) => l.startsWith("chain"));
     expect(chainLine).toBeDefined();
-    expect(chainLine).toContain("hops");
+    expect(chainLine).toMatch(/hop[s]?$/);
   });
 });
 describe("provenance completeness — every row in intent has an entry in result.rows", () => {

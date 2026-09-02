@@ -478,7 +478,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withAttribution,
       decisionLifecycle: makeLifecycle(withAttribution),
     });
 
@@ -508,7 +507,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withAttribution,
       decisionLifecycle: makeLifecycle(withAttribution),
     };
     const a = buildProvenanceGraph(input);
