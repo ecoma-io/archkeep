@@ -274,7 +274,13 @@ describe("composeImpactStatement", () => {
       constraints: [],
       decisions: [],
     });
-    expect(statement.complete).toBe(false); // no governance data
+    // No governance data, so statement is not fully complete
+    expect(statement.complete).toBe(false);
+    expect(statement.completeness).toBeDefined();
+    expect(statement.completeness.executionComplete).toBe(true);
+    expect(statement.completeness.graphComplete).toBe(true);
+    expect(statement.completeness.governanceComplete).toBe(false);
+    expect(statement.completeness.overallComplete).toBe(false);
     expect(statement.notes).toEqual([
       "finding impact not evaluated — no findings data provided to impact statement. " +
         "Pass findings data for complete governance evaluation.",
@@ -344,7 +350,14 @@ describe("composeImpactStatement", () => {
     // evolutionAlignment includes the constraint labels
     expect(statement.evolutionAlignment.projects).toEqual(["alpha", "beta"]);
     expect(statement.evolutionAlignment.constraints).toContain("sourceTag:layer:app");
-    expect(statement.complete).toBe(false); // no governance data
+    // No governance data (findings/debt), so statement is not fully complete
+    expect(statement.complete).toBe(false);
+    expect(statement.completeness).toBeDefined();
+    expect(statement.completeness.constraintComplete).toBe(true);
+    expect(statement.completeness.boundaryComplete).toBe(true);
+    expect(statement.completeness.decisionComplete).toBe(true);
+    expect(statement.completeness.governanceComplete).toBe(false);
+    expect(statement.completeness.overallComplete).toBe(false);
   });
 });
 

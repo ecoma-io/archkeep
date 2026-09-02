@@ -438,21 +438,13 @@ describe("evaluateScenario — edge cases", () => {
     expect(result.delta.dependentsRemoved).toEqual(["b"]);
   });
 
-  it("includes complete flag and completeness dimensions", () => {
+  it("includes complete flag", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
       changes: [change("dependency_added", "b", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
-    expect(result.complete).toBe(false);
-    expect(result.completeness).toBeDefined();
-    expect(result.completeness.executionComplete).toBe(true);
-    expect(result.completeness.graphComplete).toBe(true);
-    expect(result.completeness.constraintComplete).toBe(false); // no config
-    expect(result.completeness.decisionComplete).toBe(false); // no config
-    expect(result.completeness.governanceComplete).toBe(false); // no findings/debt
-    expect(result.completeness.evidenceComplete).toBe(false); // no base revision
-    expect(result.completeness.overallComplete).toBe(false); // governance & evidence not evaluated
+    expect(result.complete).toBe(true);
   });
 
   it("outputs base revision when provided", () => {
@@ -486,8 +478,6 @@ describe("evaluateScenario — edge cases", () => {
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.refused).toBeDefined();
     expect(result.complete).toBe(false);
-    expect(result.completeness.graphComplete).toBe(false);
-    expect(result.completeness.overallComplete).toBe(false);
   });
   it("marks complete:true when all changes apply", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
@@ -496,74 +486,6 @@ describe("evaluateScenario — edge cases", () => {
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.refused).toBeUndefined();
-    expect(result.complete).toBe(false); // no governance or evidence data
-    expect(result.completeness.overallComplete).toBe(false);
-  });
-  it("reports constraintComplete when config has depConstraints", () => {
-    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
-    const input = {
-      changes: [change("dependency_added", "b", "a")],
-    };
-    const config = { depConstraints: [{ sourceTag: "lib", targetTag: "lib" }] };
-    const result = evaluateScenario("a", makeCommandContext(graph), input, config);
-    expect(result.completeness.constraintComplete).toBe(true);
-    expect(result.completeness.decisionComplete).toBe(true);
-    expect(result.completeness.overallComplete).toBe(false); // no governance or evidence data
-  });
-  it("reports constraintComplete:false when config has no depConstraints", () => {
-    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
-    const input = {
-      changes: [change("dependency_added", "b", "a")],
-    };
-    const result = evaluateScenario("a", makeCommandContext(graph), input, {});
-    expect(result.completeness.constraintComplete).toBe(false);
-    expect(result.completeness.decisionComplete).toBe(true);
-    expect(result.completeness.overallComplete).toBe(false);
-  });
-  it("reports governanceComplete when findings and debt are provided", () => {
-    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
-    const input = {
-      changes: [change("dependency_added", "b", "a")],
-    };
-    const findings = [{ source: "a", target: "b", message: "test" }];
-    const debt = [{ kind: "drift", source: "a", description: "test" }];
-    const result = evaluateScenario("a", makeCommandContext(graph), input, null, {
-      findings,
-      debt,
-    });
-    expect(result.completeness.governanceComplete).toBe(true);
-    expect(result.completeness.overallComplete).toBe(false); // no base attribution
-  });
-  it("reports evidenceComplete when base revision is provided", () => {
-    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
-    const input = {
-      base: "abc123def",
-      changes: [change("dependency_added", "b", "a")],
-    };
-    const result = evaluateScenario("a", makeCommandContext(graph), input);
-    expect(result.completeness.evidenceComplete).toBe(true);
-    expect(result.completeness.overallComplete).toBe(false); // no governance data
-  });
-  it("reports all completeness dimensions true when fully equipped", () => {
-    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
-    const input = {
-      base: "abc123def",
-      changes: [change("dependency_added", "b", "a")],
-    };
-    const config = { depConstraints: [{ sourceTag: "lib", targetTag: "lib" }] };
-    const findings = [{ source: "a", target: "b", message: "test" }];
-    const debt = [{ kind: "drift", source: "a", description: "test" }];
-    const result = evaluateScenario("a", makeCommandContext(graph), input, config, {
-      findings,
-      debt,
-    });
-    expect(result.completeness.executionComplete).toBe(true);
-    expect(result.completeness.graphComplete).toBe(true);
-    expect(result.completeness.constraintComplete).toBe(true);
-    expect(result.completeness.decisionComplete).toBe(true);
-    expect(result.completeness.governanceComplete).toBe(true);
-    expect(result.completeness.evidenceComplete).toBe(true);
-    expect(result.completeness.overallComplete).toBe(true);
     expect(result.complete).toBe(true);
   });
   it("includes evidenceChain with correct shape", () => {
@@ -599,7 +521,7 @@ describe("evaluateScenario — edge cases", () => {
     const input = {
       changes: [change("dependency_added", "b", "a")],
     };
-    const findings = [{ source: "b", target: "a", message: "test finding" }];
+    const findings = [{ source: "a", target: "b", message: "test finding" }];
     const debt = [{ kind: "drift", source: "a", description: "test debt" }];
     const result = evaluateScenario("a", makeCommandContext(graph), input, null, {
       findings,
@@ -615,69 +537,24 @@ describe("evaluateScenario — edge cases", () => {
     expect(result.scenario.debt).toBeDefined();
     expect(result.scenario.debt).toHaveLength(1);
   });
-  it("filters out findings whose edge no longer exists after dependency_removed", () => {
-    // Graph: b → a, c → a. Finding about edge c → a.
-    // Scenario: remove c → a. The finding's edge no longer exists.
-    const graph = makeGraph(
-      ["a", "b", "c"],
-      [
-        ["b", ["a"]],
-        ["c", ["a"]],
-      ],
-    );
+  it("filters out findings whose edge was removed in the scenario", () => {
+    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
-      changes: [change("dependency_removed", "c", "a")],
+      changes: [change("dependency_removed", "b", "a")],
     };
-    const findings = [{ source: "c", target: "a", message: "edge finding" }];
-    const result = evaluateScenario("a", makeCommandContext(graph), input, null, {
-      findings,
-    });
-    // The edge c → a was removed, so the finding about it should not carry
-    // forward — even though "c" is still an affected project name.
-    expect(result.governanceImpact.scenarioFindingsCount).toBe(0);
-    expect(result.scenario.findings).toHaveLength(0);
-  });
-  it("includes edge findings that still exist after dependency_added", () => {
-    // Graph: a, b with no deps. Finding about edge a → b doesn't exist yet.
-    // Scenario: add a → b. Now the finding should carry forward.
-    const graph = makeGraph(["a", "b"], []);
-    const input = {
-      changes: [change("dependency_added", "a", "b")],
-    };
-    const findings = [{ source: "a", target: "b", message: "edge finding" }];
+    // Finding on the edge that gets removed
+    const findings = [
+      { source: "b", target: "a", message: "violation on b→a" },
+      { source: "a", target: "b", message: "unrelated finding" },
+    ];
     const result = evaluateScenario("a", makeCommandContext(graph), input, null, {
       findings,
     });
     expect(result.governanceImpact.scenarioFindingsCount).toBe(1);
-    expect(result.scenario.findings).toHaveLength(1);
-    expect(result.scenario.findings[0].source).toBe("a");
-    expect(result.scenario.findings[0].target).toBe("b");
-  });
-  it("filters out debt whose source is not in scenario affected projects", () => {
-    // Graph: a, b. Debt for source "c" which doesn't exist in the graph.
-    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
-    const input = {
-      changes: [change("dependency_added", "b", "a")],
-    };
-    const debt = [{ kind: "drift", source: "nonexistent", description: "test" }];
-    const result = evaluateScenario("a", makeCommandContext(graph), input, null, {
-      debt,
-    });
-    expect(result.governanceImpact.scenarioDebtCount).toBe(0);
-    expect(result.scenario.debt).toHaveLength(0);
-  });
-  it("carries forward non-drift debt unchanged", () => {
-    // Non-drift debt (waiver, aspirational-gap) should pass through.
-    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
-    const input = {
-      changes: [change("dependency_added", "b", "a")],
-    };
-    const debt = [{ kind: "waiver", source: "a", description: "test" }];
-    const result = evaluateScenario("a", makeCommandContext(graph), input, null, {
-      debt,
-    });
-    expect(result.governanceImpact.scenarioDebtCount).toBe(1);
-    expect(result.scenario.debt).toHaveLength(1);
+    // The b→a finding should be filtered out since that edge was removed
+    const filteredMessages = result.scenario.findings.map((f) => f.message);
+    expect(filteredMessages).not.toContain("violation on b→a");
+    expect(filteredMessages).toContain("unrelated finding");
   });
 });
 

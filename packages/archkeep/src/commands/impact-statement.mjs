@@ -3,10 +3,11 @@
  * every governed entity a change to one project touches — projects, edges,
  * constraints, and recorded Decisions — each tied to the reproducible evidence
  * that supports the claim, and with every gap reported rather than hidden.
+ *
  * This is a composition layer: it calls existing deterministic primitives
- * (`computeImpact`, `computeImpactConstraints`, `buildDecisionImpact`,
- * `buildEvolutionAlignment`) and assembles their outputs into one statement.
- * It does NOT invent evidence, run new analysis, or add a second authority.
+ * (`computeImpact`, `computeImpactConstraints`, `readAdrContext`,
+ * `resolveDecisionRef`) and assembles their outputs into one statement. It
+ * does NOT invent evidence, run new analysis, or add a second authority.
  *
  * ## What it composes
  *
@@ -38,9 +39,9 @@
  *
  * @module
  */
+import { buildDecisionImpact, buildEvolutionAlignment } from "./evaluation-primitives.mjs";
 import { computeImpactConstraints } from "./edge-constraints.mjs";
 import { computeImpact } from "./impact.mjs";
-import { buildDecisionImpact, buildEvolutionAlignment } from "./evaluation-primitives.mjs";
 
 /**
  * @typedef {object} ImpactStatement
@@ -314,7 +315,7 @@ export function composeImpactStatement(projectName, commandContext, config = nul
         "Pass debt data for complete governance evaluation.",
     );
   }
-  // Step 8: Determine multi-level completeness
+
   const executionComplete = true; // reached this point without throwing
   const graphComplete = true; // reverse reachability always completes
   const constraintComplete = config !== null && config.depConstraints !== undefined;

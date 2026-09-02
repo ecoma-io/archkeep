@@ -552,8 +552,79 @@ describe("decision lifecycle (PR E)", () => {
     expect(a.report.json).toBe(b.report.json);
     expect(a.report.text).toBe(b.report.text);
   });
-});
 
+  it("serializes result.provenanceGraph and result.claims in the JSON envelope", async () => {
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({
+        intent: intent({
+          allowed: [
+            {
+              from: "a",
+              to: "b",
+              origin: { by: "jane", tool: "archkeep:v1" },
+              decisionRef: "adr:0001-bind-collaboration",
+            },
+          ],
+        }),
+        adrRecords: lifecycleRecords(),
+        fileAttribution: () => attribution,
+      }),
+    );
+    const envelope = JSON.parse(result.report.json);
+
+    // provenanceGraph is present and has expected top-level keys
+    expect(envelope.result.provenanceGraph).toBeDefined();
+    expect(Array.isArray(envelope.result.provenanceGraph.nodes)).toBe(true);
+    expect(Array.isArray(envelope.result.provenanceGraph.edges)).toBe(true);
+    expect(Array.isArray(envelope.result.provenanceGraph.claims)).toBe(true);
+    expect(Array.isArray(envelope.result.provenanceGraph.causalChains)).toBe(true);
+
+    // At minimum: repo node + row node + decision nodes
+    expect(envelope.result.provenanceGraph.nodes.length).toBeGreaterThanOrEqual(2);
+
+    // Edges: at least provenance + decisionRef
+    expect(envelope.result.provenanceGraph.edges.length).toBeGreaterThanOrEqual(2);
+
+    // Claims: at least attestation + resolution + lifecycle
+    expect(envelope.result.provenanceGraph.claims.length).toBeGreaterThanOrEqual(3);
+
+    // result.claims is a separate top-level shorthand
+    expect(Array.isArray(envelope.result.claims)).toBe(true);
+  });
+
+  it("includes provenanceGraph summary in the text report when provenanceGraph is present", async () => {
+    const result = await provenanceCommand(
+      commandContext(),
+      ioWith({
+        intent: intent({
+          allowed: [
+            {
+              from: "a",
+              to: "b",
+              origin: { by: "jane", tool: "archkeep:v1" },
+              decisionRef: "adr:0001-bind-collaboration",
+            },
+          ],
+        }),
+        adrRecords: lifecycleRecords(),
+        fileAttribution: () => attribution,
+      }),
+    );
+    // The text report contains a "graph" line with counts
+    const lines = result.report.text.split("\n");
+    const graphLine = lines.find((l) => l.startsWith("graph"));
+    expect(graphLine).toBeDefined();
+    expect(graphLine).toContain("nodes");
+    expect(graphLine).toContain("edges");
+    expect(graphLine).toContain("claims");
+    expect(graphLine).toContain("chain");
+    // Also has a "chain" example line
+    const chainLine = lines.find((l) => l.startsWith("chain"));
+    expect(chainLine).toBeDefined();
+    expect(chainLine).toMatch(/hop[s]?$/);
+  });
+});
 describe("provenance completeness — every row in intent has an entry in result.rows", () => {
   it("maps every intent row (allowed, forbidden, projects) to a result.rows entry", async () => {
     const result = await provenanceCommand(
