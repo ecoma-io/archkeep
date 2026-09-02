@@ -536,12 +536,23 @@ export function evaluateScenario(
   if (refused.length > 0) {
     notes.push(`changes that could not be applied: ${refused.join("; ")}`);
   }
-  // Step 11: Assemble — determine provenance and completeness semantics
-  // `complete` reflects whether the core evaluation (graph + constraints)
-  // completed. `governanceComplete` tracks whether governance dimensions
-  // were fully evaluated.
+  // Step 11: Assemble — determine multi-level completeness semantics
+  // Each dimension records whether that axis of evaluation completed
+  // successfully. `overallComplete` is the aggregate: true only when every
+  // applicable dimension completed.
+  const executionComplete = true; // reached this point without throwing
+  const graphComplete = refused.length === 0;
+  const constraintComplete = config !== null && config.depConstraints !== undefined;
+  const decisionComplete = config !== null;
   const governanceComplete = availableFindings !== null && availableDebt !== null;
-  const isComplete = refused.length === 0;
+  const evidenceComplete = base.attributed;
+  const overallComplete =
+    executionComplete &&
+    graphComplete &&
+    (config === null || constraintComplete) &&
+    (config === null || decisionComplete) &&
+    governanceComplete &&
+    evidenceComplete;
 
   return {
     virtual: true,
@@ -583,7 +594,16 @@ export function evaluateScenario(
       scenarioDebtCount: scenarioDebt?.length ?? 0,
     },
     delta,
-    complete: isComplete,
+    completeness: {
+      executionComplete,
+      graphComplete,
+      constraintComplete,
+      decisionComplete,
+      governanceComplete,
+      evidenceComplete,
+      overallComplete,
+    },
+    complete: overallComplete,
     notes,
   };
 }

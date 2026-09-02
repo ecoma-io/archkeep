@@ -71,9 +71,16 @@ describe("composeImpactStatement (no config)", () => {
     expect(stmt.evolutionAlignment.decisions).toEqual([]);
   });
 
-  it("reports complete: true", () => {
+  it("reports complete and completeness dimensions", () => {
     const stmt = composeImpactStatement("a", commandContext());
-    expect(stmt.complete).toBe(true);
+    expect(stmt.complete).toBe(false);
+    expect(stmt.completeness).toBeDefined();
+    expect(stmt.completeness.executionComplete).toBe(true);
+    expect(stmt.completeness.graphComplete).toBe(true);
+    expect(stmt.completeness.constraintComplete).toBe(false);
+    expect(stmt.completeness.boundaryComplete).toBe(false);
+    expect(stmt.completeness.decisionComplete).toBe(false);
+    expect(stmt.completeness.overallComplete).toBe(false); // no governance data
   });
 
   it("throws when the project is not in the graph", () => {
@@ -232,21 +239,17 @@ describe("composeImpactStatement (edge cases)", () => {
       ...overrides,
     };
   }
-
-  it("handles empty depConstraints array", () => {
-    const stmt = composeImpactStatement("a", commandContext(), { depConstraints: [] });
-    expect(stmt.constraintImpact).toBeDefined();
-    // No constraint rows matched (depConstraints is empty), so no constraints
-    expect(stmt.evolutionAlignment.constraints).toEqual([]);
-  });
-
   it("handles config with no depConstraints", () => {
     const stmt = composeImpactStatement("a", commandContext(), {});
     // No depConstraints key → no constraintImpact computed
     expect(stmt.constraintImpact).toBeUndefined();
     // But impactStatement is still composed
     expect(stmt.project).toBe("a");
-    expect(stmt.complete).toBe(true);
+    expect(stmt.complete).toBe(false); // config provided but no depConstraints
+    expect(stmt.completeness.constraintComplete).toBe(false);
+    expect(stmt.completeness.boundaryComplete).toBe(true); // config was provided
+    expect(stmt.completeness.decisionComplete).toBe(true); // config was provided
+    expect(stmt.completeness.overallComplete).toBe(false); // constraint not complete
   });
 
   it("handles null config gracefully", () => {
@@ -254,5 +257,72 @@ describe("composeImpactStatement (edge cases)", () => {
     expect(stmt.constraintImpact).toBeUndefined();
     expect(stmt.decisionImpact).toBeUndefined();
     expect(stmt.project).toBe("a");
+    expect(stmt.completeness.constraintComplete).toBe(false);
+    expect(stmt.completeness.boundaryComplete).toBe(false);
+    expect(stmt.completeness.decisionComplete).toBe(false);
+    expect(stmt.completeness.overallComplete).toBe(false); // no governance data
+  });
+});
+describe("composeImpactStatement — completeness dimensions", () => {
+  function commandContext(overrides = {}) {
+    return {
+      root: "/workspace",
+      provider: "native",
+      marker: "archkeep.json",
+      graph: {
+        nodes: { a: { name: "a" }, b: { name: "b" } },
+        dependencies: { b: [{ target: "a", type: "static" }] },
+      },
+      analysis: {
+        analyzed: 2,
+        imports: [],
+        failures: [],
+      },
+      pluginGap: { registered: true, manifests: [] },
+      ...overrides,
+    };
+  }
+
+  it("reports all completeness dimensions when config has depConstraints", () => {
+    const config = {
+      depConstraints: [{ sourceTag: "lib", onlyDependOnLibsWithTags: ["lib"] }],
+    };
+    const stmt = composeImpactStatement("a", commandContext(), config);
+    expect(stmt.completeness.executionComplete).toBe(true);
+    expect(stmt.completeness.graphComplete).toBe(true);
+    expect(stmt.completeness.constraintComplete).toBe(true);
+    expect(stmt.completeness.boundaryComplete).toBe(true);
+    expect(stmt.completeness.decisionComplete).toBe(true);
+    expect(stmt.completeness.overallComplete).toBe(false); // no governance data
+    expect(stmt.complete).toBe(false);
+  });
+
+  it("reports governanceComplete when findings and debt are provided", () => {
+    const config = {
+      depConstraints: [{ sourceTag: "lib", onlyDependOnLibsWithTags: ["lib"] }],
+    };
+    const findings = [{ source: "a", target: "b", message: "test" }];
+    const debt = [{ kind: "drift", source: "a", description: "test" }];
+    const stmt = composeImpactStatement("a", commandContext(), config, {
+      findings,
+      debt,
+    });
+    expect(stmt.completeness.governanceComplete).toBe(true);
+    expect(stmt.completeness.overallComplete).toBe(true);
+  });
+
+  it("reports governanceComplete:false when findings or debt are missing", () => {
+    const config = {
+      depConstraints: [{ sourceTag: "lib", onlyDependOnLibsWithTags: ["lib"] }],
+    };
+    const stmt = composeImpactStatement("a", commandContext(), config);
+    expect(stmt.completeness.governanceComplete).toBe(false);
+    expect(stmt.completeness.overallComplete).toBe(false); // governance not evaluated
+  });
+
+  it("constraintComplete:false when config has no depConstraints", () => {
+    const stmt = composeImpactStatement("a", commandContext(), {});
+    expect(stmt.completeness.constraintComplete).toBe(false);
+    expect(stmt.completeness.overallComplete).toBe(false);
   });
 });
