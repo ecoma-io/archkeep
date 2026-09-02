@@ -183,7 +183,11 @@ export function composeImpactStatement(projectName, commandContext, config = nul
 
   // Step 7b: Build canonical completeness from domain statuses
   // When config is null, constraint/boundary/decision are vacuously complete
-  // (matching old behavior: `(config === null || X)` in overallComplete)
+  // (old behavior: `(config === null || X)` in overallComplete made config=null
+  // vacuously complete; constraint required depConstraints, boundary/decision
+  // were always vacuously complete without config).
+  // Note: boundaryImpact.evaluated may disagree (it reports whether boundary
+  // analysis ran, not whether the domain is vacuously complete).
   const hasConfig = config !== null;
   const hasDepConstraints = hasConfig && config.depConstraints !== undefined;
   const constraintStatus =

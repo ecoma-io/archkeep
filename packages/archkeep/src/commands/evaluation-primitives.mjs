@@ -289,10 +289,14 @@ export function evaluateBoundaryImpact(graph, constraintImpact, targetProject) {
  *
  * This is the canonical evaluation function that composes all evaluation
  * dimensions (structural, constraint, boundary, decision, governance) into a
+ * single result.
+ *
  * @param {object} params
  * @param {object} params.graph The project graph.
  * @param {object|null} params.config The loaded boundary config.
  * @param {string} params.projectName The target project.
+ * @param {string} [params.root] The ADR root directory path. When null (default),
+ *   decision impact cannot resolve decision refs and reports them as unresolved.
  * @param {object[]|null} [params.findings] Pre-computed findings.
  * @param {object[]|null} [params.debt] Pre-computed debt entries.
  * @returns {object} The complete evaluation result with all domains and
@@ -302,6 +306,7 @@ export function evaluateArchitectureState({
   graph,
   config,
   projectName,
+  root = null,
   findings = null,
   debt = null,
 }) {
@@ -323,7 +328,7 @@ export function evaluateArchitectureState({
   // Step 3: Decision impact
   let decisionImpact = null;
   if (constraintImpact) {
-    decisionImpact = buildDecisionImpact(projectName, constraintImpact, config);
+    decisionImpact = buildDecisionImpact(root, constraintImpact, config);
   }
 
   // Step 4: Evolution alignment

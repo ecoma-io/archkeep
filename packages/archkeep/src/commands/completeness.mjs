@@ -21,11 +21,11 @@ export const EVALUATION_STATUS = Object.freeze({
   UNSUPPORTED: "unsupported",
   REFUSED: "refused",
 });
-export const EVALUATED = "evaluated";
-export const PARTIAL = "partial";
-export const NOT_EVALUATED = "not_evaluated";
-export const UNSUPPORTED = "unsupported";
-export const REFUSED = "refused";
+export const EVALUATED = EVALUATION_STATUS.EVALUATED;
+export const PARTIAL = EVALUATION_STATUS.PARTIAL;
+export const NOT_EVALUATED = EVALUATION_STATUS.NOT_EVALUATED;
+export const UNSUPPORTED = EVALUATION_STATUS.UNSUPPORTED;
+export const REFUSED = EVALUATION_STATUS.REFUSED;
 
 // ---------------------------------------------------------------------------
 // Helpers
