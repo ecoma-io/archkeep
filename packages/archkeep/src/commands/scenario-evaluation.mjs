@@ -86,6 +86,12 @@ export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "depende
  * @property {string} evidenceChain.currentState The state before applying changes ("current").
  * @property {string} evidenceChain.scenarioState The state after applying changes ("scenario").
  * @property {object} evidenceChain.delta The computed differences.
+ * @property {object} [governanceImpact] Governance re-evaluation results.
+ * @property {boolean} governanceImpact.findingsReEvaluated Whether findings were re-evaluated.
+ * @property {boolean} governanceImpact.debtReEvaluated Whether debt was re-evaluated.
+ * @property {boolean} governanceImpact.governanceComplete Whether all governance data was provided.
+ * @property {number} governanceImpact.scenarioFindingsCount Number of findings in the scenario state.
+ * @property {number} governanceImpact.scenarioDebtCount Number of debt entries in the scenario state.
  * @property {boolean} complete Whether the evaluation could be fully completed.
  * @property {string[]} notes Caveats about the evaluation.
  */
