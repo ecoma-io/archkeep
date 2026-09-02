@@ -599,7 +599,7 @@ describe("evaluateScenario — edge cases", () => {
     const input = {
       changes: [change("dependency_added", "b", "a")],
     };
-    const findings = [{ source: "a", target: "b", message: "test finding" }];
+    const findings = [{ source: "b", target: "a", message: "test finding" }];
     const debt = [{ kind: "drift", source: "a", description: "test debt" }];
     const result = evaluateScenario("a", makeCommandContext(graph), input, null, {
       findings,
@@ -613,6 +613,70 @@ describe("evaluateScenario — edge cases", () => {
     expect(result.scenario.findings).toBeDefined();
     expect(result.scenario.findings).toHaveLength(1);
     expect(result.scenario.debt).toBeDefined();
+    expect(result.scenario.debt).toHaveLength(1);
+  });
+  it("filters out findings whose edge no longer exists after dependency_removed", () => {
+    // Graph: b → a, c → a. Finding about edge c → a.
+    // Scenario: remove c → a. The finding's edge no longer exists.
+    const graph = makeGraph(
+      ["a", "b", "c"],
+      [
+        ["b", ["a"]],
+        ["c", ["a"]],
+      ],
+    );
+    const input = {
+      changes: [change("dependency_removed", "c", "a")],
+    };
+    const findings = [{ source: "c", target: "a", message: "edge finding" }];
+    const result = evaluateScenario("a", makeCommandContext(graph), input, null, {
+      findings,
+    });
+    // The edge c → a was removed, so the finding about it should not carry
+    // forward — even though "c" is still an affected project name.
+    expect(result.governanceImpact.scenarioFindingsCount).toBe(0);
+    expect(result.scenario.findings).toHaveLength(0);
+  });
+  it("includes edge findings that still exist after dependency_added", () => {
+    // Graph: a, b with no deps. Finding about edge a → b doesn't exist yet.
+    // Scenario: add a → b. Now the finding should carry forward.
+    const graph = makeGraph(["a", "b"], []);
+    const input = {
+      changes: [change("dependency_added", "a", "b")],
+    };
+    const findings = [{ source: "a", target: "b", message: "edge finding" }];
+    const result = evaluateScenario("a", makeCommandContext(graph), input, null, {
+      findings,
+    });
+    expect(result.governanceImpact.scenarioFindingsCount).toBe(1);
+    expect(result.scenario.findings).toHaveLength(1);
+    expect(result.scenario.findings[0].source).toBe("a");
+    expect(result.scenario.findings[0].target).toBe("b");
+  });
+  it("filters out debt whose source is not in scenario affected projects", () => {
+    // Graph: a, b. Debt for source "c" which doesn't exist in the graph.
+    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
+    const input = {
+      changes: [change("dependency_added", "b", "a")],
+    };
+    const debt = [{ kind: "drift", source: "nonexistent", description: "test" }];
+    const result = evaluateScenario("a", makeCommandContext(graph), input, null, {
+      debt,
+    });
+    expect(result.governanceImpact.scenarioDebtCount).toBe(0);
+    expect(result.scenario.debt).toHaveLength(0);
+  });
+  it("carries forward non-drift debt unchanged", () => {
+    // Non-drift debt (waiver, aspirational-gap) should pass through.
+    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
+    const input = {
+      changes: [change("dependency_added", "b", "a")],
+    };
+    const debt = [{ kind: "waiver", source: "a", description: "test" }];
+    const result = evaluateScenario("a", makeCommandContext(graph), input, null, {
+      debt,
+    });
+    expect(result.governanceImpact.scenarioDebtCount).toBe(1);
     expect(result.scenario.debt).toHaveLength(1);
   });
 });
