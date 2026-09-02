@@ -67,6 +67,12 @@ import { computeImpact } from "./impact.mjs";
  * @property {{boundaries: object[], evaluated: boolean}} boundaryImpact
  *   Boundary-crossing analysis for each affected edge. `evaluated: false` when
  *   no constraint impact was available.
+ * @property {{executionComplete: boolean, graphComplete: boolean,
+ *   constraintComplete: boolean, boundaryComplete: boolean,
+ *   decisionComplete: boolean, governanceComplete: boolean,
+ *   overallComplete: boolean}} completeness
+ *   Per-dimension completeness flags. Every dimension reports a boolean
+ *   so callers never need to guess which is missing.
  * @property {boolean} complete Whether the statement could be fully composed.
  * @property {string[]} notes Caveats about statement completeness and
  *   governance gaps.
