@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.0](https://github.com/ecoma-io/archkeep/compare/v0.19.0...v0.20.0) (2026-09-02)
+
+
+### Features
+
+* implement evidence chain and governance integration in impact statement ([#557](https://github.com/ecoma-io/archkeep/issues/557)) ([cdebde4](https://github.com/ecoma-io/archkeep/commit/cdebde4767cc96cea587b9ccdb2789cdc1d2148f))
+
 ## [0.19.0](https://github.com/ecoma-io/archkeep/compare/v0.18.1...v0.19.0) (2026-09-02)
 
 
