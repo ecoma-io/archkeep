@@ -57,6 +57,9 @@ export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "depende
  * @property {"dependency_added"|"dependency_removed"} type
  * @property {string} source The source project of the dependency.
  * @property {string} target The target project of the dependency.
+ * @property {string} [edgeType] The dependency edge type (required for
+ *   dependency_added; used for disambiguation in dependency_removed when
+ *   multiple edges exist between the same source+target with different types).
  */
 
 /**
@@ -67,8 +70,6 @@ export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "depende
  */
 
 // ---------------------------------------------------------------------------
-// Output types
-// ---------------------------------------------------------------------------
 /**
  * @typedef {object} ScenarioEvaluation
  * @property {boolean} virtual Always true — a scenario is never authoritative.
@@ -76,8 +77,10 @@ export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "depende
  * @property {string} project The target project being evaluated.
  * @property {object} base The base graph information.
  * @property {string} base.revision The git revision or snapshot identity.
- * @property {boolean} base.attributed Whether the base is a real, verifiable revision.
- * @property {string} base.provenance How the base was determined (user-provided, auto-resolved, or unverifiable).
+ * @property {string} base.identity One of: "verified", "unverified", "mismatch", "unattributed".
+ * @property {boolean} base.identityVerified Whether the base revision identity was verified against workspace HEAD.
+ * @property {boolean} base.identityMismatch Whether the base revision does not match workspace HEAD.
+ * @property {string} base.provenance How the base was determined.
  * @property {string[]} changes The change descriptions that were applied.
  * @property {string[]|undefined} refused Changes that could not be applied, if any.
  * @property {object} current The current impact for the target project.
@@ -85,14 +88,12 @@ export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "depende
  * @property {object} delta What would change.
  * @property {string[]} delta.dependentsAdded Dependents added in the scenario (flat access).
  * @property {string[]} delta.dependentsRemoved Dependents removed in the scenario (flat access).
- * @property {boolean} delta.constraintsChanged Whether constraint impacts changed.
- * @property {boolean} delta.decisionsChanged Whether decisions changed.
+ * @property {{status: string}} delta.constraintsChanged Whether constraint impacts changed (structured status).
+ * @property {{status: string}} delta.decisionsChanged Whether decisions changed (structured status).
  * @property {object} delta.structuralDelta Structured delta for dependency changes.
- * @property {string[]} delta.structuralDelta.dependentsAdded Dependents added in the scenario.
- * @property {string[]} delta.structuralDelta.dependentsRemoved Dependents removed in the scenario.
  * @property {object} delta.governanceDelta Governance-level delta.
- * @property {boolean} delta.governanceDelta.findingsChanged Whether findings changed.
- * @property {boolean} delta.governanceDelta.debtChanged Whether debt changed.
+ * @property {{status: string}} delta.governanceDelta.findingsChanged Status: "changed" | "unchanged" | "not_evaluated".
+ * @property {{status: string}} delta.governanceDelta.debtChanged Status: "changed" | "unchanged" | "not_evaluated".
  * @property {object} delta.evidenceDelta Evidence-level delta metadata.
  * @property {string} delta.evidenceDelta.baseRevision The revision used as base.
  * @property {number} delta.evidenceDelta.changesApplied Number of changes applied.
@@ -112,8 +113,9 @@ export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "depende
  * @property {string} governanceImpact.findingsStatus EVALUATION_STATUS for findings.
  * @property {string} governanceImpact.debtStatus EVALUATION_STATUS for debt.
  * @property {object} completeness Structured completeness from buildScenarioCompleteness.
- * @property {boolean} complete Backward-compat shorthand: whether all changes were applied (refused.length === 0).
+ * @property {boolean} complete Backward-compat shorthand: whether all changes were applied (mutationCoverageComplete).
  * @property {string[]} notes Caveats about the evaluation.
+ */
 
 // ---------------------------------------------------------------------------
 // Graph manipulation
@@ -133,6 +135,11 @@ function cloneGraph(graph) {
 
 /**
  * Applies a scenario's changes to a graph, producing a would-be graph.
+ *
+ * Each change must identify the edge type explicitly. For dependency_added,
+ * the type field is required. For dependency_removed, identity is resolved
+ * by source + target + type. If type is not provided and multiple edges
+ * exist between the same source+target, the mutation is refused as ambiguous.
  *
  * @param {object} graph The base graph to apply changes to.
  * @param {DependencyChange[]} changes The hypothetical changes.
@@ -160,40 +167,68 @@ function applyChanges(graph, changes) {
         continue;
       }
 
-      // Check if edge already exists
-      const existing = cloned.dependencies[change.source] ?? [];
-      if (existing.some((e) => e.target === change.target)) {
-        applied.push(`dependency already exists: ${change.source} → ${change.target}`);
+      // The edge type must be explicit — do not silently invent "static"
+      if (!change.edgeType || typeof change.edgeType !== "string") {
+        refused.push(
+          `cannot add dependency: edge type is required for ${change.source} → ${change.target}`,
+        );
         continue;
       }
 
-      // Add the edge
-      // Canonical edge identity: source+target. For production, add type matching.
+      // Check if edge already exists (source+target+type identity)
+      const existing = cloned.dependencies[change.source] ?? [];
+      if (existing.some((e) => e.target === change.target && e.type === change.edgeType)) {
+        applied.push(
+          `dependency already exists: ${change.source} → ${change.target} (${change.edgeType})`,
+        );
+        continue;
+      }
+
+      // Add the edge with explicit type
       if (!cloned.dependencies[change.source]) {
         cloned.dependencies[change.source] = [];
       }
       cloned.dependencies[change.source].push({
         target: change.target,
-        // type is set to "static" for newly added edges as scenario edges have no real type data
-        type: "static",
+        type: change.edgeType,
         source: change.source,
       });
-      applied.push(`added dependency: ${change.source} → ${change.target}`);
+      applied.push(`added dependency: ${change.source} → ${change.target} (${change.edgeType})`);
     }
 
     if (change.type === "dependency_removed") {
       const existing = cloned.dependencies[change.source] ?? [];
-      // Uses findIndex with target-only matching — ambiguous when multiple edges share the same
-      // target but is acceptable for the MVP where all edges have unique target+type combinations
-      const idx = existing.findIndex((e) => e.target === change.target);
-      if (idx === -1) {
+
+      // Use canonical edge identity: source + target + type
+      const matching = existing.filter((e) => {
+        if (e.target !== change.target) return false;
+        if (change.edgeType && e.type !== change.edgeType) return false;
+        return true;
+      });
+
+      if (matching.length === 0) {
+        const typeInfo = change.edgeType ? ` (${change.edgeType})` : "";
         refused.push(
-          `cannot remove dependency: no edge from "${change.source}" to "${change.target}"`,
+          `cannot remove dependency: no edge from "${change.source}" to "${change.target}"${typeInfo}`,
         );
         continue;
       }
+
+      if (matching.length > 1) {
+        // Ambiguous: multiple edges with same source+target but different types,
+        // and no type was specified to disambiguate
+        const types = matching.map((e) => e.type).join(", ");
+        refused.push(
+          `ambiguous removal: multiple edges from "${change.source}" to "${change.target}" ` +
+            `(${types}). Specify edgeType to disambiguate.`,
+        );
+        continue;
+      }
+      // Remove the single matching edge by identity (matching was already computed)
+      const idx = existing.indexOf(matching[0]);
       existing.splice(idx, 1);
-      applied.push(`removed dependency: ${change.source} → ${change.target}`);
+      const typeLabel = change.edgeType ? ` (${change.edgeType})` : "";
+      applied.push(`removed dependency: ${change.source} → ${change.target}${typeLabel}`);
     }
   }
   // Clean up empty dependency arrays
@@ -209,18 +244,24 @@ function applyChanges(graph, changes) {
 /**
  * Computes the delta between current and scenario.
  *
+ * All boolean delta fields are replaced with structured status objects
+ * to avoid boolean information loss. Each status is one of:
+ * - "changed": the value differs between current and scenario
+ * - "unchanged": the value is identical
+ * - "not_evaluated": the comparison could not be performed
+ *
  * @param {object} current Current impact.
  * @param {object} scenario Scenario impact.
  * @param {object} [extra] Additional context for structured delta sections.
  * @param {string} [extra.baseRevision] The base revision used.
  * @param {number} [extra.changesApplied] Number of changes applied.
  * @param {number} [extra.changesRefused] Number of changes refused.
- * @param {boolean} [extra.findingsChanged] Whether findings changed.
- * @param {boolean} [extra.debtChanged] Whether debt changed.
+ * @param {string} [extra.findingsChanged] Status: "changed" | "unchanged" | "not_evaluated".
+ * @param {string} [extra.debtChanged] Status: "changed" | "unchanged" | "not_evaluated".
  * @returns {{dependentsAdded: string[], dependentsRemoved: string[],
- *   constraintsChanged: boolean, decisionsChanged: boolean,
+ *   constraintsChanged: {status: string}, decisionsChanged: {status: string},
  *   structuralDelta: {dependentsAdded: string[], dependentsRemoved: string[]},
- *   governanceDelta: {findingsChanged: boolean, debtChanged: boolean},
+ *   governanceDelta: {findingsChanged: {status: string}, debtChanged: {status: string}},
  *   evidenceDelta: {baseRevision: string, changesApplied: number, changesRefused: number}}}
  */
 function computeDelta(current, scenario, extra = {}) {
@@ -230,12 +271,24 @@ function computeDelta(current, scenario, extra = {}) {
   const dependentsAdded = [...scenarioDeps].filter((d) => !currentDeps.has(d)).sort();
   const dependentsRemoved = [...currentDeps].filter((d) => !scenarioDeps.has(d)).sort();
 
-  const constraintsChanged =
-    JSON.stringify(current.constraintImpact ?? []) !==
-    JSON.stringify(scenario.constraintImpact ?? []);
+  const constraintsChanged = {
+    status:
+      JSON.stringify(current.constraintImpact ?? []) !==
+      JSON.stringify(scenario.constraintImpact ?? [])
+        ? "changed"
+        : "unchanged",
+  };
 
-  const decisionsChanged =
-    JSON.stringify(current.decisionImpact ?? []) !== JSON.stringify(scenario.decisionImpact ?? []);
+  const decisionsChanged = {
+    status:
+      JSON.stringify(current.decisionImpact ?? []) !== JSON.stringify(scenario.decisionImpact ?? [])
+        ? "changed"
+        : "unchanged",
+  };
+
+  // Use structured status for governance changes
+  const findingsStatus = extra.findingsChanged ?? "not_evaluated";
+  const debtStatus = extra.debtChanged ?? "not_evaluated";
 
   return {
     dependentsAdded,
@@ -247,8 +300,8 @@ function computeDelta(current, scenario, extra = {}) {
       dependentsRemoved,
     },
     governanceDelta: {
-      findingsChanged: extra.findingsChanged ?? false,
-      debtChanged: extra.debtChanged ?? false,
+      findingsChanged: { status: findingsStatus },
+      debtChanged: { status: debtStatus },
     },
     evidenceDelta: {
       baseRevision: extra.baseRevision ?? "(unknown)",
@@ -258,57 +311,92 @@ function computeDelta(current, scenario, extra = {}) {
   };
 }
 
+/**
+ * Resolves the base revision for a scenario, with explicit identity verification.
+ *
+ * The following identity states are represented:
+ * - verified: the base revision matches the verified workspace HEAD
+ * - unverified: the base revision could not be verified against workspace state
+ * - mismatch: the base revision differs from the verified workspace HEAD
+ * - unattributed: no git revision could be resolved
+ *
+ * @param {string} root The workspace root.
+ * @param {string} [userBase] Optional user-provided base revision.
+ * @returns {{revision: string, identity: string, provenance: string,
+ *   identityVerified: boolean, identityMismatch: boolean}}
+ */
 function resolveBaseRevision(root, userBase) {
-  if (typeof userBase === "string" && userBase.length > 0) {
-    // Cross-validate user-provided base against git state
-    let provenance;
-    try {
-      provenance = resolveProvenance(root);
-    } catch {
-      provenance = null;
+  let workspaceHead = null;
+  let isDirty = false;
+  try {
+    const provenance = resolveProvenance(root);
+    if (provenance && provenance.commit && provenance.commit.length > 0) {
+      workspaceHead = provenance.commit;
+      isDirty = !!provenance.dirty;
     }
+  } catch {
+    // Provenance unavailable — will use "(unknown)" below
+  }
 
-    if (provenance && provenance.commit && provenance.commit.length > 0 && !provenance.dirty) {
-      if (userBase === provenance.commit) {
+  if (typeof userBase === "string" && userBase.length > 0) {
+    // User-provided base — verify against workspace HEAD
+    if (workspaceHead) {
+      if (isDirty) {
+        // Dirty tree: cannot verify relationship
         return {
           revision: userBase,
-          attributed: true,
-          provenance: "user-provided (matches HEAD)",
+          identity: "unverified",
+          identityVerified: false,
+          identityMismatch: false,
+          provenance: `user-provided (HEAD is ${workspaceHead}, dirty — identity unverifiable)`,
         };
       }
+      if (userBase === workspaceHead) {
+        return {
+          revision: userBase,
+          identity: "verified",
+          identityVerified: true,
+          identityMismatch: false,
+          provenance: `user-provided (matches HEAD ${workspaceHead})`,
+        };
+      }
+      // User-provided base does not match HEAD
       return {
         revision: userBase,
-        attributed: true,
-        provenance: "user-provided (cross-validated: differs from HEAD)",
+        identity: "mismatch",
+        identityVerified: false,
+        identityMismatch: true,
+        provenance: `user-provided (HEAD is ${workspaceHead}, requested ${userBase})`,
       };
     }
 
+    // No workspace HEAD to verify against
     return {
       revision: userBase,
-      attributed: true,
-      provenance: "user-provided (could not cross-validate — HEAD unverifiable or dirty)",
+      identity: "unverified",
+      identityVerified: false,
+      identityMismatch: false,
+      provenance: "user-provided (could not verify — no git HEAD available)",
     };
   }
 
-  // Auto-resolve from git via resolveProvenance
-  let provenance;
-  try {
-    provenance = resolveProvenance(root);
-  } catch {
-    provenance = null;
-  }
-
-  if (provenance && provenance.commit && provenance.commit.length > 0) {
+  // Auto-resolve from git
+  if (workspaceHead) {
+    const suffix = isDirty ? " (dirty)" : "";
     return {
-      revision: provenance.commit,
-      attributed: true,
-      provenance: `auto-resolved: git commit ${provenance.commit}${provenance.dirty ? " (dirty)" : ""}`,
+      revision: workspaceHead,
+      identity: isDirty ? "unverified" : "verified",
+      identityVerified: !isDirty,
+      identityMismatch: false,
+      provenance: `auto-resolved: git commit ${workspaceHead}${suffix}`,
     };
   }
 
   return {
     revision: "(unattributed workspace)",
-    attributed: false,
+    identity: "unattributed",
+    identityVerified: false,
+    identityMismatch: false,
     provenance: "unverifiable — git rev-parse HEAD failed or not a git repository",
   };
 }
@@ -411,11 +499,10 @@ export function evaluateScenario(
     baseRevision: base.revision,
     changesApplied: applied.length,
     changesRefused: refused.length,
-    findingsChanged: availableFindings !== null,
-    debtChanged: availableDebt !== null,
+    // Governance was NOT re-evaluated — filtering is not evaluation
+    findingsChanged: "not_evaluated",
+    debtChanged: "not_evaluated",
   });
-
-  // Step 8: Build evidence chain
   const evidenceChain = {
     baseRevision: base.revision,
     appliedChanges: applied,
@@ -495,14 +582,23 @@ export function evaluateScenario(
     notes.push(`changes that could not be applied: ${refused.join("; ")}`);
   }
   // Step 11: Assemble — determine provenance and completeness semantics
-  // `complete` reflects whether the core evaluation (graph + constraints)
-  // completed. `governanceComplete` tracks whether governance dimensions
-  // were fully evaluated.
-  const governanceComplete = availableFindings !== null && availableDebt !== null;
+  //
+  // Governance filtering (re-applying precomputed findings/debt to the
+  // hypothetical graph) is NOT governance re-evaluation. True re-evaluation
+  // would run the full check pipeline against the hypothetical graph.
+  // When we only filter, governance is NOT_EVALUATED.
+  const findingsReEvaluated = availableFindings !== null;
+  const debtReEvaluated = availableDebt !== null;
 
-  // Compute evaluation statuses for governance domains
-  const findingsStatus = evaluationStatus({ evaluated: availableFindings !== null });
-  const debtStatus = evaluationStatus({ evaluated: availableDebt !== null });
+  // Mark governance as NOT_EVALUATED when not truly re-evaluated
+  const findingsStatus = evaluationStatus({
+    evaluated: false, // filtering is NOT evaluation
+    notEvaluated: !findingsReEvaluated,
+  });
+  const debtStatus = evaluationStatus({
+    evaluated: false, // filtering is NOT evaluation
+    notEvaluated: !debtReEvaluated,
+  });
 
   // Build governance completeness
   const governanceCompleteness = buildGovernanceCompleteness({
@@ -512,10 +608,17 @@ export function evaluateScenario(
     debtCount: scenarioDebt?.length ?? 0,
   });
 
+  // Determine mutation coverage completeness
+  const totalChanges = scenarioInput.changes.length;
+  const appliedCount = applied.length;
+  const refusedCount = refused.length;
+  const mutationCoverageComplete = totalChanges === appliedCount && refusedCount === 0;
+
   // Build overall scenario completeness
   const scenarioCompleteness = buildScenarioCompleteness({
-    changesComplete: refused.length === 0,
-    baseAttributed: base.attributed,
+    changesComplete: mutationCoverageComplete,
+    baseIdentityVerified: base.identityVerified,
+    mutationCoverageComplete,
     governance: governanceCompleteness,
   });
 
@@ -552,9 +655,9 @@ export function evaluateScenario(
       ...(scenarioDebt !== null ? { debt: scenarioDebt } : {}),
     },
     governanceImpact: {
-      findingsReEvaluated: availableFindings !== null,
-      debtReEvaluated: availableDebt !== null,
-      governanceComplete,
+      findingsReEvaluated,
+      debtReEvaluated,
+      governanceComplete: false, // filtering is NOT evaluation
       scenarioFindingsCount: scenarioFindings?.length ?? 0,
       scenarioDebtCount: scenarioDebt?.length ?? 0,
       findingsStatus,
@@ -562,7 +665,7 @@ export function evaluateScenario(
     },
     delta,
     completeness: scenarioCompleteness,
-    complete: refused.length === 0,
+    complete: mutationCoverageComplete,
     notes,
   };
 }
@@ -616,6 +719,12 @@ export function parseScenarioInput(jsonString) {
 
   return {
     base: typeof parsed.base === "string" ? parsed.base : undefined,
-    changes: changes.map((c) => ({ type: c.type, source: c.source, target: c.target })),
+    changes: changes.map((c) => {
+      const change = { type: c.type, source: c.source, target: c.target };
+      if (c.edgeType && typeof c.edgeType === "string") {
+        change.edgeType = c.edgeType;
+      }
+      return change;
+    }),
   };
 }

@@ -39,21 +39,7 @@
  *
  * @module
  */
-import {
-  buildDecisionImpact,
-  buildEvolutionAlignment,
-  evaluateFindingsImpact,
-  evaluateDebtImpact,
-  evaluateBoundaryImpact,
-} from "./evaluation-primitives.mjs";
-import {
-  buildCompleteness,
-  buildGovernanceCompleteness,
-  EVALUATION_STATUS,
-  createDomain,
-} from "./completeness.mjs";
-import { computeImpactConstraints } from "./edge-constraints.mjs";
-import { computeImpact } from "./impact.mjs";
+import { evaluateArchitectureState } from "./evaluation-primitives.mjs";
 /**
  * @typedef {object} ImpactStatement
  * @property {string} project The target project name.
@@ -106,45 +92,17 @@ export function composeImpactStatement(projectName, commandContext, config = nul
   const { root, graph } = commandContext;
   const { findings: availableFindings = null, debt: availableDebt = null } = options;
 
-  // Step 1: Reverse reachability (existing primitive)
-  const impact = computeImpact(projectName, graph);
-
-  // Step 2: Edge and constraint impact (existing primitive)
-  let constraintImpact = null;
-  if (config && config.depConstraints) {
-    constraintImpact = computeImpactConstraints(
-      projectName,
-      impact.dependents,
-      graph.nodes,
-      graph.dependencies,
-      config.depConstraints,
-    );
-  }
-
-  // Step 3: Decision impact (with evidence)
-  let decisionImpact = null;
-  if (constraintImpact) {
-    decisionImpact = buildDecisionImpact(root, constraintImpact, config);
-  }
-
-  // Step 4: Evolution alignment
-  const resolvedDecisions = decisionImpact ? decisionImpact.decisions.map((d) => d.id) : [];
-  const evolutionAlignment = buildEvolutionAlignment(
+  // Delegate to the canonical evaluator — one semantic evaluator, many views
+  const evaluation = evaluateArchitectureState({
+    graph,
+    config,
     projectName,
-    impact,
-    constraintImpact,
-    resolvedDecisions,
-  );
+    root,
+    findings: availableFindings,
+    debt: availableDebt,
+  });
 
-  // Step 5: Boundary impact evaluation
-  const boundaryImpact = evaluateBoundaryImpact(graph, constraintImpact, projectName);
-
-  // Step 6: Findings and Debt impact evaluation
-  const affectedProjects = [projectName, ...impact.dependents];
-  const findingsImpact = evaluateFindingsImpact(affectedProjects, availableFindings);
-  const debtImpact = evaluateDebtImpact(affectedProjects, availableDebt);
-
-  // Step 7: Assemble the statement with evidence and coverage notes
+  // Build impact-statement-specific notes
   const notes = [];
 
   if (config && config.depConstraints) {
@@ -155,77 +113,41 @@ export function composeImpactStatement(projectName, commandContext, config = nul
     );
   }
 
-  if (!findingsImpact.evaluated) {
+  if (!evaluation.findingsImpact.evaluated) {
     notes.push(
       "finding impact not evaluated — no findings data provided to impact statement. " +
         "Pass findings data for complete governance evaluation.",
     );
   }
 
-  if (!debtImpact.evaluated) {
+  if (!evaluation.debtImpact.evaluated) {
     notes.push(
       "debt impact not evaluated — no debt data provided to impact statement. " +
         "Pass debt data for complete governance evaluation.",
     );
   }
 
-  // Step 7a: Build governance completeness from findings/debt status
-  const governanceResult = buildGovernanceCompleteness({
-    findingsStatus: findingsImpact.evaluated
-      ? EVALUATION_STATUS.EVALUATED
-      : EVALUATION_STATUS.NOT_EVALUATED,
-    debtStatus: debtImpact.evaluated
-      ? EVALUATION_STATUS.EVALUATED
-      : EVALUATION_STATUS.NOT_EVALUATED,
-    findingsCount: findingsImpact.count,
-    debtCount: debtImpact.count,
-  });
-
-  // Step 7b: Build canonical completeness from domain statuses
-  // When config is null, constraint/boundary/decision are vacuously complete
-  // (old behavior: `(config === null || X)` in overallComplete made config=null
-  // vacuously complete; constraint required depConstraints, boundary/decision
-  // were always vacuously complete without config).
-  // Note: boundaryImpact.evaluated may disagree (it reports whether boundary
-  // analysis ran, not whether the domain is vacuously complete).
-  const hasConfig = config !== null;
-  const hasDepConstraints = hasConfig && config.depConstraints !== undefined;
-  const constraintStatus =
-    !hasConfig || hasDepConstraints ? EVALUATION_STATUS.EVALUATED : EVALUATION_STATUS.NOT_EVALUATED;
-
-  const completeness = buildCompleteness({
-    structural: createDomain(EVALUATION_STATUS.EVALUATED),
-    constraint: createDomain(constraintStatus),
-    boundary: createDomain(EVALUATION_STATUS.EVALUATED),
-    decision: createDomain(EVALUATION_STATUS.EVALUATED),
-    governance: governanceResult.domain,
-  });
-
   const statement = {
-    project: impact.project,
-    impact: {
-      direct: impact.direct,
-      transitive: impact.transitive,
-      dependents: impact.dependents,
-    },
-    evolutionAlignment,
-    findingsImpact,
-    debtImpact,
-    boundaryImpact,
-    completeness,
-    complete: completeness.overallComplete,
+    project: evaluation.project,
+    impact: evaluation.impact,
+    evolutionAlignment: evaluation.evolutionAlignment,
+    findingsImpact: evaluation.findingsImpact,
+    debtImpact: evaluation.debtImpact,
+    boundaryImpact: evaluation.boundaryImpact,
+    completeness: evaluation.completeness,
+    complete: evaluation.completeness.overallComplete,
     notes,
   };
 
-  if (constraintImpact) {
-    statement.constraintImpact = constraintImpact;
+  if (evaluation.constraintImpact) {
+    statement.constraintImpact = evaluation.constraintImpact;
   }
 
-  if (decisionImpact) {
-    statement.decisionImpact = decisionImpact;
-    if (decisionImpact.unresolvedDecisionRefs.length > 0) {
+  if (evaluation.decisionImpact) {
+    statement.decisionImpact = evaluation.decisionImpact;
+    if (evaluation.decisionImpact.unresolvedDecisionRefs.length > 0) {
       statement.notes.push(
-        `unresolved decision references: ${decisionImpact.unresolvedDecisionRefs.join(", ")}`,
+        `unresolved decision references: ${evaluation.decisionImpact.unresolvedDecisionRefs.join(", ")}`,
       );
     }
   }

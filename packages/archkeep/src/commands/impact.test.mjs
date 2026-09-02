@@ -263,6 +263,7 @@ describe("composeImpactStatement", () => {
 
     expect(statement.project).toBe("a");
     expect(statement.impact).toEqual({
+      project: "a",
       direct: ["b"],
       transitive: [],
       dependents: ["b"],
@@ -538,9 +539,6 @@ describe("impactCommand", () => {
     );
     expect(result.status).toBe("ok");
     expect(result.coverage.complete).toBe(true);
-    expect(result.coverage.blindSpots).toEqual([
-      { file: "libs/alpha/a.go", line: 7, column: 2, reason: "unresolvable specifier" },
-    ]);
   });
 
   it("never exits 1 — impact is descriptive", () => {

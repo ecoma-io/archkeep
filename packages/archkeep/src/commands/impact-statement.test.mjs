@@ -76,11 +76,10 @@ describe("composeImpactStatement (no config)", () => {
     // With no config, execution and graph always complete
     expect(stmt.completeness).toBeDefined();
     expect(stmt.completeness.domains.structural.status).toBe("evaluated");
-    // Without config, constraint/boundary/decision are vacuously complete
-    expect(stmt.completeness.domains.constraint.status).toBe("evaluated");
-    expect(stmt.completeness.domains.boundary.status).toBe("evaluated");
-    expect(stmt.completeness.domains.decision.status).toBe("evaluated");
-    // Without governance data
+    // Without config, constraint/boundary/decision cannot be evaluated
+    expect(stmt.completeness.domains.constraint.status).toBe("not_evaluated");
+    expect(stmt.completeness.domains.boundary.status).toBe("not_evaluated");
+    expect(stmt.completeness.domains.decision.status).toBe("not_evaluated");
     expect(stmt.completeness.domains.governance.status).toBe("not_evaluated");
     // Overall is false because governance is incomplete
     expect(stmt.completeness.overallComplete).toBe(false);
@@ -274,9 +273,9 @@ describe("composeImpactStatement (edge cases)", () => {
     expect(stmt.project).toBe("a");
     expect(stmt.complete).toBe(false);
     expect(stmt.completeness).toBeDefined();
-    // With null config, constraint/boundary/decision are vacuously complete
-    expect(stmt.completeness.domains.constraint.status).toBe("evaluated");
-    expect(stmt.completeness.domains.boundary.status).toBe("evaluated");
-    expect(stmt.completeness.domains.decision.status).toBe("evaluated");
+    // With null config, constraint/boundary/decision cannot be evaluated
+    expect(stmt.completeness.domains.constraint.status).toBe("not_evaluated");
+    expect(stmt.completeness.domains.boundary.status).toBe("not_evaluated");
+    expect(stmt.completeness.domains.decision.status).toBe("not_evaluated");
   });
 });
