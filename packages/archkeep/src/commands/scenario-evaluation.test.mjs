@@ -458,14 +458,17 @@ describe("evaluateScenario — edge cases", () => {
     expect(result.base.attributed).toBe(true);
   });
 
-  it("outputs current workspace when no base provided", () => {
+  it("outputs unattributed workspace when no git revision available", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
       changes: [change("dependency_added", "b", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
-    expect(result.base.revision).toBe("(current workspace)");
+    // When no base is provided and git rev-parse HEAD fails (test env),
+    // the fallback is "(unattributed workspace)" with attributed: false.
+    expect(result.base.revision).toBe("(unattributed workspace)");
     expect(result.base.attributed).toBe(false);
+    expect(result.base.provenance).toMatch(/unverifiable/);
   });
   it("marks complete:false when changes are refused", () => {
     const graph = makeGraph(["a"], []);
@@ -484,6 +487,55 @@ describe("evaluateScenario — edge cases", () => {
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.refused).toBeUndefined();
     expect(result.complete).toBe(true);
+  });
+  it("includes evidenceChain with correct shape", () => {
+    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
+    const input = {
+      base: "abc123def",
+      changes: [change("dependency_added", "b", "a")],
+    };
+    const result = evaluateScenario("a", makeCommandContext(graph), input);
+    expect(result.evidenceChain).toBeDefined();
+    expect(result.evidenceChain.baseRevision).toBe("abc123def");
+    expect(Array.isArray(result.evidenceChain.appliedChanges)).toBe(true);
+    expect(result.evidenceChain.currentState).toBe("current");
+    expect(result.evidenceChain.scenarioState).toBe("scenario");
+    expect(result.evidenceChain.delta).toBeDefined();
+    expect(typeof result.evidenceChain.delta.dependentsAdded).toBe("object");
+  });
+  it("includes governanceImpact with correct defaults", () => {
+    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
+    const input = {
+      changes: [change("dependency_added", "b", "a")],
+    };
+    const result = evaluateScenario("a", makeCommandContext(graph), input);
+    expect(result.governanceImpact).toBeDefined();
+    expect(result.governanceImpact.findingsReEvaluated).toBe(false);
+    expect(result.governanceImpact.debtReEvaluated).toBe(false);
+    expect(result.governanceImpact.governanceComplete).toBe(false);
+    expect(result.governanceImpact.scenarioFindingsCount).toBe(0);
+    expect(result.governanceImpact.scenarioDebtCount).toBe(0);
+  });
+  it("re-evaluates findings and debt when provided", () => {
+    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
+    const input = {
+      changes: [change("dependency_added", "b", "a")],
+    };
+    const findings = [{ source: "a", target: "b", message: "test finding" }];
+    const debt = [{ kind: "drift", source: "a", description: "test debt" }];
+    const result = evaluateScenario("a", makeCommandContext(graph), input, null, {
+      findings,
+      debt,
+    });
+    expect(result.governanceImpact.findingsReEvaluated).toBe(true);
+    expect(result.governanceImpact.debtReEvaluated).toBe(true);
+    expect(result.governanceImpact.governanceComplete).toBe(true);
+    expect(result.governanceImpact.scenarioFindingsCount).toBe(1);
+    expect(result.governanceImpact.scenarioDebtCount).toBe(1);
+    expect(result.scenario.findings).toBeDefined();
+    expect(result.scenario.findings).toHaveLength(1);
+    expect(result.scenario.debt).toBeDefined();
+    expect(result.scenario.debt).toHaveLength(1);
   });
 });
 
