@@ -81,6 +81,7 @@ export function scenarioCommand(projectName, scenarioJson, commandContext, confi
     virtual: scenario.virtual,
     notAuthoritative: scenario.notAuthoritative,
     complete: scenario.complete,
+    completeness: scenario.completeness,
     project: scenario.project,
     base: scenario.base,
     changes: scenario.changes,

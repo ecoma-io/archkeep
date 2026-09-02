@@ -277,10 +277,10 @@ describe("composeImpactStatement", () => {
     // No governance data, so statement is not fully complete
     expect(statement.complete).toBe(false);
     expect(statement.completeness).toBeDefined();
-    expect(statement.completeness.executionComplete).toBe(true);
-    expect(statement.completeness.graphComplete).toBe(true);
-    expect(statement.completeness.governanceComplete).toBe(false);
+    expect(statement.completeness.domains.structural.status).toBe("evaluated");
+    expect(statement.completeness.domains.governance.status).toBe("not_evaluated");
     expect(statement.completeness.overallComplete).toBe(false);
+    expect(statement.completeness.overallStatus).toBe("not_evaluated");
     expect(statement.notes).toEqual([
       "finding impact not evaluated — no findings data provided to impact statement. " +
         "Pass findings data for complete governance evaluation.",
@@ -353,11 +353,12 @@ describe("composeImpactStatement", () => {
     // No governance data (findings/debt), so statement is not fully complete
     expect(statement.complete).toBe(false);
     expect(statement.completeness).toBeDefined();
-    expect(statement.completeness.constraintComplete).toBe(true);
-    expect(statement.completeness.boundaryComplete).toBe(true);
-    expect(statement.completeness.decisionComplete).toBe(true);
-    expect(statement.completeness.governanceComplete).toBe(false);
+    expect(statement.completeness.domains.constraint.status).toBe("evaluated");
+    expect(statement.completeness.domains.boundary.status).toBe("evaluated");
+    expect(statement.completeness.domains.decision.status).toBe("evaluated");
+    expect(statement.completeness.domains.governance.status).toBe("not_evaluated");
     expect(statement.completeness.overallComplete).toBe(false);
+    expect(statement.completeness.overallStatus).toBe("not_evaluated");
   });
 });
 
