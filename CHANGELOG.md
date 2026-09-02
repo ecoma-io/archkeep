@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.19.0](https://github.com/ecoma-io/archkeep/compare/v0.18.1...v0.19.0) (2026-09-02)
+
+
+### Features
+
+* **archkeep:** add impact statement with decision impact and evolution alignment ([#551](https://github.com/ecoma-io/archkeep/issues/551)) ([94fa308](https://github.com/ecoma-io/archkeep/commit/94fa308f5990a2518491a5ca9f9fffcafceae93d))
+* **archkeep:** add scenario evaluation command ([#552](https://github.com/ecoma-io/archkeep/issues/552)) ([a4307d0](https://github.com/ecoma-io/archkeep/commit/a4307d01cb9252812cab1105d902bf7c17a6d055))
+* **archkeep:** discover --propose --write-intent &lt;file&gt; ([#553](https://github.com/ecoma-io/archkeep/issues/553)) ([d8bdcab](https://github.com/ecoma-io/archkeep/commit/d8bdcab4e64cdf36d9e27ed88dc919e94dafa4de))
+* **archkeep:** discover --propose --write-intent &lt;file&gt; writes candidate architecture-intent.json ([d8bdcab](https://github.com/ecoma-io/archkeep/commit/d8bdcab4e64cdf36d9e27ed88dc919e94dafa4de))
+* scenario evaluation, impact analysis, MCP integration, and cross-language hardening ([6052742](https://github.com/ecoma-io/archkeep/commit/6052742fbe9a5aed0476fbc5797600232257ba1f))
+
+
+### Bug Fixes
+
+* **archkeep:** harden architecture intelligence — causal binding, scenario MCP tool ([#555](https://github.com/ecoma-io/archkeep/issues/555)) ([7fcca6b](https://github.com/ecoma-io/archkeep/commit/7fcca6bd6241174b55fad5c37b9836e2e7fec21b))
+
+
+### Documentation
+
+* replace Status section with Real-world usage ([#549](https://github.com/ecoma-io/archkeep/issues/549)) ([288aae8](https://github.com/ecoma-io/archkeep/commit/288aae8eded46195612e3bc1b8e15143ff771708))
+
 ## [0.18.1](https://github.com/ecoma-io/archkeep/compare/v0.18.0...v0.18.1) (2026-08-31)
 
 

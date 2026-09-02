@@ -1,6 +1,6 @@
 {
   "name": "archkeep",
-  "version": "0.18.1",
+  "version": "0.19.0",
   "description": "Module-boundary diagnostics at edit time, and architecture agent skills, for Go, Rust, Python, Vue, Java, Kotlin and C#",
   "skills": "./skills/",
   "author": {
