@@ -87,6 +87,8 @@ export function scenarioCommand(projectName, scenarioJson, commandContext, confi
     refused: scenario.refused,
     current: scenario.current,
     scenario: scenario.scenario,
+    governanceImpact: scenario.governanceImpact,
+    evidenceChain: scenario.evidenceChain,
     delta: scenario.delta,
     notes: scenario.notes,
   };

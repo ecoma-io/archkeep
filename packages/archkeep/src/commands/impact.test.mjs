@@ -276,9 +276,21 @@ describe("composeImpactStatement", () => {
     });
     expect(statement.complete).toBe(true);
     expect(statement.notes).toEqual([
-      "finding and debt impact are not yet evaluated. " +
-        "The impact statement covers dependency structure and constraint violations only.",
+      "finding impact not evaluated — no findings data provided to impact statement. " +
+        "Pass findings data for complete governance evaluation.",
+      "debt impact not evaluated — no debt data provided to impact statement. " +
+        "Pass debt data for complete governance evaluation.",
     ]);
+    // Governance dimensions are always present (with null for not-evaluated)
+    expect(statement.findingsImpact).toBeDefined();
+    expect(statement.findingsImpact.evaluated).toBe(false);
+    expect(statement.debtImpact).toBeDefined();
+    expect(statement.debtImpact.evaluated).toBe(false);
+    expect(statement.boundaryImpact).toBeDefined();
+    expect(statement.boundaryImpact).toEqual({
+      boundaries: [],
+      evaluated: false,
+    });
     // No config, so no constraintImpact or decisionImpact
     expect(statement).not.toHaveProperty("constraintImpact");
     expect(statement).not.toHaveProperty("decisionImpact");
