@@ -11,6 +11,8 @@
 import { readAdrContext } from "./adr.mjs";
 import { hasAuthority, resolveDecisionRef, stripAdrPrefix } from "../governance/adr-registry.mjs";
 import { isComboDepConstraint } from "../rules/tags.mjs";
+import { computeDecisionProvenance } from "../governance/provenance-graph.mjs";
+import { resolveFileAttribution } from "./provenance.mjs";
 
 // ---------------------------------------------------------------------------
 // Decision resolution
@@ -114,8 +116,10 @@ export function buildDecisionImpact(root, constraintImpact, config) {
       unresolvedDecisionRefs: [...affectedRefs],
     };
   }
-
-  const { byId, knownFitness } = adrContext;
+  const { records, byId, knownFitness } = adrContext;
+  const decisionProvenance = computeDecisionProvenance(records, (file) =>
+    resolveFileAttribution(root, file),
+  );
   const unresolvedDecisionRefs = [];
   const decisions = [];
 
@@ -139,9 +143,9 @@ export function buildDecisionImpact(root, constraintImpact, config) {
       });
       continue;
     }
-
     // ADR record
     const record = resolved.record;
+    const prov = decisionProvenance.get(record.id) ?? { attested: false, attribution: null };
     decisions.push({
       id: record.id,
       kind: "adr",
@@ -149,6 +153,10 @@ export function buildDecisionImpact(root, constraintImpact, config) {
       hasAuthority: hasAuthority(record.status),
       supersedes: record.supersedes.length > 0 ? record.supersedes : undefined,
       supersededBy: (record.supersededBy ?? []).length > 0 ? record.supersededBy : undefined,
+      provenance: {
+        attested: prov.attested,
+        origin: prov.attribution,
+      },
       evidence,
     });
   }

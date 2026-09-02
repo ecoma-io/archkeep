@@ -47,6 +47,7 @@ export function formatProvenanceReport({
   decisionRefTotal,
   unresolvedDecisionRefs,
   decisionLifecycle = [],
+  provenanceGraph = null,
 }) {
   const attestedCount = rowsTotal - unattested.length;
   const text = [];
@@ -140,5 +141,31 @@ export function formatProvenanceReport({
       );
     }
   }
+
+  // PR4 — provenance graph summary and one chain example
+  if (provenanceGraph !== null && provenanceGraph !== undefined) {
+    const nodeCount = provenanceGraph.nodes.length;
+    const edgeCount = provenanceGraph.edges.length;
+    const claimCount = provenanceGraph.claims.length;
+    const chainCount = provenanceGraph.causalChains.length;
+    text.push(
+      `graph     ${nodeCount} nodes, ${edgeCount} edges, ${claimCount} claims, ` +
+        `${chainCount} causal chain${chainCount === 1 ? "" : "s"}`,
+    );
+
+    // Show the first causal chain as an example (deterministic — sorted order)
+    if (chainCount > 0) {
+      const chain = provenanceGraph.causalChains[0];
+      text.push(
+        `chain     ${chain.id} — ${chain.hops.length} hop${chain.hops.length === 1 ? "" : "s"}`,
+      );
+      text.push(`  ${chain.startNode}`);
+      for (const hop of chain.hops) {
+        const evidence = hop.evidence.map((e) => e.detail).join("; ");
+        text.push(`  → ${hop.toNode}  (${hop.edgeKind}: ${evidence})`);
+      }
+    }
+  }
+
   return text.join("\n");
 }

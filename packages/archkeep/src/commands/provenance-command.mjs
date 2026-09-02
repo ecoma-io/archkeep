@@ -82,6 +82,7 @@ import {
   hasAuthority,
   unresolvedDecisionRefRows,
 } from "../governance/adr-registry.mjs";
+import { buildProvenanceGraph } from "../governance/provenance-graph.mjs";
 
 /**
  * Whether a row declares a governance origin (`origin.by`/`origin.tool`).
@@ -339,6 +340,25 @@ export async function provenanceCommand(commandContext, io = {}) {
     });
   }
 
+  // PR4 — provenance graph: compose nodes, edges, claims, and causal chains
+  // from the already-resolved repo, rows, and decision lifecycle.
+  const graphRows = governanceRows.map(({ kind, row }) => ({
+    kind,
+    attested: hasOrigin(row),
+    origin: hasOrigin(row) ? row.origin : null,
+    decisionRef: row?.decisionRef ?? undefined,
+    label: rowLabel(kind, row),
+  }));
+  const provenanceGraph = buildProvenanceGraph({
+    repo,
+    rows: graphRows,
+    records: adrContext.records,
+    byId: adrContext.byId,
+    knownFitness: declaredFitnessNames(loadedConfig),
+    fileAttribution: (path) => attributor(root, path),
+    decisionLifecycle,
+  });
+
   const establishment = repo !== null;
   const repoResult = establishment ? repo : { commit: null, remote: null, dirty: null };
   const rowsTotal = rowList.length;
@@ -358,6 +378,7 @@ export async function provenanceCommand(commandContext, io = {}) {
     decisionRefTotal: decisionRefRows.length,
     unresolvedDecisionRefs,
     decisionLifecycle,
+    provenanceGraph,
   });
 
   const context = {
@@ -397,14 +418,19 @@ export async function provenanceCommand(commandContext, io = {}) {
       unattested: unattested.map(({ kind, label, note }) => ({ kind, label, note })),
       unresolvedDecisionRefs,
       decisionLifecycle,
+      provenanceGraph: {
+        nodes: provenanceGraph.nodes,
+        edges: provenanceGraph.edges,
+        claims: provenanceGraph.claims,
+        causalChains: provenanceGraph.causalChains,
+      },
+      claims: provenanceGraph.claims,
     },
   });
 
   return {
     status: "ok",
     repo: { ...repoResult, established: establishment },
-    // The four answer surfaces, also available readably (not only inside the
-    // envelope) so `cli.mjs` can drive the text report from the same facts.
     rows: rowList.map(({ kind, attested, origin }) => ({
       kind,
       attested,
@@ -413,6 +439,8 @@ export async function provenanceCommand(commandContext, io = {}) {
     unattested: unattested.map(({ kind, label, note }) => ({ kind, label, note })),
     unresolvedDecisionRefs,
     decisionLifecycle,
+    provenanceGraph,
+    claims: provenanceGraph.claims,
     report: {
       text: reportText,
       json: renderJson(envelope),
