@@ -318,7 +318,7 @@ function main() {
 
     const installedBin = join(consumer, "node_modules", "@ecoma-io", "archkeep-mcp", "mcp.mjs");
 
-    // 3. The installed bin answers initialize and lists the eight tools.
+    // 3. The installed bin answers initialize and lists the nine tools.
     const clean = fixtureWorkspace(workspace, { violating: false });
     const conversation = converse(installedBin, clean);
     check(
@@ -328,8 +328,8 @@ function main() {
       `serverInfo = ${JSON.stringify(conversation.serverInfo)}`,
     );
     check(
-      "the installed bin lists the eight tools",
-      conversation.toolNames.length === 8,
+      "the installed bin lists the nine tools",
+      conversation.toolNames.length === 9,
       conversation.toolNames.join(", "),
     );
 
