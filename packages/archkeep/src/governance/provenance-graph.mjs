@@ -84,7 +84,7 @@ import { resolveDecisionRef, stripRuleFitnessPrefix, stripAdrPrefix } from "./ad
  * @property {object|null} repo
  *   Git provenance info (`{commit, remote, dirty}`) or null when unavailable.
  * @property {{kind: string, attested: boolean, origin: object|null,
- *   decisionRef: string|undefined, label: string}[]} rows
+ *   decisionRef?: string, label: string, id?: string}[]} rows
  *   Governance rows to include as nodes.
  * @property {object[]} records
  *   ADR records for decision nodes and supersession edges.
@@ -92,12 +92,11 @@ import { resolveDecisionRef, stripRuleFitnessPrefix, stripAdrPrefix } from "./ad
  *   Decision record lookup map.
  * @property {Set<string>} knownFitness
  *   Fitness record names for resolution.
+ * @property {(path: string) => object|null} [fileAttribution]
+ *   Resolves git attribution for a decision record file. Passed through to
+ *   `computeDecisionProvenance`. Defaults to a function that always returns null.
  * @property {{id: string, attested: boolean, attribution: object|null}[]}
  *   decisionLifecycle
- *   Pre-computed decision lifecycle entries from provenance-command.
- */
-
-/**
  * @typedef {object} ProvenanceGraphNode
  * @property {string} id
  * @property {string} kind
@@ -173,6 +172,7 @@ export function buildProvenanceGraph({
   records = [],
   byId = new Map(),
   knownFitness = new Set(),
+  fileAttribution: _fileAttribution = () => null,
   decisionLifecycle = [],
 }) {
   const nodes = [];

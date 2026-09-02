@@ -225,6 +225,10 @@ export function unresolvedDecisionRefNote(decisionRef) {
  *     supersededBy: string[], bindings: string[],
  *     attribution: {createdBy: object|null, lastChangedBy: object|null},
  *     attested: boolean, note: string|null}[],
+ *   provenanceGraph: {nodes: object[], edges: object[], claims: object[],
+ *     causalChains: object[]},
+ *   claims: {id: string, kind: string, verdict: string,
+ *     evidence: {kind: string, detail: string}[]}[],
  *   report: {text: string, json: string}}>}
  * @throws {Error} on a malformed intent, boundary config, or ADR registry —
  *   exit 3, the loud refusal every command that reads them makes.
