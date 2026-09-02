@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.1](https://github.com/ecoma-io/archkeep/compare/v0.20.0...v0.20.1) (2026-09-02)
+
+
+### Bug Fixes
+
+* **archkeep-mcp:** update verify script tool count from 8 to 9 ([#559](https://github.com/ecoma-io/archkeep/issues/559)) ([6a61f57](https://github.com/ecoma-io/archkeep/commit/6a61f571779b4344faaf5db81f636a4cf6f0a8cc))
+
 ## [0.20.0](https://github.com/ecoma-io/archkeep/compare/v0.19.0...v0.20.0) (2026-09-02)
 
 
