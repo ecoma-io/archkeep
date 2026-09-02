@@ -83,6 +83,10 @@ export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "depende
  * @property {object} current The current impact for the target project.
  * @property {object} scenario The would-be impact after applying the changes.
  * @property {object} delta What would change.
+ * @property {string[]} delta.dependentsAdded Dependents added in the scenario (flat access).
+ * @property {string[]} delta.dependentsRemoved Dependents removed in the scenario (flat access).
+ * @property {boolean} delta.constraintsChanged Whether constraint impacts changed.
+ * @property {boolean} delta.decisionsChanged Whether decisions changed.
  * @property {object} delta.structuralDelta Structured delta for dependency changes.
  * @property {string[]} delta.structuralDelta.dependentsAdded Dependents added in the scenario.
  * @property {string[]} delta.structuralDelta.dependentsRemoved Dependents removed in the scenario.

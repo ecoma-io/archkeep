@@ -14,6 +14,7 @@ import {
   buildCompleteness,
   buildScenarioCompleteness,
   buildGovernanceCompleteness,
+  createDomain,
   EVALUATED,
   NOT_EVALUATED,
   PARTIAL,
@@ -27,7 +28,7 @@ import { evaluateScenario } from "./scenario-evaluation.mjs";
 
 /** Minimal domain object — buildCompleteness only reads `.status`. */
 function domain(status) {
-  return { status };
+  return createDomain(status);
 }
 
 /** Minimal graph with one project and no dependencies. */
@@ -107,7 +108,10 @@ describe("completeness conservation — buildScenarioCompleteness", () => {
     const result = buildScenarioCompleteness({
       changesComplete: true,
       baseAttributed: true,
-      governance: { domain: domain(EVALUATED) },
+      governance: buildGovernanceCompleteness({
+        findingsStatus: EVALUATED,
+        debtStatus: EVALUATED,
+      }),
     });
     expect(result.overallComplete).toBe(true);
   });
@@ -171,9 +175,11 @@ describe("refusal isolation — evaluateScenario", () => {
   const commandContext = { root: "/tmp/dummy-archkeep-scenario", graph };
 
   it("refused changes → complete: false AND scenarioDomains.changes.status === partial", () => {
+    /** @type {any} */
+    const badChange = { type: "unsupported_change" };
     const result = evaluateScenario(projectName, commandContext, {
       base: "test-revision",
-      changes: [{ type: "unsupported_change" }],
+      changes: [badChange],
     });
     expect(result.complete).toBe(false);
     expect(result.completeness.scenarioDomains.changes.status).toBe(PARTIAL);
