@@ -33,10 +33,8 @@
  */
 import { computeImpact } from "./impact.mjs";
 import { computeImpactConstraints } from "./edge-constraints.mjs";
-import { readAdrContext } from "./adr.mjs";
-import { hasAuthority, resolveDecisionRef, stripAdrPrefix } from "../governance/adr-registry.mjs";
-import { isComboDepConstraint } from "../rules/tags.mjs";
-import { execSync } from "node:child_process";
+import { buildDecisionImpact, buildEvolutionAlignment } from "./evaluation-primitives.mjs";
+import { resolveProvenance } from "./provenance.mjs";
 
 // ---------------------------------------------------------------------------
 // Scenario types
@@ -107,11 +105,8 @@ export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "depende
  * @returns {{nodes: object, dependencies: object}}
  */
 function cloneGraph(graph) {
-  const nodes = { ...graph.nodes };
-  const dependencies = {};
-  for (const [source, edges] of Object.entries(graph.dependencies)) {
-    dependencies[source] = edges.map((e) => ({ ...e }));
-  }
+  const nodes = structuredClone(graph.nodes);
+  const dependencies = structuredClone(graph.dependencies);
   return { nodes, dependencies };
 }
 
@@ -176,126 +171,14 @@ function applyChanges(graph, changes) {
       applied.push(`removed dependency: ${change.source} → ${change.target}`);
     }
   }
+  // Clean up empty dependency arrays
+  for (const [source, edges] of Object.entries(cloned.dependencies)) {
+    if (edges.length === 0) {
+      delete cloned.dependencies[source];
+    }
+  }
 
   return { graph: cloned, applied, refused };
-}
-
-// ---------------------------------------------------------------------------
-// Decision impact (reuses impact-statement's buildDecisionImpact)
-// ---------------------------------------------------------------------------
-
-/**
- * Builds decision impact for the scenario's would-be state.
- *
- * @param {string} root Workspace root path.
- * @param {object[]} constraintImpact Per-dependent constraint analysis.
- * @param {object} config The loaded boundary config.
- * @returns {{decisions: object[], unresolvedDecisionRefs: string[]}|null}
- */
-function buildScenarioDecisionImpact(root, constraintImpact, config) {
-  if (!constraintImpact || !config?.depConstraints) {
-    return { decisions: [], unresolvedDecisionRefs: [] };
-  }
-
-  // Collect unique decisionRefs ONLY from constraint rows that are actually
-  // AFFECTED by the scenario change — rows that govern edges from impacted
-  // dependents. A decisionRef in the config is not enough.
-  const seenRefs = new Set();
-  const affectedRefs = [];
-
-  // Build a set of all constraint rows that appear in constraintImpact,
-  // using identity matching (the rows are the actual config row objects).
-  const activeRows = new Set(constraintImpact.flatMap((entry) => entry.constraintRows));
-
-  for (const row of config.depConstraints) {
-    if (!row.decisionRef) continue;
-    if (activeRows.has(row) && !seenRefs.has(row.decisionRef)) {
-      seenRefs.add(row.decisionRef);
-      affectedRefs.push(row.decisionRef);
-    }
-  }
-
-  if (affectedRefs.length === 0) {
-    return { decisions: [], unresolvedDecisionRefs: [] };
-  }
-
-  let adrContext;
-  try {
-    adrContext = readAdrContext(root);
-  } catch {
-    return { decisions: [], unresolvedDecisionRefs: [...affectedRefs].sort() };
-  }
-
-  const { byId, knownFitness } = adrContext;
-  const unresolvedDecisionRefs = [];
-  const decisions = [];
-
-  for (const ref of affectedRefs) {
-    const resolution = resolveDecisionRef(byId, knownFitness, ref);
-    if (resolution === "unknown") {
-      unresolvedDecisionRefs.push(ref);
-      continue;
-    }
-    if (resolution === "fitness") {
-      decisions.push({ id: ref, kind: "fitness", resolution: "known" });
-      continue;
-    }
-    const record = byId.get(stripAdrPrefix(ref));
-    decisions.push({
-      id: record.id,
-      kind: "adr",
-      status: record.status,
-      hasAuthority: hasAuthority(record.status),
-    });
-  }
-
-  return {
-    decisions: decisions.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
-    unresolvedDecisionRefs: [...new Set(unresolvedDecisionRefs)].sort(),
-  };
-}
-
-/**
- * Builds evolution alignment for the scenario.
- *
- * @param {string} projectName The target project.
- *
- * @param {object[]} [constraintImpact]
- * @param {string[]} [resolvedDecisions]
- * @returns {{projects: string[], boundaries: string[], constraints: string[], decisions: string[]}}
- */
-function buildScenarioEvolutionAlignment(projectName, impact, constraintImpact, resolvedDecisions) {
-  const affectedProjects = [projectName, ...impact.dependents];
-  const affectedConstraints = [];
-  const affectedBoundaries = [];
-
-  if (constraintImpact) {
-    for (const entry of constraintImpact) {
-      // Collect edge identities for each affected boundary
-      for (const edge of entry.edges) {
-        const edgeId = `${entry.project}>${edge.target}:${edge.type}`;
-        if (!affectedBoundaries.includes(edgeId)) {
-          affectedBoundaries.push(edgeId);
-        }
-      }
-      // Collect constraint row labels using same format as buildEvolutionAlignment
-      for (const row of entry.constraintRows) {
-        const label = isComboDepConstraint(row)
-          ? `allSourceTags:${row.allSourceTags.join(",")}`
-          : `sourceTag:${row.sourceTag}`;
-        if (!affectedConstraints.includes(label)) {
-          affectedConstraints.push(label);
-        }
-      }
-    }
-  }
-
-  return {
-    projects: [...new Set(affectedProjects)].sort(),
-    boundaries: affectedBoundaries.sort(),
-    constraints: affectedConstraints.sort(),
-    decisions: resolvedDecisions ? [...new Set(resolvedDecisions)].sort() : [],
-  };
 }
 
 /**
@@ -327,43 +210,53 @@ function computeDelta(current, scenario) {
     decisionsChanged,
   };
 }
-/**
- * Resolves the base revision for a scenario evaluation.
- *
- * When the user provides a `base` string, it is used as-is and marked as
- * attributed. When no base is provided, we attempt to resolve from
- * `git rev-parse HEAD`. If that fails, we report the gap rather than
- * fabricating a revision.
- *
- * @param {string} root The workspace root.
- * @param {string|undefined} userBase The user-provided base (optional).
- * @returns {{revision: string, attributed: boolean, provenance: string}}
- */
+
 function resolveBaseRevision(root, userBase) {
   if (typeof userBase === "string" && userBase.length > 0) {
+    // Cross-validate user-provided base against git state
+    let provenance;
+    try {
+      provenance = resolveProvenance(root);
+    } catch {
+      provenance = null;
+    }
+
+    if (provenance && provenance.commit && provenance.commit.length > 0 && !provenance.dirty) {
+      if (userBase === provenance.commit) {
+        return {
+          revision: userBase,
+          attributed: true,
+          provenance: "user-provided (matches HEAD)",
+        };
+      }
+      return {
+        revision: userBase,
+        attributed: true,
+        provenance: "user-provided (cross-validated: differs from HEAD)",
+      };
+    }
+
     return {
       revision: userBase,
       attributed: true,
-      provenance: "user-provided",
+      provenance: "user-provided (could not cross-validate — HEAD unverifiable or dirty)",
     };
   }
 
-  // Attempt to resolve from git
+  // Auto-resolve from git via resolveProvenance
+  let provenance;
   try {
-    const revision = execSync("git rev-parse HEAD", {
-      cwd: root,
-      encoding: "utf8",
-      timeout: 5000,
-    }).trim();
-    if (revision && revision.length === 40) {
-      return {
-        revision,
-        attributed: true,
-        provenance: "auto-resolved: git rev-parse HEAD",
-      };
-    }
+    provenance = resolveProvenance(root);
   } catch {
-    // Fall through to unverifiable
+    provenance = null;
+  }
+
+  if (provenance && provenance.commit && provenance.commit.length > 0) {
+    return {
+      revision: provenance.commit,
+      attributed: true,
+      provenance: `auto-resolved: git commit ${provenance.commit}${provenance.dirty ? " (dirty)" : ""}`,
+    };
   }
 
   return {
@@ -432,12 +325,8 @@ export function evaluateScenario(
   }
 
   // Step 5: Build decision impact for both sides
-  const currentDecisionImpact = buildScenarioDecisionImpact(root, currentConstraintImpact, config);
-  const scenarioDecisionImpact = buildScenarioDecisionImpact(
-    root,
-    scenarioConstraintImpact,
-    config,
-  );
+  const currentDecisionImpact = buildDecisionImpact(root, currentConstraintImpact, config);
+  const scenarioDecisionImpact = buildDecisionImpact(root, scenarioConstraintImpact, config);
 
   // Step 6: Build evolution alignment for both sides
   const currentResolved = currentDecisionImpact
@@ -447,13 +336,13 @@ export function evaluateScenario(
     ? scenarioDecisionImpact.decisions.map((d) => d.id)
     : [];
 
-  const currentEvolution = buildScenarioEvolutionAlignment(
+  const currentEvolution = buildEvolutionAlignment(
     projectName,
     currentImpact,
     currentConstraintImpact,
     currentResolved,
   );
-  const scenarioEvolution = buildScenarioEvolutionAlignment(
+  const scenarioEvolution = buildEvolutionAlignment(
     projectName,
     scenarioImpact,
     scenarioConstraintImpact,
@@ -492,11 +381,24 @@ export function evaluateScenario(
   let scenarioFindings = null;
   let scenarioDebt = null;
   if (availableFindings) {
-    // Re-filter findings for the hypothetical graph's affected projects
+    // Build set of edges that were removed in this scenario
+    const removedEdges = new Set();
+    for (const change of scenarioInput.changes) {
+      if (change.type === "dependency_removed") {
+        removedEdges.add(`${change.source}|${change.target}`);
+      }
+    }
+
+    // Re-filter findings for the hypothetical graph's affected projects,
+    // excluding findings whose edge was removed
     const affectedSet = new Set(scenarioAffectedProjects);
     scenarioFindings = availableFindings.filter((f) => {
+      // Check if this finding's edge was removed
       const source = f.source ?? f.project ?? "";
       const target = f.target ?? "";
+      if (removedEdges.has(`${source}|${target}`)) {
+        return false; // edge no longer exists in hypothetical graph
+      }
       return affectedSet.has(source) || affectedSet.has(target);
     });
   }

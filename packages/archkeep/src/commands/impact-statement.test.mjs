@@ -71,9 +71,21 @@ describe("composeImpactStatement (no config)", () => {
     expect(stmt.evolutionAlignment.decisions).toEqual([]);
   });
 
-  it("reports complete: true", () => {
+  it("reports completeness dimensions when no config is provided", () => {
     const stmt = composeImpactStatement("a", commandContext());
-    expect(stmt.complete).toBe(true);
+    // With no config, execution and graph always complete
+    expect(stmt.completeness).toBeDefined();
+    expect(stmt.completeness.executionComplete).toBe(true);
+    expect(stmt.completeness.graphComplete).toBe(true);
+    // Without config, constraint/boundary/decision are incomplete
+    expect(stmt.completeness.constraintComplete).toBe(false);
+    expect(stmt.completeness.boundaryComplete).toBe(false);
+    expect(stmt.completeness.decisionComplete).toBe(false);
+    // Without governance data
+    expect(stmt.completeness.governanceComplete).toBe(false);
+    // Overall is false because governance is incomplete
+    expect(stmt.completeness.overallComplete).toBe(false);
+    expect(stmt.complete).toBe(false);
   });
 
   it("throws when the project is not in the graph", () => {
@@ -232,12 +244,16 @@ describe("composeImpactStatement (edge cases)", () => {
       ...overrides,
     };
   }
-
   it("handles empty depConstraints array", () => {
     const stmt = composeImpactStatement("a", commandContext(), { depConstraints: [] });
     expect(stmt.constraintImpact).toBeDefined();
     // No constraint rows matched (depConstraints is empty), so no constraints
     expect(stmt.evolutionAlignment.constraints).toEqual([]);
+    // Without governance data, complete is false
+    expect(stmt.complete).toBe(false);
+    expect(stmt.completeness).toBeDefined();
+    expect(stmt.completeness.constraintComplete).toBe(true);
+    expect(stmt.completeness.boundaryComplete).toBe(true);
   });
 
   it("handles config with no depConstraints", () => {
@@ -246,7 +262,11 @@ describe("composeImpactStatement (edge cases)", () => {
     expect(stmt.constraintImpact).toBeUndefined();
     // But impactStatement is still composed
     expect(stmt.project).toBe("a");
-    expect(stmt.complete).toBe(true);
+    // Without governance data, complete is false
+    expect(stmt.complete).toBe(false);
+    expect(stmt.completeness).toBeDefined();
+    expect(stmt.completeness.constraintComplete).toBe(false);
+    expect(stmt.completeness.boundaryComplete).toBe(true);
   });
 
   it("handles null config gracefully", () => {
@@ -254,5 +274,10 @@ describe("composeImpactStatement (edge cases)", () => {
     expect(stmt.constraintImpact).toBeUndefined();
     expect(stmt.decisionImpact).toBeUndefined();
     expect(stmt.project).toBe("a");
+    expect(stmt.complete).toBe(false);
+    expect(stmt.completeness).toBeDefined();
+    expect(stmt.completeness.constraintComplete).toBe(false);
+    expect(stmt.completeness.boundaryComplete).toBe(false);
+    expect(stmt.completeness.decisionComplete).toBe(false);
   });
 });

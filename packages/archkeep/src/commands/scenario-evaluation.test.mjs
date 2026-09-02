@@ -537,6 +537,25 @@ describe("evaluateScenario — edge cases", () => {
     expect(result.scenario.debt).toBeDefined();
     expect(result.scenario.debt).toHaveLength(1);
   });
+  it("filters out findings whose edge was removed in the scenario", () => {
+    const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
+    const input = {
+      changes: [change("dependency_removed", "b", "a")],
+    };
+    // Finding on the edge that gets removed
+    const findings = [
+      { source: "b", target: "a", message: "violation on b→a" },
+      { source: "a", target: "b", message: "unrelated finding" },
+    ];
+    const result = evaluateScenario("a", makeCommandContext(graph), input, null, {
+      findings,
+    });
+    expect(result.governanceImpact.scenarioFindingsCount).toBe(1);
+    // The b→a finding should be filtered out since that edge was removed
+    const filteredMessages = result.scenario.findings.map((f) => f.message);
+    expect(filteredMessages).not.toContain("violation on b→a");
+    expect(filteredMessages).toContain("unrelated finding");
+  });
 });
 
 // ---------------------------------------------------------------------------
