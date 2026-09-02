@@ -35,6 +35,7 @@ import { computeImpact } from "./impact.mjs";
 import { computeImpactConstraints } from "./edge-constraints.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { hasAuthority, resolveDecisionRef, stripAdrPrefix } from "../governance/adr-registry.mjs";
+import { isComboDepConstraint } from "../rules/tags.mjs";
 
 // ---------------------------------------------------------------------------
 // Scenario types
@@ -180,11 +181,19 @@ function buildScenarioDecisionImpact(root, constraintImpact, config) {
     return { decisions: [], unresolvedDecisionRefs: [] };
   }
 
+  // Collect unique decisionRefs ONLY from constraint rows that are actually
+  // AFFECTED by the scenario change — rows that govern edges from impacted
+  // dependents. A decisionRef in the config is not enough.
   const seenRefs = new Set();
   const affectedRefs = [];
 
+  // Build a set of all constraint rows that appear in constraintImpact,
+  // using identity matching (the rows are the actual config row objects).
+  const activeRows = new Set(constraintImpact.flatMap((entry) => entry.constraintRows));
+
   for (const row of config.depConstraints) {
-    if (row.decisionRef && !seenRefs.has(row.decisionRef)) {
+    if (!row.decisionRef) continue;
+    if (activeRows.has(row) && !seenRefs.has(row.decisionRef)) {
       seenRefs.add(row.decisionRef);
       affectedRefs.push(row.decisionRef);
     }
@@ -198,7 +207,7 @@ function buildScenarioDecisionImpact(root, constraintImpact, config) {
   try {
     adrContext = readAdrContext(root);
   } catch {
-    return { decisions: [], unresolvedDecisionRefs: [...affectedRefs] };
+    return { decisions: [], unresolvedDecisionRefs: [...affectedRefs].sort() };
   }
 
   const { byId, knownFitness } = adrContext;
@@ -225,7 +234,7 @@ function buildScenarioDecisionImpact(root, constraintImpact, config) {
   }
 
   return {
-    decisions,
+    decisions: decisions.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
     unresolvedDecisionRefs: [...new Set(unresolvedDecisionRefs)].sort(),
   };
 }
@@ -234,7 +243,7 @@ function buildScenarioDecisionImpact(root, constraintImpact, config) {
  * Builds evolution alignment for the scenario.
  *
  * @param {string} projectName The target project.
- * @param {{direct: string[], transitive: string[], dependents: string[]}} impact
+ *
  * @param {object[]} [constraintImpact]
  * @param {string[]} [resolvedDecisions]
  * @returns {{projects: string[], boundaries: string[], constraints: string[], decisions: string[]}}
@@ -242,13 +251,22 @@ function buildScenarioDecisionImpact(root, constraintImpact, config) {
 function buildScenarioEvolutionAlignment(projectName, impact, constraintImpact, resolvedDecisions) {
   const affectedProjects = [projectName, ...impact.dependents];
   const affectedConstraints = [];
+  const affectedBoundaries = [];
 
   if (constraintImpact) {
     for (const entry of constraintImpact) {
+      // Collect edge identities for each affected boundary
+      for (const edge of entry.edges) {
+        const edgeId = `${entry.project}>${edge.target}:${edge.type}`;
+        if (!affectedBoundaries.includes(edgeId)) {
+          affectedBoundaries.push(edgeId);
+        }
+      }
+      // Collect constraint row labels using same format as buildEvolutionAlignment
       for (const row of entry.constraintRows) {
-        const label = row.sourceTag
-          ? `sourceTag:${row.sourceTag}`
-          : `allSourceTags:${(row.allSourceTags ?? []).join(",")}`;
+        const label = isComboDepConstraint(row)
+          ? `allSourceTags:${row.allSourceTags.join(",")}`
+          : `sourceTag:${row.sourceTag}`;
         if (!affectedConstraints.includes(label)) {
           affectedConstraints.push(label);
         }
@@ -258,7 +276,7 @@ function buildScenarioEvolutionAlignment(projectName, impact, constraintImpact, 
 
   return {
     projects: [...new Set(affectedProjects)].sort(),
-    boundaries: [],
+    boundaries: affectedBoundaries.sort(),
     constraints: affectedConstraints.sort(),
     decisions: resolvedDecisions ? [...new Set(resolvedDecisions)].sort() : [],
   };
@@ -379,23 +397,39 @@ export function evaluateScenario(projectName, commandContext, scenarioInput, con
   };
   const delta = computeDelta(currentState, scenarioState);
 
-  // Step 7: Build notes
+  // Step 7: Build notes — coverage and completeness
   const notes = [
     "virtual evaluation — not authoritative",
     "this scenario has not been committed; run `check` for the real verdict",
   ];
+  if (config && config.depConstraints) {
+    notes.push(
+      "constraint impact covers only depConstraints (3 of 15 violation types). " +
+        "A project with no violations here may still violate other rules.",
+    );
+  }
+  notes.push(
+    "finding and debt impact are not yet evaluated. " +
+      "The scenario covers dependency structure and constraint violations only.",
+  );
   if (refused.length > 0) {
     notes.push(`changes that could not be applied: ${refused.join("; ")}`);
   }
+  // Step 8: Assemble — determine provenance and completeness semantics
+  // Determine provenance: base is attributable only when a real revision was provided
+  const baseRevision = scenarioInput.base ?? "(current workspace)";
+  const isAttributed = typeof scenarioInput.base === "string" && scenarioInput.base.length > 0;
 
-  // Step 8: Assemble
+  // Complete means all changes were applied AND all required evaluations completed
+  const isComplete = refused.length === 0;
+
   return {
     virtual: true,
     notAuthoritative: true,
     project: projectName,
     base: {
-      revision: scenarioInput.base ?? "(current workspace)",
-      attributed: true,
+      revision: baseRevision,
+      attributed: isAttributed,
     },
     changes: applied,
     refused: refused.length > 0 ? refused : undefined,
@@ -422,7 +456,7 @@ export function evaluateScenario(projectName, commandContext, scenarioInput, con
       evolutionAlignment: scenarioEvolution,
     },
     delta,
-    complete: true,
+    complete: isComplete,
     notes,
   };
 }

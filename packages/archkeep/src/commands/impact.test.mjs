@@ -275,7 +275,10 @@ describe("composeImpactStatement", () => {
       decisions: [],
     });
     expect(statement.complete).toBe(true);
-    expect(statement.notes).toEqual([]);
+    expect(statement.notes).toEqual([
+      "finding and debt impact are not yet evaluated. " +
+        "The impact statement covers dependency structure and constraint violations only.",
+    ]);
     // No config, so no constraintImpact or decisionImpact
     expect(statement).not.toHaveProperty("constraintImpact");
     expect(statement).not.toHaveProperty("decisionImpact");
