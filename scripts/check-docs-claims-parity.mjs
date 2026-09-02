@@ -259,7 +259,7 @@ async function main() {
     // Import MCP tool count
     // The MCP package doesn't export a tool count, so we hard-code the known value
     // This could be improved by exporting a TOOL_NAMES constant
-    mcpToolCount = 8; // archkeep_context, check, impact, drift, explain, graph, history, propose
+    mcpToolCount = 9; // archkeep_context, check, impact, drift, explain, graph, history, propose, scenario
 
     // Import EXPECTED_SKILLS from check-skills
     const checkSkillsPath = join(root, "scripts/check-skills.mjs");
