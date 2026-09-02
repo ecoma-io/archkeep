@@ -31,13 +31,9 @@
  *     created: string|null, updated: string|null, supersedes: string[],
  *     supersededBy: string[], bindings: string[],
  *     attribution: {createdBy: object|null, lastChangedBy: object|null}|null,
- *     attested: boolean, note: string|null}[]}} input
- *   `decisionRefTotal` is how many governance rows cite a `decisionRef` at
- *   all — the resolution section renders only when it is non-zero, the same
- *   "no fact, no claim" bargain every optional axis in this tool states.
- *   `decisionLifecycle` (optional, default `[]`) is the decision-lifecycle
- *   section — it renders only when non-empty.
- * @returns {string}
+ *     attested: boolean, note: string|null}[],
+ *   provenanceGraph?: {nodes: object[], edges: object[], claims: object[],
+ *     causalChains: object[]}|null}} input
  */
 export function formatProvenanceReport({
   establishment,
