@@ -305,17 +305,24 @@ function evaluateFindingsImpact(affectedProjects, availableFindings = null) {
 /**
  * Evaluates debt impact for the affected projects.
  *
+ *
+ * Debt entries have `source` as either a project name (for drift entries) or
+ * a file path (for waiver entries). When a `resolveProject` function is
+ * provided, file-path sources are resolved to project names for matching.
  * When no debt data is provided, reports the gap explicitly rather than
  * claiming no debt exists.
  *
  * @param {string[]} affectedProjects The projects affected by the change.
  * @param {object[]|null} [availableDebt] Optional pre-computed debt entries
- *   from the debt ledger.
+ *   from the debt ledger (`computeDebtLedger().entries`).
+ * @param {function(string): string|null} [resolveProject] Optional function
+ *   to resolve a file path to its owning project name. Used for waiver entries
+ *   whose `source` is a file path, not a project name.
  * @returns {{evaluated: boolean, entries: object[], note: string|null}}
- *   `evaluated: true` when debt data was available and filtered.
+ *   `evaluated: true` when debt data was available and filtering was attempted.
  *   `evaluated: false` when debt was not provided.
  */
-function evaluateDebtImpact(affectedProjects, availableDebt = null) {
+function evaluateDebtImpact(affectedProjects, availableDebt = null, resolveProject = null) {
   if (!availableDebt) {
     return {
       evaluated: false,
@@ -324,11 +331,27 @@ function evaluateDebtImpact(affectedProjects, availableDebt = null) {
     };
   }
 
-  // Filter debt entries by affected projects (debt entries carry a `project` field)
+  // Filter debt entries by affected projects.
+  // Debt entries use `source` as either a project name (drift, unresolved) or
+  // a file path (waiver, expired-waiver). For path-based sources, use the
+  // resolveProject function when available.
   const affectedSet = new Set(affectedProjects);
   const entries = availableDebt.filter((d) => {
-    const project = d.project ?? d.source ?? "";
-    return affectedSet.has(project);
+    // Drift and unresolved entries have source = project name directly
+    if (d.kind === "drift" || d.kind === "unresolved") {
+      return affectedSet.has(d.source ?? "");
+    }
+    // Waiver entries have source = file path; resolve via owning project
+    if (d.kind === "waiver" || d.kind === "expired-waiver") {
+      if (typeof resolveProject === "function") {
+        const project = resolveProject(d.source ?? "");
+        return project !== null && affectedSet.has(project);
+      }
+      // Without resolveProject, we cannot match path-based sources
+      return false;
+    }
+    // Aspirational-gap entries have source = note text — no project match
+    return false;
   });
 
   return {
