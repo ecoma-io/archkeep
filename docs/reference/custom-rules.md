@@ -229,6 +229,19 @@ fixed id, so no existing `ruleIndex` moves) with unjudged rules surfacing as
 notifications rather than silence; the JSON envelope gains the additive
 `result.customRules` section [json-output.md](json-output.md) documents.
 
+A custom rule's findings are the one finding list the engine reports in
+neither sorted nor canonical order: the engine's own violations pass through
+`sortViolations` at the report boundary, but a rule's findings reach every
+face in the order the rule emitted them. This is deliberate, and it is safe
+because a rule holds no ambient capability — no imports, no clock, no
+randomness — so its output, order included, is a function of the evidence
+bytes alone, and re-sorting would destroy an order the rule chose rather than
+normalize an accident. The 2-run repeatability case in
+`packages/archkeep/src/conformance/rule-sdks.integration.test.mjs` holds that
+order: the same evidence evaluated twice must answer byte-identically, second
+run included. A consumer that needs its own order sorts the `findings` array
+itself.
+
 ## Writing a rule
 
 Three SDKs ship from this repository, each in its own package with the README
