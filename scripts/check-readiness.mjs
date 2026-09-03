@@ -86,14 +86,90 @@ export const RELEASES_IN_A_ROW = 2;
  * The proxy therefore OVER-counts, and that direction is deliberate: it can
  * only report the stretch as shorter than it really is, never longer. A
  * readiness claim that errs must err toward "not yet".
+ *
+ * It can also under-count, in one way a marker scan cannot see: a commit that
+ * changes what an unchanged workspace is told without carrying a marker. #573
+ * reshaped the JSON envelope behind a subject with no `!` and no footer. So
+ * the stretch reads a second, independent signal: `CONTRACT_SURFACE` below.
+ * A commit touching one of those paths unmarked breaks the stretch too, and
+ * the row names it — a commit that changes the output contract and says so
+ * is the marker system working, not a hidden one.
  */
 const BREAKING_SUBJECT = /^[a-z]+(\([^)]*\))?!:/u;
 const BREAKING_FOOTER = /^BREAKING[ -]CHANGE:/mu;
 
 /**
+ * The observable-contract surface: paths whose change is a change to what an
+ * unchanged workspace is told, whatever the commit message claims.
+ *
+ * The list over-approximates on purpose. A comment fix inside `src/report/`
+ * flags a commit that changed no verdict, and the cost of that is a human
+ * glancing at a named subject; the cost of a path missing from this list is
+ * the silent direction this scan exists to close. When a change adds a face
+ * to what the tool tells a workspace, this is the list that has to hear
+ * about it.
+ */
+export const CONTRACT_SURFACE = Object.freeze([
+  "packages/archkeep/src/report/",
+  "packages/archkeep/src/verdict.mjs",
+  "packages/archkeep/src/exit-matrix.integration.test.mjs",
+  "packages/archkeep/src/intent/intent-manifest.json",
+  "docs/reference/exit-codes.md",
+  "docs/reference/json-output.md",
+]);
+
+/**
+ * Whether a commit carries a breaking marker, in either Conventional Commits
+ * spelling.
+ *
+ * @param {{subject: string, body: string}} commit
+ * @returns {boolean}
+ */
+function isBreakingCommit(commit) {
+  return BREAKING_SUBJECT.test(commit.subject) || BREAKING_FOOTER.test(commit.body);
+}
+
+/**
+ * Whether a changed file sits on the contract surface. A directory entry
+ * (trailing `/`) matches everything under it; a file entry matches only
+ * itself — so `src/report/` covers the envelope and the text faces, and
+ * `exit-codes.md` does not swallow a sibling appendix.
+ *
+ * @param {string} file
+ * @param {readonly string[]} surface
+ * @returns {boolean}
+ */
+function touchesContractSurface(file, surface) {
+  return surface.some(
+    (path) => file === path || file.startsWith(path.endsWith("/") ? path : `${path}/`),
+  );
+}
+
+/**
+ * The commits the marker scan cannot see: unmarked ones whose changed files
+ * sit on the contract surface. These are the #573 shape — a reshaped envelope
+ * behind a subject that carries no marker — and they break the quiet stretch
+ * even though no marker will ever flag them.
+ *
+ * @param {{subject: string, body: string, files?: string[]}[]} commits Newest
+ *   first. Commits read without their file lists (`files` absent) can never
+ *   match, which is the safe direction for a caller that supplies fewer facts.
+ * @param {readonly string[]} surface
+ * @returns {{subject: string, body: string, files?: string[]}[]} The flagged
+ *   commits, in the order given.
+ */
+export function findUnmarkedContractCommits(commits, surface = CONTRACT_SURFACE) {
+  return commits.filter(
+    (commit) =>
+      !isBreakingCommit(commit) &&
+      (commit.files ?? []).some((file) => touchesContractSurface(file, surface)),
+  );
+}
+
+/**
  * @typedef {object} ReadinessFacts
- * @property {{subject: string, body: string}[]} commits Newest first, from the
- *   tip toward the root.
+ * @property {{subject: string, body: string, files?: string[]}[]} commits Newest
+ *   first, from the tip toward the root, each with the files it changed.
  * @property {string[]} taggedVersions Every released version this repository
  *   tagged, newest last.
  * @property {string[] | null} publishedVersions Every version the registry
@@ -191,7 +267,7 @@ function adoptionRow(adopters) {
  * Condition 3, the one fact that is entirely local: how many commits have
  * landed since the last one that could have changed a verdict.
  *
- * @param {{subject: string, body: string}[]} commits Newest first.
+ * @param {{subject: string, body: string, files?: string[]}[]} commits Newest first.
  * @returns {ReadinessRow}
  */
 function quietStretchRow(commits) {
@@ -202,19 +278,30 @@ function quietStretchRow(commits) {
       evidence: "no commits were read — git log answered nothing",
     };
   }
-  const index = commits.findIndex(
-    (commit) => BREAKING_SUBJECT.test(commit.subject) || BREAKING_FOOTER.test(commit.body),
-  );
-  // `-1` means no breaking commit in the window at all, which is a stretch at
-  // least as long as the window — reported as the window rather than as
-  // infinity, because that is what was actually read.
-  const stretch = index === -1 ? commits.length : index;
+  const breaking = commits.findIndex(isBreakingCommit);
+  const unmarked = findUnmarkedContractCommits(commits);
+  // Both signals break the stretch at their own position, and the stretch is
+  // what remains after whichever lands first from the tip. `-1` means a scan
+  // saw nothing; the `commits.length` form means a stretch at least as long
+  // as the window — reported as the window rather than as infinity, because
+  // that is what was actually read.
+  const breakingAt = breaking === -1 ? commits.length : breaking;
+  const unmarkedAt = unmarked.length === 0 ? commits.length : commits.indexOf(unmarked[0]);
+  const stretch = Math.min(breakingAt, unmarkedAt);
+  const stretchCommit = stretch === commits.length ? null : commits[stretch];
   return {
     condition: CONDITIONS[2],
     state: stretch >= QUIET_STRETCH_COMMITS ? "met" : "not met",
     evidence:
-      `${stretch} of ${QUIET_STRETCH_COMMITS} commits since the last breaking change` +
-      (index === -1 ? ` (none in the ${commits.length} read)` : ` (${commits[index].subject})`),
+      `${stretch} of ${QUIET_STRETCH_COMMITS} commits since the last commit that could have ` +
+      `changed what an unchanged workspace is told` +
+      (stretchCommit === null
+        ? ` (none in the ${commits.length} read)`
+        : ` (${stretchCommit.subject})`) +
+      (unmarked.length === 0
+        ? ""
+        : `; ${unmarked.length} unmarked commit(s) touch the output-contract surface: ` +
+          unmarked.map((commit) => `"${commit.subject}"`).join("; ")),
   };
 }
 
@@ -266,22 +353,33 @@ function releaseRow(tagged, published) {
  * (`../AGENTS.md`): a test that stubbed the answer would pin the stub.
  *
  * @param {number} limit How many commits to read, newest first.
- * @returns {{subject: string, body: string}[]}
+ * @returns {{subject: string, body: string, files?: string[]}[]}
  */
 function readCommits(limit) {
   // A record separator no commit message can contain, so a body with blank
-  // lines in it cannot be read as two commits.
-  const result = spawnSync("git", ["log", `-${limit}`, "--no-merges", "--format=%s%x1f%b%x1e"], {
-    encoding: "utf8",
-  });
+  // lines in it cannot be read as two commits. `--name-only` puts each
+  // commit's changed files after the format record, so the files that decide
+  // the contract-surface scan ride along in the same read.
+  const result = spawnSync(
+    "git",
+    ["log", `-${limit}`, "--no-merges", "--format=%x1e%s%x1f%b%x1f", "--name-only"],
+    { encoding: "utf8" },
+  );
   if (result.status !== 0) return [];
   return result.stdout
     .split("\u001e")
     .map((entry) => entry.trim())
     .filter((entry) => entry !== "")
     .map((entry) => {
-      const [subject, body = ""] = entry.split("\u001f");
-      return { subject: subject.trim(), body };
+      const [subject, body = "", files = ""] = entry.split("\u001f");
+      return {
+        subject: subject.trim(),
+        body,
+        files: files
+          .split("\n")
+          .map((line) => line.trim())
+          .filter((line) => line !== ""),
+      };
     });
 }
 

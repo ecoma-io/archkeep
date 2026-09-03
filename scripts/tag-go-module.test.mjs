@@ -11,7 +11,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { goModulePath, goModuleTag, goModuleTagPrefix } from "./tag-go-module.mjs";
+import {
+  goModulePath,
+  goModuleTag,
+  goModuleTagPrefix,
+  readCreatedRef,
+  readBackDelay,
+} from "./tag-go-module.mjs";
 
 describe("goModulePath", () => {
   it("reads the module directive past the header comments", () => {
@@ -84,5 +90,77 @@ describe("goModuleTag", () => {
 
   it("leaves a root module's tag bare", () => {
     assert.equal(goModuleTag("", "0.11.0"), "v0.11.0");
+  });
+});
+
+describe("readCreatedRef", () => {
+  const ref = { object: { sha: "5fa9735" } };
+
+  it("returns the ref the first time it reads back", async () => {
+    const sleeps = [];
+    const read = await readCreatedRef(() => ref, {
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+    });
+    assert.equal(read, ref);
+    assert.deepEqual(sleeps, []);
+  });
+
+  it("retries across a propagation window instead of obeying the first 404", async () => {
+    // The 0.21.0 shape: the POST created the tag; the immediate read-back
+    // lost the race and the lane went red on a ref `git ls-remote` showed
+    // present at the released SHA.
+    let attempts = 0;
+    const sleeps = [];
+    const read = await readCreatedRef(
+      () => {
+        attempts += 1;
+        if (attempts < 3) throw new Error("gh: Not Found (HTTP 404)");
+        return ref;
+      },
+      {
+        sleep: async (ms) => {
+          sleeps.push(ms);
+        },
+      },
+    );
+    assert.equal(attempts, 3);
+    assert.equal(read, ref);
+    assert.deepEqual(sleeps, [1000, 2000]);
+  });
+
+  it("returns null after the final attempt, never a verdict it cannot back", async () => {
+    let attempts = 0;
+    const read = await readCreatedRef(
+      () => {
+        attempts += 1;
+        throw new Error("gh: Not Found (HTTP 404)");
+      },
+      { attempts: 3, sleep: async () => {} },
+    );
+    assert.equal(attempts, 3);
+    assert.equal(read, null);
+  });
+
+  it("treats a read that answers nothing as not-yet-readable, not as success", async () => {
+    // A 2xx shape with no ref in it is the "created nothing" failure the
+    // read-back exists to catch; it must burn attempts, not satisfy them.
+    let attempts = 0;
+    const read = await readCreatedRef(
+      () => {
+        attempts += 1;
+        return attempts < 2 ? null : ref;
+      },
+      { sleep: async () => {} },
+    );
+    assert.equal(attempts, 2);
+    assert.equal(read, ref);
+  });
+});
+
+describe("readBackDelay", () => {
+  it("doubles per attempt from one second", () => {
+    assert.deepEqual([0, 1, 2, 3].map(readBackDelay), [1000, 2000, 4000, 8000]);
   });
 });

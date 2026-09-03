@@ -6,6 +6,7 @@ import {
   QUIET_STRETCH_COMMITS,
   RELEASES_IN_A_ROW,
   evaluate,
+  findUnmarkedContractCommits,
   parseArgs,
   parseDifferential,
 } from "./check-readiness.mjs";
@@ -121,6 +122,75 @@ test("a long enough stretch of ordinary commits is met", () => {
     (entry) => entry.condition === CONDITIONS[2],
   );
   assert.equal(row.state, "met");
+});
+test("an unmarked commit touching the output-contract surface breaks the stretch", () => {
+  // The #573 shape: an envelope-reshaping commit whose subject carries no
+  // marker. The marker proxy alone would call this window quiet.
+  const commits = [
+    ...quiet(3),
+    {
+      subject: "feat(archkeep): close Evidence-Complete gaps",
+      body: "",
+      files: ["packages/archkeep/src/report/json.mjs", "README.md"],
+    },
+    ...quiet(60),
+  ];
+  const row = evaluate({ ...nothing, commits }).find((entry) => entry.condition === CONDITIONS[2]);
+  assert.equal(row.state, "not met");
+  assert.match(row.evidence, /^3 of /u);
+  assert.match(row.evidence, /touch the output-contract surface/u);
+  assert.match(row.evidence, /close Evidence-Complete gaps/u);
+});
+
+test("a marked contract commit breaks the stretch once, through the marker", () => {
+  // The marker doing its job is not a hidden surface touch: the flagged list
+  // is for commits the marker scan cannot see, so a `!:` subject must break
+  // the stretch through the breaking scan alone.
+  const commits = [
+    ...quiet(2),
+    {
+      subject: "feat(archkeep)!: move a verdict",
+      body: "",
+      files: ["packages/archkeep/src/verdict.mjs"],
+    },
+    ...quiet(60),
+  ];
+  const row = evaluate({ ...nothing, commits }).find((entry) => entry.condition === CONDITIONS[2]);
+  assert.equal(row.state, "not met");
+  assert.match(row.evidence, /^2 of /u);
+  assert.doesNotMatch(row.evidence, /output-contract surface/u);
+});
+
+test("an unmarked commit off the contract surface keeps the stretch", () => {
+  // Touching a file that is not on the surface must not cost the window its
+  // quietness — otherwise the scan reads every commit as suspect and the
+  // report stops being information.
+  const commits = [
+    {
+      subject: "fix(scripts): tidy a gate",
+      body: "",
+      files: ["scripts/check-readiness.mjs"],
+    },
+    ...quiet(QUIET_STRETCH_COMMITS - 1),
+  ];
+  const row = evaluate({ ...nothing, commits }).find((entry) => entry.condition === CONDITIONS[2]);
+  assert.equal(row.state, "met");
+});
+
+test("a directory surface entry covers everything under it, a file entry only itself", () => {
+  // `src/report/` must reach the text faces under it; `exit-codes.md` must
+  // not swallow a sibling appendix. The distinction decides how wide the
+  // scan is, so it is pinned rather than remembered.
+  const flagged = findUnmarkedContractCommits([
+    { subject: "a", body: "", files: ["packages/archkeep/src/report/text.mjs"] },
+    { subject: "b", body: "", files: ["packages/archkeep/src/reporting/other.mjs"] },
+    { subject: "c", body: "", files: ["docs/reference/exit-codes.md"] },
+    { subject: "d", body: "", files: ["docs/reference/exit-codes-appendix.md"] },
+  ]);
+  assert.deepEqual(
+    flagged.map((commit) => commit.subject),
+    ["a", "c"],
+  );
 });
 
 test("no commits read at all is unmeasured, not a quiet stretch", () => {
