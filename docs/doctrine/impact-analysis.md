@@ -90,20 +90,21 @@ never from Archkeep's structural output alone.
 
 ## Dependencies
 
-Impact Analysis is a gate on the maturity ladder. It depends on:
+Impact Analysis is the first capability of the roadmap's Change Intelligence
+phase. It depends on:
 
-- The deterministic authority core (gate 1): a trustworthy graph and verdict
-  before anyone trusts an impact statement built on it.
-- First-class architecture state (gate 2): `graph`, `diff`, `history`,
-  `trajectory`, `evolution`, `provenance`, `drift` as one consistent state
-  model — an impact statement stitches these together, so their consistency is
-  a precondition, not a convenience.
-- Broadened change context (gate 4): `context --plan`, `impact`, `delta` and
-  `explain` — the per-change questions this capability elevates into a full
-  statement.
-- **Deepened reconciliation (gate 3) is deliberately adjacent, not a
-  dependency.** Reconciliation classifies the gap between intent and reality;
-  impact enumerates what a change touches. They inform each other but neither
+- The Authority phase: a trustworthy graph and verdict before anyone trusts an
+  impact statement built on it.
+- The Evidence phase: `graph`, `diff`, `history`, `trajectory`, `evolution`,
+  `provenance`, `drift` as one consistent state model — an impact statement
+  stitches these together, so their consistency is a precondition, not a
+  convenience.
+- The Change Intelligence phase's shipped substrate: `context --plan`,
+  `impact`, `delta` and `explain` — the per-change questions this capability
+  elevates into a full statement.
+- **The Governance phase is deliberately adjacent, not a dependency.**
+  Reconciliation classifies the gap between intent and reality; impact
+  enumerates what a change touches. They inform each other but neither
   blocks the other.
 
 ## Acceptance criteria

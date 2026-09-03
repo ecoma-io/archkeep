@@ -12,8 +12,8 @@ live in [doctrine/](doctrine/):
 the way — [architecture-authority.md](doctrine/architecture-authority.md) — what Archkeep
 is, what it is not, the intent/reality/state vocabulary it locks, and the
 line its neighbours may not cross — and [roadmap.md](doctrine/roadmap.md) —
-the maturity ladder there: what ships today, the foundation gates before
-stable 1.0, and the later maturity beyond them.
+the maturity model there: five phases of trust, the conditions stable 1.0
+waits on, and the later maturity beyond them.
 
 ---
 
@@ -209,7 +209,7 @@ decided rather than summarized into them.
 | [architecture-authority.md](doctrine/architecture-authority.md)       | What Archkeep is, what it is not, the intent/reality/state vocabulary, and the line providers/skills/agents/platform clients may not cross |
 | [principles.md](doctrine/principles.md)                               | The seven binding principles                                                                                                               |
 | [architecture-governance.md](doctrine/architecture-governance.md)     | How Archkeep practices what it enforces                                                                                                    |
-| [roadmap.md](doctrine/roadmap.md)                                     | The maturity ladder: what ships today, the foundation gates before stable 1.0, and the later maturity beyond them                          |
+| [roadmap.md](doctrine/roadmap.md)                                     | The maturity model: five phases of trust, the conditions stable 1.0 waits on, and the later maturity beyond them                           |
 
 ## Development
 
@@ -239,7 +239,7 @@ allowed to say it". That table:
 | [`docs/doctrine/north-star.md`](doctrine/north-star.md)                               | The direction, what "finished" means per language, and the refusals                                                                                                                                                                                         |
 | [`docs/doctrine/architecture-authority.md`](doctrine/architecture-authority.md)       | What Archkeep is, what it is not, the intent/reality/state vocabulary, and the boundary its neighbours may not cross                                                                                                                                        |
 | [`docs/doctrine/principles.md`](doctrine/principles.md)                               | The seven binding principles                                                                                                                                                                                                                                |
-| [`docs/doctrine/roadmap.md`](doctrine/roadmap.md)                                     | The maturity ladder: what ships today, the foundation gates before stable 1.0, and the later maturity beyond them, in that order                                                                                                                            |
+| [`docs/doctrine/roadmap.md`](doctrine/roadmap.md)                                     | The maturity model: five phases of trust, the conditions stable 1.0 waits on, and the later maturity beyond them, in that order                                                                                                                             |
 | [`docs/doctrine/impact-analysis.md`](doctrine/impact-analysis.md)                     | The first intelligence capability: the impact statement, the evidence contract, and why impact is never risk                                                                                                                                                |
 | [`docs/doctrine/scenario-evaluation.md`](doctrine/scenario-evaluation.md)             | The second intelligence capability: the virtual, read-only evaluation of a hypothetical change, and why a Scenario is never a Decision                                                                                                                      |
 | [`docs/doctrine/evidence-grounded-advisor.md`](doctrine/evidence-grounded-advisor.md) | The third intelligence capability: the evidence context, the FACT/INFERENCE split, and why the AI has no authority                                                                                                                                          |

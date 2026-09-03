@@ -113,8 +113,9 @@ The advisor composes the deterministic outputs and reasons over them:
 
 ## Dependencies
 
-The advisor depends on both prior capabilities and on the foundation gates
-(1–4). Its testability rests on **its deterministic components producing the
+The advisor depends on both prior capabilities and on the foundation phases
+(Authority, Evidence, Governance, and the Change Intelligence phase's shipped
+substrate). Its testability rests on **its deterministic components producing the
 same output from the same inputs**, and on **every model contribution being
 labelled, its inputs recorded, and removably degrading the answer** rather than
 invalidating it — the standard [architecture-authority.md](architecture-authority.md)

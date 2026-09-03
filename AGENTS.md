@@ -531,9 +531,10 @@ for each step is named beside it.
 **An agent must never expand "Architectural Intelligence", "agentic
 governance" or "later maturity" into an AI architect, a runtime simulator,
 an autonomous migration planner, a cost estimator, a risk predictor, or a
-second authority.** The roadmap names the three later gates — impact
-hardening (descriptive), scenario evaluation (deterministic what-if),
-evidence-grounded advisor (read-only explanation) — and
+second authority.** The roadmap's Change Intelligence phase names the three
+capabilities — impact hardening (descriptive), scenario evaluation
+(deterministic what-if), evidence-grounded advisor (read-only explanation) —
+and
 [architecture-authority.md](docs/doctrine/architecture-authority.md) names the
 boundary every capability stays inside. A proposal that crosses that boundary
 is rejected at review regardless of code quality. If you are uncertain whether

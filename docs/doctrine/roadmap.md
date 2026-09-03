@@ -1,15 +1,16 @@
 # Roadmap
 
-Where Archkeep is going, in stages. This document owns the staged direction —
-the maturity ladder that orders the capabilities, and in what order the project
-earns them. It deliberately owns nothing finer than that: individual features,
-their design and their sequencing live in GitHub issues and milestones, because
-a roadmap that lists fifty features is a backlog wearing a roadmap's name, and
-it is stale the day the first one ships. [north-star.md](north-star.md)
-owns what "finished" means for the capabilities named here and the refusals
-that hold on the way; [architecture-authority.md](architecture-authority.md)
-owns the system boundary every capability stays inside. When a claim in this
-file needs a finish line, that file is the one that binds.
+Where Archkeep is going, in stages of trust. This document owns the staged
+direction — the maturity model that orders the capabilities, and in what order
+the project earns them. It deliberately owns nothing finer than that:
+individual features, their design and their sequencing live in GitHub issues
+and milestones, because a roadmap that lists fifty features is a backlog
+wearing a roadmap's name, and it is stale the day the first one ships.
+[north-star.md](north-star.md) owns what "finished" means for the capabilities
+named here and the refusals that hold on the way;
+[architecture-authority.md](architecture-authority.md) owns the system
+boundary every capability stays inside. When a claim in this file needs a
+finish line, that file is the one that binds.
 
 ## The thesis
 
@@ -26,263 +27,555 @@ produce most of the diffs. Archkeep's answer is to make the architecture itself
 machine-readable and its enforcement deterministic, so that "the boundary
 holds" is a verdict a pipeline computes rather than a belief a reviewer holds.
 
-## Current / implemented
+## The maturity model
 
-Everything in this section ships today and is not future work.
-A new reader should find these capabilities described as present, not promised.
+One product, one development line, one maturity model. The phases below are
+stages of trust on `main` — not versions, not generations: no phase is a 1.x
+or 2.x line, a branch, a tag series, or a second contract, and completing a
+phase never splits the product. The order is a hierarchy of trust, not a
+schedule; the dates are not the commitment.
+[architecture-authority.md](architecture-authority.md) owns the abstractions
+the phases are named for, and each phase says what ships today versus what the
+phase itself must add.
 
-- **A core independent of Nx, of Moon, and of monorepos.** The engine discovers
-  projects, builds the dependency graph and judges boundaries from its own
-  model; Nx and Moon are providers of that model rather than its foundation.
-  Single-repo, monorepo and polyrepo layouts are first-class.
-  ([concepts/integrations.md](../concepts/integrations.md))
-- **A multi-language dependency graph read from source.** Go, Rust, Python,
-  TypeScript, JavaScript, Vue, and JVM languages — Java and Kotlin imports read
-  from source, Maven and Gradle manifests for project identity and static
-  dependency edges. All analysis is static — nothing invokes a toolchain to answer
-  a question about imports.
-  ([reference/languages.md](../reference/languages.md))
-- **Architecture as code.** Layers, boundaries, dependency constraints and
-  ownership declared in a machine-readable model that is reviewed like code, in
-  the repository it governs. ([concepts/boundaries.md](../concepts/boundaries.md))
-- **Named law profiles.** A workspace may keep several boundary laws in a
-  `profiles` registry and select one by name at check time, stacked on a shared
-  `base` — resolved loudly, with no silent fallback to a quieter law.
-  ([concepts/profiles.md](../concepts/profiles.md))
-- **Six architecture styles shipped as policy packs.** Clean Architecture,
-  hexagonal, traditional layering (strict and relaxed), layered modular
-  monolith, vertical slices and DDD bounded contexts ride inside the package as
-  profile registries, read by the same loader, validated by the same validator
-  and enforced by the same path a registry a workspace wrote itself takes. A
-  pack saves the blank page, not a mechanism.
-  ([usage/presets.md](../usage/presets.md))
-- **ADR / decision registry.** `docs/adr/` records name the recorded
-  architecture decision a rule, fitness gate, or intent row leans on through a
-  `decisionRef`, read with `archkeep adr`; a reference that resolves to nothing
-  is `unknown`, never a pass. ([concepts/adr.md](../concepts/adr.md))
-- **Deterministic enforcement in CLI and CI.** The verdict is an exit code and
-  a machine-readable report; the same tree and the same model always produce
-  the same answer. ([reference/exit-codes.md](../reference/exit-codes.md))
-- **24 commands — `check`, `change`, `graph`, `diff`, `delta`, `discover`,
-  `drift`, `reconcile`, `waivers`, `fitness`, `history`, `trajectory`,
-  `evolution`, `health`, `report`, `debt`, `impact`, `scenario`, `explain`, `context`,
-  `provenance`, `decisions`, `adr`, `rules`** — each with
-  output a script or an agent can consume without parsing prose.
-  `history` records the
-  architecture's evolution across captured snapshots — the deterministic half
-  of "how it got here" — `trajectory` aggregates that same record into
-  signal counts, churn and persistence (facts that moved, never a score), and
-  `evolution` reads it across a selected range of Git revisions, so "at which
-  commit did this first appear" is answered from analyzed trees rather than
-  from commit messages; `debt` ages the workspace's waivers, gaps and
-  drift across it, and `report` composes health, waivers,
-  fitness, the decision registry and provenance into one governance document
-  under a single resolved law, so no two sections can answer from two.
-  ([reference/cli.md](../reference/cli.md), [usage/history.md](../usage/history.md),
-  [usage/trajectory.md](../usage/trajectory.md),
-  [usage/evolution.md](../usage/evolution.md),
-  [usage/debt.md](../usage/debt.md), [usage/report.md](../usage/report.md))
-- **Nx and Moon as first-class integrations, not dependencies.** A workspace
-  that has Nx or Moon gets graph reuse and `affected` integration; a repository
-  that has neither loses nothing.
-  ([integrations/nx.md](../integrations/nx.md),
-  [integrations/moon.md](../integrations/moon.md))
+### Roadmap at a glance
+
+| Phase                        | The question it answers                                            | Where it stands today                                                                   |
+| ---------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| **1 · Authority**            | Does the enforcement core decide deterministically, and only once? | Foundation in place; the open work is evidence breadth against real trees               |
+| **2 · Evidence**             | Is what the authority knows one coherent, reproducible state?      | In place and schema-gated; one-state coherence is the remaining consolidation           |
+| **3 · Governance**           | Does every gap between intent and reality become a decision?       | Machinery shipped; depth — a decision path for every difference — is the gate           |
+| **4 · Change Intelligence**  | Can change be anticipated from deterministic evidence?             | Deterministic substrate shipped; the three intelligence capabilities are later maturity |
+| **5 · Agentic Architecture** | Can agents act inside the authority without becoming it?           | Every surface shipped; the closed loop is later maturity                                |
+
+The hierarchy is the design: nothing later replaces anything earlier, every
+later phase stands on the deterministic core the first phase hardens, and
+neither of the last two may hold the foundation hostage — no capability in the
+intelligence or agentic phases can become a prerequisite of stable 1.0.
+
+### Capability trust levels
+
+A capability's place here is a claim about trust, not about existence. A
+command can exist and still not be something the project stakes 1.0 on. Four
+words, defined once, used without synonym:
+
+- **Hardened** — implemented, with semantics pinned by executable evidence on
+  both sides of its contract: the behavior is regression-protected and the
+  silent direction is covered by a test that goes red if a violation stops
+  being reported.
+- **Implemented** — the behavior ships and its contract is documented and
+  tested, but the evidence is not yet both-sides deep, or breadth (real trees,
+  real adopters) is still accumulating.
+- **Emerging** — the deterministic substrate exists and is used, and the
+  capability's intended depth is explicitly open work.
+- **Future** — documented direction with a contract document of its own; not
+  shipped, and never described here as if it were.
+
+"Implemented" and "trusted" are different rows, and this document keeps them
+different: what makes a capability hardened is the evidence behind it, and the
+evidence bar is stated in [the section below](#the-road-to-stable-10).
+
+`packages/archkeep/src/intent/intent-manifest.json` is the mechanical half of
+this section: a machine-readable manifest that declares each load-bearing
+v1.0 contract — provider independence, the empty-result invariant, snapshot
+identity, determinism, provider parity, the check-agreement contract — with
+its supporting evidence, classified by an explicit taxonomy in which only a
+behavioral test, an end-to-end test, or an architecture test counts as proof.
+It currently reads **13 contracts, all proven, zero unproven** — and a
+contract that loses its evidence loses its row.
+
+## Phase 1 — Authority
+
+**Maturity goal.** The enforcement core decides, deterministically, and only
+once.
+
+**The invariant it protects.** Exactly one enforcement authority — `check` —
+nothing that cannot look reports clean, and no verdict depends on which
+provider, workspace shape, or language toolchain happened to be present.
+
+**What it requires.**
+
+- **The boundary law as a reviewed, machine-readable file.** One constraint
+  table at the workspace root — four dialects accepted, one validator —
+  extended by `architecture-intent.json` when a workspace declares it.
+  ([concepts/boundaries.md](../concepts/boundaries.md),
+  [concepts/policies.md](../concepts/policies.md)) — **hardened**.
+- **The verdict system.** `check` is the gate and the only command holding all
+  four exit codes; `fitness`, `delta`, `change` and `rules verify` are
+  verdict-carriers on their own questions under the same law; every other
+  command only ever reads. The four-state vocabulary (`pass`/`fail`/`unknown`/
+  `not_applicable`), coverage on every result, and `ok` refused over
+  incomplete coverage — enforced in the envelope builder, not just documented.
+  ([reference/exit-codes.md](../reference/exit-codes.md)) — **hardened**: the
+  exit-code matrix drives all 24 commands on both sides of their exit
+  contract, with a roster guard so an undecided command fails the suite.
+- **Provider independence.** The engine discovers projects, builds the graph
+  and judges boundaries from its own model; Nx and Moon are providers of that
+  model, selected by one marker and refused loudly when the markers disagree.
+  ([concepts/integrations.md](../concepts/integrations.md)) — **hardened**:
+  an architecture test walks the core's imports, and the provider parity and
+  differential suites assert identical verdicts across the three providers.
+- **Static, cross-language analysis.** Eight languages read statically — Go,
+  Rust, Python, TypeScript and JavaScript, Vue, Java, Kotlin, C#/.NET — under
+  one frozen record contract, with no toolchain invoked to answer a question
+  about imports and every parse limit documented, each limit erring toward
+  naming text the file really contains rather than staying silent.
+  ([reference/languages.md](../reference/languages.md)) — **implemented**, with
+  one open hardening item: the real-tree evidence lane for the languages no
+  upstream differential can reach (see [stable 1.0](#the-road-to-stable-10)).
+- **Deterministic custom rules.** A workspace's own rules as committed
+  WebAssembly artifacts — no imports, one contract, four SDKs (Rust, Go,
+  AssemblyScript, Python) whose committed reference artifacts are required to
+  answer identical verdicts through the real host. Folding into `check` by
+  presence, in the same four-state vocabulary.
+  ([concepts/custom-rules.md](../concepts/custom-rules.md)) — **implemented**,
+  contract-hardened by the conformance suite; real-tree breadth still
+  accumulating.
+- **Law profiles and the preset packs.** Several boundary laws in one
+  workspace, selected by name, stacked on a shared base, resolved loudly — and
+  six architecture styles shipped as packs read by the same loader, validated
+  by the same validator, enforced by the same path a workspace-written
+  registry takes. ([concepts/profiles.md](../concepts/profiles.md),
+  [usage/presets.md](../usage/presets.md)) — **implemented**.
+
+**Evidence required.** Determinism sweeps (byte-identical reruns), the
+conformance differential against `@nx/enforce-module-boundaries`, the
+packed-artifact verification of the installed CLI, and the envelope-shape gate
+that pins every command's JSON roster in both directions.
+
+**Tests and conformance.** The differential (48 fixture workspaces, 125
+probes, 100 projects — every upstream violation id triggered, and
+weaker-than-upstream a defect by definition), five pinned real public
+workspaces on a schedule, provider parity and differential suites, the
+rule-SDK conformance gate, and the metamorphic suites that prove irrelevant
+edits cannot move the facts.
+
+**What you can do because of it.** Gate a build on `check` in any of the three
+workspace shapes, in any shipped language, and have a green exit mean
+"analyzed and clean".
+
+**Depends on.** Nothing — this is the foundation every later phase stands on,
+and none of them retires it.
+
+**Exit criteria.**
+
+- Verdicts are deterministic and byte-reproducible on unchanged trees.
+- One enforcement authority; the verdict vocabulary is one vocabulary
+  everywhere it appears.
+- Coverage is explicit on every result; could-not-look never reads as clean.
+- Provider parity is asserted, not assumed.
+- All analyzers sit under one frozen record contract; parse limits are stated
+  and tested.
+- Custom rules stay deterministic under the wasm contract.
+
+**Done means:** a consumer gates a build on `check` in any workspace shape and
+any shipped language, and the differential and parity evidence behind that
+verdict is green, run after run, on trees nobody here designed.
+
+## Phase 2 — Evidence
+
+**Maturity goal.** What the authority knows is one coherent, reproducible
+state — not a bag of adjacent reports.
+
+**The invariant it protects.** An architecture fact is reproducible and
+attributable: snapshots are byte-identical across runs, provenance travels
+with them, the envelope is schema-versioned, and no command fabricates
+evidence over a tree it did not read.
+
+**What it requires.**
+
 - **Architecture snapshots with provenance.** `graph` produces a deterministic
-  snapshot carrying the git origin of the run; `diff` warns when a baseline
-  cannot be attributed to the same repository.
-  ([usage/graph.md](../usage/graph.md), [reference/json-output.md](../reference/json-output.md))
-- **Meaningful architecture diff.** `diff` separates structural change from
-  policy mismatch from rule impact, and refuses an incomplete baseline.
-  ([usage/diff.md](../usage/diff.md))
-- **Basic drift detection.** Four drift signals, with no predictive component:
-  boundary violations and configuration drift surface through `check`;
-  structural drift and its rule impact surface through `diff`; and
-  architecture-intent drift has a descriptive face of its own (`drift`) that
-  `check` also folds in by presence.
-  ([concepts/drift.md](../concepts/drift.md))
-- **Fitness functions.** Named, declared quality gates — "the graph stays
-  cycle-free", "at least 90% of files are analyzed", "no slice reaches another
-  slice" — judged deterministically against the same observed facts `check`
-  reads, and folded into `check` by presence so a declared function is enforced
-  on every run. `tag-axis-isolation` makes a partition — a module, a bounded
-  context, a slice, a service — enforceable without one constraint row per
-  partition.
-  ([concepts/fitness-functions.md](../concepts/fitness-functions.md),
-  [usage/fitness.md](../usage/fitness.md))
-- **Custom rules under one contract.** A workspace declares its own rules as
-  committed WebAssembly artifacts in the policy's `customRules` list — written
-  in any language whose toolchain emits a no-import core-wasm module, judged
-  by the same deterministic engine over the same observed facts, folded into
-  `check` by presence with verdicts in the same four-state vocabulary, and
-  loud on every failure path. Four SDKs ship from this repository on the same
-  version chain — Rust, Go (TinyGo's freestanding target), TypeScript-syntax
-  AssemblyScript, and Python (a RustPython carrier) — each proven by a
-  committed reference artifact whose verdicts are byte-identical across all
-  four, with each build story's measured limits declared in its package
-  ([adr/0002](../adr/0002-custom-rules-one-contract.md) records the staging).
-  ([concepts/custom-rules.md](../concepts/custom-rules.md),
-  [reference/custom-rules.md](../reference/custom-rules.md))
-- **Architecture planning facts for agents.** `context` and `impact` answer the
-  questions an agent asks before and during a change, in machine-readable form;
-  `explain` explains a finding after it is reported.
-  ([concepts/agentic-development.md](../concepts/agentic-development.md))
-- **Architecture intent as a machine-readable contract.** The boundary config
-  is the declared intent: boundaries, allowed and forbidden relationships, and
-  the constraints a workspace states about its own structure. Intent is
-  validated against the observed architecture with no AI-generated intent and
-  no semantic inference.
-  ([concepts/boundaries.md](../concepts/boundaries.md))
-- **A stated and gated `schemaVersion` promise.** The JSON envelope's field
-  names and its version are a public contract said out loud where consumers
-  read it, and held by a gate rather than by discipline: every command's
-  envelope is reduced to a field roster and compared against a recorded
-  snapshot in both directions, over a command list taken from the CLI's own
-  table so a command added later cannot ship an unmeasured shape.
-  ([reference/json-output.md](../reference/json-output.md))
-- **Agentic governance.** The five `arch-*` skills teach agents when to ask the
-  authority and how to read its answers; Claude Code, Codex and opencode run
-  the same editor gates; the repository dogfoods its own enforcer in CI.
-  ([skills/overview.md](../skills/overview.md),
-  [architecture-authority.md](architecture-authority.md))
-- **A semantic model that deliberately stops at the deterministic core.** The
-  structural core and the wave-3 evolution model were re-audited adversarially
-  (Phase 4, 2026-08-30) for ownership, data-flow, API, event and runtime
-  semantic candidates; none met the authoritative-evidence gate, so none was
-  built — the canonical data-flow (declared intent → observed evidence →
-  deterministic verdict → event → report) holds with no shortcut.
-  ([adr/0007-no-semantic-model-expansion.md](../adr/0007-no-semantic-model-expansion.md))
+  snapshot carrying the git origin of the run and a policy fingerprint naming
+  the exact law that governed it; `diff` warns when a baseline cannot be
+  attributed to the same repository.
+  ([usage/graph.md](../usage/graph.md),
+  [reference/json-output.md](../reference/json-output.md)) — **hardened**
+  (snapshot identity is contract D in the intent manifest: byte-identical
+  reruns, asserted end-to-end).
+- **A stated and gated `schemaVersion` promise.** The envelope's field names
+  and version are a public contract held by a gate, not by discipline: every
+  command's envelope is reduced to a field roster and compared against a
+  recorded snapshot in both directions, over a command list taken from the
+  CLI's own table.
+  ([reference/json-output.md](../reference/json-output.md)) — **hardened**.
+- **A meaningful architecture diff.** `diff` separates structural change from
+  policy mismatch from rule impact — three different questions, never blended
+  — and refuses an incomplete baseline.
+  ([usage/diff.md](../usage/diff.md)) — **hardened** (contract F).
+- **The temporal commands, each owning one question.** `delta` classifies how
+  violations moved across a captured baseline — per-change rule impact, with
+  one spelling for edge identity owned by `classifyEvolution`. `history`
+  describes consecutive transitions across captured snapshots; `trajectory`
+  aggregates that record into signal counts and churn (facts that moved, never
+  a score); `evolution` reads it across a Git revision range, so "at which
+  commit did this first appear" is answered from analyzed trees.
+  ([usage/history.md](../usage/history.md),
+  [usage/trajectory.md](../usage/trajectory.md),
+  [usage/evolution.md](../usage/evolution.md)) — **implemented**; the
+  evolution event model was re-audited and its soundness gaps closed in
+  2026-08, and the identity spelling was unified to one.
+- **Coverage as semantics.** `coverage.complete` true only when `notAnalyzed`
+  is empty — enforced, not correlated; whole-file failures, site-level blind
+  spots, and out-of-verdict coverage gaps are three distinct reported shapes,
+  never folded into clean.
+  ([reference/json-output.md](../reference/json-output.md)) — **hardened**.
 
-## The maturity ladder
+**Evidence required.** Byte-identical determinism sweeps over snapshots and
+every temporal command; the schema-roster gate; the refusal of incomplete
+baselines; provenance fields on every governance row.
 
-One product, one development line, one ladder. The stages below are
-**maturity gates on `main`** — not versions, not generations: no gate is a
-1.x or 2.x line, a branch, a tag series, or a second contract, and passing a
-gate never splits the product. The order is the commitment; the dates are
-not. [architecture-authority.md](architecture-authority.md) owns the
-abstractions the gates are named for, and each gate says what ships today
-versus what the gate itself must add.
+**Tests and conformance.** Determinism end-to-end suites, the diff/delta
+envelope gates, and the structural-refusal suites that pin every
+could-not-attribute, could-not-read path as exit 3 rather than an empty result.
 
-1. **Harden the deterministic authority core.** The verdict, the exit-code
-   contract, the four-state vocabulary, coverage on every result, the
-   provider-independent graph, the cross-language analyzers, and the
-   conformance proof that holds them together. Most of this ships today; the
-   gate is its hardening — conformance evidence broadened to real trees,
-   parse limits held, determinism proven on workspaces nobody here designed.
-   Every later gate stands on this one, and none of them retires it.
-2. **Make architecture state first-class.** A workspace's architecture is
-   one state — intent, observed reality, constraints, decisions, exceptions,
-   evidence — changing through transitions, not a bag of adjacent commands.
-   The mechanisms ship today (`graph` snapshots, `diff`, `history`,
-   `trajectory`, `evolution`, `provenance`, `drift`); the gate is their
-   consistency as one state model — one vocabulary, one evidence contract,
-   one provenance story across all of them.
-3. **Deepen architecture reconciliation.** The gap between intent and
-   reality identified and classified element by element, so every difference
-   becomes a decision. `reconcile`, `change`, `discover`'s proposal-only
-   candidates and the waiver lifecycle ship today; the gate is depth —
-   finer classification of the gap, and a decision path (fix, waive,
-   re-declare) for every difference reconciliation can find.
-4. **Broaden architecture change context and impact.** Before and during a
-   change: which boundaries are affected, which constraints and recorded
-   decisions are in play, what the blast radius is. `context`, `impact`,
-   `delta` and `explain` ship today; the gate is breadth — the questions an
-   agent or a reviewer asks before touching a boundary, answered in
-   machine-readable form every time.
-5. **Add the three architecture-intelligence capabilities, in order.** The
-   layer that reads, evaluates and explains on top of the core — first
-   **Architectural Impact Analysis**, then **Scenario Evaluation**, then the
-   **Evidence-Grounded Architectural Advisor**, each gated by the one before
-   it (see the section below). Optional and later by design, and each
-   capability arrives through the door
-   [architecture-authority.md](architecture-authority.md) puts in front of
-   the layer, and none is required by the gates above.
-6. **Close the agentic feedback loop.** An agent draws its architectural
-   context from Archkeep, makes the change inside it, and Archkeep verifies
-   and reconciles the result deterministically — the loop closed by the
-   authority, never by the agent's own judgment. The `arch-*` skills, the
-   MCP tools and the read-only command set are the loop's shape today; the
-   gate is the loop running end to end without a human assembling the
-   pieces.
+**What you can do because of it.** Capture a snapshot, come back months later,
+and get the same diff, history, and evolution answers byte-for-byte — each
+temporal command answering a different question about the same recorded state.
 
-Gates 1–4 are the foundation stable 1.0 stands on. Gates 5–7 are later
-maturity on the same line: they follow stable 1.0, they never fork it, and
-nothing in them holds the foundation hostage.
+**Depends on.** [Phase 1](#phase-1--authority) — evidence about architecture
+is only as trustworthy as the verdict core that produces it.
+
+**Exit criteria.**
+
+- Snapshots are byte-identical across runs and versions of the tree.
+- Every evidence artifact is attributable: provenance on governance rows, a
+  fingerprint naming the law.
+- The temporal semantics stay separate: structural diff ≠ policy mismatch ≠
+  rule impact ≠ drift ≠ proposal — no command answers another's question.
+- Nothing produces evidence over an unread tree; every path that cannot read
+  says so loudly.
+
+**Done means:** a snapshot captured today still reproduces its diff, history
+and evolution answers byte-for-byte after months of `main` moving — and no
+command's answer depends on another command's vocabulary.
+
+## Phase 3 — Governance
+
+**Maturity goal.** Every gap between intent and reality becomes a decision —
+fix, waive, or re-declare — recorded where the repository can see it.
+
+**The invariant it protects.** `check` remains the only enforcement authority.
+The governance artifacts — ADR, Decision, Waiver, fitness — explain, record,
+and constrain; none of them is a second authority, and none of them can make
+an unchanged workspace's verdict move.
+
+**What it requires.**
+
+- **Intent as a machine-readable contract.** `architecture-intent.json`
+  declares named boundaries, forbidden and allowed relationships, judged by a
+  pure, provider-neutral judge; a boundary that matches no observed project
+  reads as no-verdict loudly, never as "intent passes".
+  ([reference/architecture-intent.md](../reference/architecture-intent.md)) —
+  **implemented**.
+- **Drift as a descriptive face.** `drift` compares observed against declared
+  and never exits 1 on its own; `check` folds it in by presence, so the
+  authority still enforces what drift reports.
+  ([concepts/drift.md](../concepts/drift.md)) — **implemented** (contract M in
+  the intent manifest: clean still states its comparison facts, and every
+  could-not-judge path is loud).
+- **Reconciliation and proposal-only candidates.** `reconcile` classifies the
+  gap element by element; under `--propose` it emits ranked candidates marked
+  `proposed` and `notAuthoritative` — never written to the intent file. Same
+  for `discover --propose`.
+  ([concepts/reconciliation.md](../concepts/reconciliation.md)) —
+  **implemented**.
+- **The waiver lifecycle.** A row with a deadline keeps the violation visible
+  as accepted until the term lapses — and then re-asserts itself loudly;
+  a permanent acceptance is a different row shape with a different review
+  story. ([concepts/waivers.md](../concepts/waivers.md)) — **implemented**.
+- **Decisions that ground constraints.** A constraint row may cite an ADR via
+  `decisionRef`; a citation that resolves to nothing is `unknown`, never a
+  pass. `decisions` walks the full chain behind one recorded decision.
+  ([concepts/adr.md](../concepts/adr.md)) — **implemented**.
+- **Fitness functions.** Declared predicates — cycle-free graphs, coverage
+  floors, tag-axis partitions — judged deterministically against the same
+  observed facts `check` reads, folded into `check` by presence. A failing
+  function is a finding, not a print job.
+  ([concepts/fitness-functions.md](../concepts/fitness-functions.md)) —
+  **implemented**.
+- **Change intents.** A per-change declaration of expected architectural
+  consequences, reconciled against the actual delta; undeclared material
+  changes are findings.
+  ([usage/change.md](../usage/change.md)) — **implemented**.
+- **The aging surfaces.** `debt` ages waivers, gaps and drift across
+  snapshots; `health` reports metrics that say `unknown` rather than zero when
+  they cannot be computed; `report` composes health, waivers, fitness, the
+  decision registry and provenance into one governance document under one
+  resolved law. ([usage/debt.md](../usage/debt.md),
+  [usage/report.md](../usage/report.md)) — **implemented**.
+- **Reconciliation depth.** Finer classification of the gap, and a decision
+  path — fix, waive, re-declare — for every difference reconciliation can
+  find. The machinery above is this phase's substrate; **depth is the phase's
+  open work** — **emerging**.
+
+**Evidence required.** Waiver expiry and permanent-row behavior tested on both
+sides; `decisionRef` resolution and its unknown path tested; proposal
+non-authority asserted (the intent file stays byte-identical); fitness folded
+into `check` end-to-end.
+
+**Tests and conformance.** The governance suites over waiver, fitness,
+decision-chain and change-intent behavior; the envelope gates for each
+governance command; and the soundness suites that pin "a citation that resolves
+to nothing is unknown, never clean".
+
+**What you can do because of it.** Answer any difference the tool reports with
+a tracked decision — a fix, a dated waiver, or a re-declared boundary — each a
+reviewed diff rather than a conversation.
+
+**Depends on.** [Phase 1](#phase-1--authority) (governance artifacts may never
+become a second authority) and [Phase 2](#phase-2--evidence) (a decision is
+only as good as the evidence it cites).
+
+**Exit criteria.**
+
+- Every reconciliation finding carries a decision path: fix, waive, or
+  re-declare.
+- The waiver lifecycle is loud at both ends: acceptance visible, expiry
+  re-asserting.
+- No governance artifact creates a second enforcement authority, and the
+  intent file is byte-identical after every proposal run.
+- A citation that resolves to nothing reports `unknown`, never a pass.
+
+**Done means:** any difference between declared and observed architecture can
+be answered by fix, waive, or re-declare — and each answer lands as a reviewed
+diff the repository can enforce.
+
+## Phase 4 — Change Intelligence
+
+**Maturity goal.** Change anticipated from deterministic evidence — before it
+lands and before it is real — never guessed.
+
+**The invariant it protects.** Evidence and verdicts are deterministic and
+authoritative; predictions, proposals and judgments are not, and are marked as
+such wherever they appear. The intelligence layer reads the deterministic
+core; it never sits inside a verdict, never alters one, and a scenario is
+hypothetical — it cannot mutate architecture state, record history, or become
+a Decision or a Verdict without an explicit human governance step.
+
+**What it requires.**
+
+- **The deterministic substrate — shipped.** `impact` names what depends on
+  what (reverse reachability, deterministic by contract G); `context --plan`
+  hands the governing constraints to an agent before it edits; `explain`
+  returns the full judgment for one import site; `delta`'s rule impact names
+  which rules a change moved; and `scenario` evaluates a hypothetical change
+  as a read-only projection marked `virtual` and `notAuthoritative`.
+  ([concepts/agentic-development.md](../concepts/agentic-development.md)) —
+  **implemented**, under the check-agreement contract (J in the intent
+  manifest): wherever these commands evaluate, their verdicts agree with
+  `check`, and every narrowing (per-edge verdicts cover `depConstraints`
+  only) is disclosed where an agent will read it.
+- **Architectural Impact Analysis** — a change to any architecture entity
+  reliably enumerates every affected entity, decision and governance artifact
+  with evidence, on real trees. The substrate is mostly built; the gate is
+  breadth and evidence on trees nobody here designed. — **emerging**, the
+  first of the three intelligence capabilities.
+- **Scenario Evaluation** — a hypothetical change re-evaluated against a base
+  revision in virtual, non-mutating isolation; explicitly not a runtime
+  simulation. Gated on impact being stable and a real use case existing.
+  ([scenario-evaluation.md](scenario-evaluation.md)) — **future**, and the
+  shipped `scenario` command is its deterministic projection, not the
+  capability at intended maturity.
+- **Evidence-Grounded Architectural Advisor** — explanations, options and
+  trade-offs laid over canonical facts, marked FACT from INFERENCE,
+  expendable by construction, never load-bearing for a verdict. Gated on both
+  deterministic layers being trustworthy.
+  ([evidence-grounded-advisor.md](evidence-grounded-advisor.md)) —
+  **future**.
+
+**Evidence required.** The check-agreement contract asserted wherever a
+command evaluates; every narrowing disclosed in output; scenario output
+carrying `virtual` and `notAuthoritative` on every shape it prints.
+
+**Tests and conformance.** The intent-manifest contracts G, H, I, J and their
+behavioral, end-to-end and architecture tests; the disclosure tests that keep
+the depConstraints narrowing visible.
+
+**What you can do because of it.** Ask the before-change questions — what does
+this touch, which constraints are in play, what would this hypothetical move —
+in machine-readable form, with every answer agreeing with the authority.
+
+**Depends on.** [Phase 2](#phase-2--evidence) — intelligence over architecture
+is only as trustworthy as the evidence state it reads — and
+[Phase 3](#phase-3--governance) for the decision semantics it must not bypass.
+
+**Exit criteria.**
+
+- Wherever a command evaluates, its verdicts agree with `check`, and every
+  narrowing is disclosed where the consumer reads.
+- Scenarios never mutate state, never record history, never become a Decision
+  or a Verdict without a human governance step.
+- Every intelligence output is marked as evidence-traced fact or as
+  inference — and no intelligence output carries an exit code.
+
+**Done means:** the before-change questions are answered in machine-readable
+form by commands whose verdicts provably agree with `check` — and the three
+intelligence capabilities, when they arrive, arrive through the boundary
+[architecture-authority.md](architecture-authority.md) puts in front of the
+layer, each gated by the one before it.
+
+## Phase 5 — Agentic Architecture
+
+**Maturity goal.** Agents operate inside the authority — they consume it, and
+they never become it.
+
+**The invariant it protects.** Agent surfaces consume the same authority
+humans and CI consume: no agent-facing tool accepts a weaker boundary config,
+no skill teaches an agent to edit policy to reach green, and the loop closes
+through the authority's verdict, never through the agent's own judgment.
+
+**What it requires.**
+
+- **Agent-facing tools over one engine.** An MCP server exposing nine
+  read-only tools — context before editing, the authoritative check, impact,
+  drift, explain, graph, history, a proposal mode carrying
+  `requiresApproval: true`, and a scenario tool — every tool calling the
+  engine's own command layer in process, so an agent sees the same envelope a
+  pipeline sees. No tool writes, and no tool accepts a weaker law.
+  ([integrations/mcp.md](../integrations/mcp.md)) — **implemented**.
+- **Skills that teach the protocol.** Five host-independent `arch-*` skills —
+  read the constraints, change inside them, check, report evidence — never
+  modify policy to reach green, validated by a repository gate so a skill
+  cannot drift from the roster.
+  ([skills/overview.md](../skills/overview.md)) — **implemented**.
+- **Editor surfaces with the one invariant.** A language server whose empty
+  diagnostic list means "no violation", and nothing else; a VS Code client
+  that ships no analysis of its own, resolves the workspace's server, and
+  routes the polyglot languages to it — TS/JS deliberately left to the
+  workspace's ESLint setup.
+  ([integrations/vscode.md](../integrations/vscode.md)) — **implemented**.
+- **The repository's own enforcement, in CI.** This repository runs its own
+  checker on its own tree, and the agent harnesses (Claude Code, Codex,
+  opencode) run the same editor gates. Self-enforcement proves the tool runs
+  on a tree whose vocabulary it does not know.
+  ([development/repository.md](../development/repository.md)) —
+  **implemented**.
+- **External workspaces gating on it.** The readiness condition is
+  attestation-shaped: a repository outside this one runs `check` as a blocking
+  gate and publishes the evidence shape
+  [gate-attestation.md](../reference/gate-attestation.md) defines. Adoption
+  exists; **attested readiness is the open half** — **emerging**.
+- **The closed agentic loop.** Declare → context → change → observe →
+  evidence → verdict → CI, running end to end on a tree nobody here designed
+  without a human assembling the pieces. **future** — the phase's summit, on
+  the same line, never a fork.
+
+**Evidence required.** The no-override property asserted on every agent
+surface; the skills gate; the MCP server composing the engine's own `./commands`
+layer rather than a second implementation; the attestation evidence shape
+verified, not asserted.
+
+**Tests and conformance.** The MCP composition suites, the skills gate, the
+LSP invariant suites (empty diagnostics only from two named places), and the
+packed-artifact verification that installs the CLI the way a consumer does.
+
+**What you can do because of it.** Point a coding agent at a governed
+repository and have it read the constraints first, change inside them, verify
+with the same `check` CI uses, and report evidence — with no path by which the
+agent weakens the law it is judged by.
+
+**Depends on.** All four earlier phases — an agent surface is a consumer of
+authority, evidence, governance semantics and change intelligence, and it is
+the one layer that must never be mistaken for any of them.
+
+**Exit criteria.**
+
+- Every agent surface consumes the engine's own command layer and the same
+  verdict vocabulary; no second implementation exists.
+- No agent-facing tool accepts a weaker boundary config, and no skill teaches
+  policy editing to reach green.
+- The authority boundary holds for autonomous operation: proposals carry
+  approval requirements, and declaring or changing intent stays a human,
+  reviewed act.
+- External adoption is attested, not anecdotal: the evidence shape is
+  published and verified.
+
+**Done means:** an agent can run the full loop — declare, context, change,
+observe, evidence, verdict, CI — on a tree nobody here designed, with the
+authority boundary held at every step, and the repository can see it happen
+through published attestation.
 
 ## The road to stable 1.0
 
-Stable 1.0 is not "enough features shipped". It is the point where the four
-foundation gates — the hardened authority core, first-class architecture
-state, deepened reconciliation, broadened change context — hold every
+Stable 1.0 is not "enough features shipped". It is the point where the
+foundation phases — **Authority**, **Evidence**, **Governance** — hold every
 property that makes them an official foundation: **deterministic**,
 **explainable**, **reproducible**, **provenance-complete**,
 **provider-independent**, **cross-language**, **conformance-hardened**, and
-quiet long enough to be trusted with a stability promise. The impact-hardening,
-scenario-evaluation and advisory capabilities of gates 5–7 are deliberately
-absent from that list: they extend a finished foundation rather than block
-it, and no capability on those gates may hold the deterministic authority
-hostage by being made a prerequisite of it.
+quiet long enough to be trusted with a stability promise. The capabilities of
+the Change Intelligence and Agentic phases are deliberately absent from that
+list: they extend a finished foundation rather than block it, and no capability
+in those phases may hold the deterministic authority hostage by being made a
+prerequisite of it.
 
-Almost everything the foundation needs is already implemented and listed
-above. What remains before a **stable 1.0** is hardening of the proof, not a
-new feature list — one item, and it is evidence rather than code:
+Almost everything the foundation needs is already implemented, and its
+load-bearing claims are the intent manifest's contracts — the mechanical
+Evidence-Complete gate [defined above](#capability-trust-levels). What
+separates 0.x from 1.0 here is not
+a missing feature; it is evidence, and evidence is something the project
+accumulates rather than something it implements.
 
-Stable 1.0 is approached through a release candidate, named by one
-`Release-As:` commit when the conditions below read met — the 2026-08-28
-candidates are parked and the release line returned to 0.x in the interim
-(maintainer decision, 2026-08-29). The conditions below decide when the
-contract stops being a candidate and becomes the version that holds.
-[docs/development/release.md](../development/release.md#release-stages-the-0x-line-and-the-parked-candidate)
-owns the mechanics.
+### The 1.0 exit criteria
 
-- **Breadth of conformance evidence.** The differential against
-  `@nx/enforce-module-boundaries` runs over real public workspaces, weekly and
-  on demand, as a non-required check that is still treated as a regression when
-  it goes red; more real trees is the remaining gap, not a missing feature. A
-  second lane beside it measures what the Go, Rust and Python analyzers read on
-  real repositories, where no upstream exists to disagree with — the languages
-  the differential structurally cannot cover.
-  ([development/testing.md](../development/testing.md))
+The structural criteria are the phases' own: [Phase 1](#phase-1--authority)
+and [Phase 2](#phase-2--evidence) exit criteria read met, and with them:
 
-The VS Code marketplace listing is deliberately **not** on that list. The
-client exists, the `.vsix` attaches to every release, and the publisher
-account exists; the marketplace carries no prerelease versions, so the
-listing starts at the stable cut
-([integrations/vscode.md](../integrations/vscode.md) owns that status) —
-and 1.0 does not wait for it.
+- **Exactly one enforcement authority.** `check` is the gate; `fitness`,
+  `delta`, `change` and `rules verify` are verdict-carriers on their own
+  questions under the same law; ADR, Decision, Waiver and fitness create no
+  second authority.
+- **Verdicts are deterministic and reproducible** — byte-identical output on
+  unchanged trees, swept and asserted.
+- **Verdicts are evidence-backed** — every verdict cites the constraint row,
+  the recorded decision, or the provenance behind it, and the intent manifest's
+  executable-proof bar holds for the contracts 1.0 leans on.
+- **Coverage is explicit** — `ok` requires complete coverage, enforced in the
+  envelope builder; unknown and incomplete analysis cannot masquerade as
+  success.
+- **Provider independence** — identical semantics across Nx, Moon and native,
+  asserted by parity and differential suites, not assumed.
+- **One analysis, one semantics** — language and analyzer differences never
+  create competing verdict semantics: one frozen record contract, one judge,
+  one envelope, and parse limits that err loud.
+- **A coherent architecture state** — snapshots, diff, delta, history,
+  trajectory, evolution and provenance answer from one state model, one
+  vocabulary, one evidence contract.
+- **Governance without second authorities** — fitness judged inside the
+  enforcement model; proposals never decisions; scenarios hypothetical.
+- **Custom rules preserve the contract** — wasm under one deterministic
+  contract, conformance-gated across all four SDKs.
+- **Intelligence cannot alter authoritative verdicts** — intelligence beside
+  verdicts, never inside them, whatever the later phases ship.
+- **Agent surfaces consume the same authority** — no override, no weaker law,
+  no second implementation behind the agent-facing tools.
+- **Load-bearing claims are Evidence-Complete** — the intent manifest's
+  executable-proof taxonomy reads all-proven for every contract 1.0 rests on.
 
-### What 1.0 waits for, and how each condition is read
-
-The item above is the remaining work. These four are how the project knows it
-is done — conditions rather than a date, in keeping with this document's
-refusals, and each read off something that already runs rather than off
-anyone's judgement of readiness. A fifth stood here until the `schemaVersion`
-promise was both stated and gated; it is listed among the shipped capabilities
-above rather than deleted, because a condition that was met is part of how the
-project got here.
-
-The first three exist because the ways this project can be wrong are not
-symmetric. A feature list can be finished by writing code; a claim that the
-engine is stable can only be finished by the engine failing to surprise anyone
-over a stretch of time in which it had the chance to.
+On top of the structural criteria sit four measurable conditions. The first
+three exist because the ways this project can be wrong are not symmetric: a
+feature list can be finished by writing code, but a claim that the engine is
+stable can only be finished by the engine failing to surprise anyone over a
+stretch of time in which it had the chance to.
 
 1. **The real-tree differential green, run after run.** Not one green run — a
    run of them, on the weekly schedule, with no red in between that was not a
-   genuine conformance finding. One green run says the lane works; a series says
-   the engine and upstream have stopped disagreeing in ways nobody predicted.
+   genuine conformance finding. One green run says the lane works; a series
+   says the engine and upstream have stopped disagreeing in ways nobody
+   predicted.
 2. **A workspace outside this repository running `check` as a blocking gate.**
-   Self-enforcement (`AGENTS.md`, "The repository's own module boundaries")
-   proves the tool runs on a tree whose vocabulary it does not know. It cannot
-   prove what a tree nobody here designed does to it. Until some other
-   repository has failed a build on a Archkeep verdict and been right to, the
-   parse limits are a list of shapes that were imagined rather than met.
+   Self-enforcement proves the tool runs on a tree whose vocabulary it does
+   not know. It cannot prove what a tree nobody here designed does to it.
+   Until some other repository has failed a build on an Archkeep verdict and
+   been right to, the parse limits are a list of shapes that were imagined
+   rather than met.
    [gate-attestation.md](../reference/gate-attestation.md) is the evidence
    shape such a repository publishes, and what readiness accepts for this row.
-3. **A quiet stretch in what an unchanged workspace is told.** `AGENTS.md`
-   makes a change to what is reported on an unchanged workspace a breaking
-   change; 1.0 is the version where that promise starts costing something. So
-   the last condition before it is a stretch of commits during which no fix
-   changed a verdict on a tree that did not change — measured from the log,
-   which names each such fix, not from memory.
+3. **A quiet stretch in what an unchanged workspace is told.** The
+   compatibility contract makes a change to what is reported on an unchanged
+   workspace a breaking change; 1.0 is the version where that promise starts
+   costing something. So the last condition before it is a stretch of commits
+   during which no fix changed a verdict on a tree that did not change —
+   measured from the log, which names each such fix, not from memory.
 4. **Releases that land without a hand on them.** Tag, npm, and the attached
    `.vsix` agreeing, more than once in a row. The 0.5.0 tag that npm never
    received is the failure this condition exists to have stopped happening.
@@ -290,17 +583,43 @@ over a stretch of time in which it had the chance to.
 `scripts/check-readiness.mjs` is what reads these four rather than anyone
 remembering them — `pnpm readiness` prints one row each, and says `unmeasured`
 for the two whose evidence lives outside this repository rather than guessing.
-The fifth condition sitting here for six releases after it was met is the
-failure that script exists to have stopped happening.
+`unmeasured` is not a failure and not a pass: it is the third state this
+repository insists on everywhere else.
 
-None of the four is a feature, and that is the point: what separates 0.x from
-1.0 here is evidence, and evidence is something the project accumulates rather
-than something it implements.
+### One remaining evidence gap, named
+
+The item below is the remaining _work_, as distinct from the conditions above
+— which are _measurements_, not tasks:
+
+- **Breadth of conformance evidence.** The differential against
+  `@nx/enforce-module-boundaries` runs over real public workspaces, weekly and
+  on demand; more real trees is the remaining gap, not a missing feature. A
+  second lane beside it measures what the Go, Rust and Python analyzers read
+  on real repositories, where no upstream exists to disagree with — the
+  languages the differential structurally cannot cover.
+  ([development/testing.md](../development/testing.md))
+
+The VS Code marketplace listing is deliberately **not** on any of these lists.
+The client exists, the `.vsix` attaches to every release, and the publisher
+account exists; the marketplace carries no prerelease versions, so the listing
+starts at the stable cut
+([integrations/vscode.md](../integrations/vscode.md) owns that status) — and
+1.0 does not wait for it.
+
+### How 1.0 is approached
+
+Stable 1.0 is approached through a release candidate, named by one
+`Release-As:` commit when the conditions above read met — the 2026-08-28
+candidates are parked and the release line returned to 0.x in the interim
+(maintainer decision, 2026-08-29). The conditions decide when the contract
+stops being a candidate and becomes the version that holds.
+[docs/development/release.md](../development/release.md#release-stages-the-0x-line-and-the-parked-candidate)
+owns the mechanics.
 
 ## Later maturity: architecture intelligence, in three capabilities
 
-Gate 5 of the ladder, and "optional" is part of its name: this is later
-maturity on the same development line — not a next product, not a second
+The Change Intelligence phase, and "optional" is part of its name: this is
+later maturity on the same development line — not a next product, not a second
 platform, and not a stage the foundation waits for. It extends the
 deterministic core with a different relationship to the architecture it
 already governs: **reading, evaluating and explaining**, on top of — never in
@@ -308,7 +627,7 @@ place of — the checking and judging.
 
 This section names the direction as exactly three capabilities, in a fixed
 order, each gated by the one before it. The gating is the whole design:
-nothing here is a dated promise, and each phase has an explicit exit
+nothing here is a dated promise, and each capability has an explicit exit
 criterion that must already hold before the next one starts. The three are,
 by user value rather than by an "AI generation" label:
 
@@ -345,11 +664,10 @@ implementation shape:
   provider abstraction, prompt/context boundaries, failure behavior, and why
   the AI has no authority.
 
-### Gate 5, narrowed
+### The three capabilities, narrowed
 
-The maturity-ladder's gate 5 — "add the intelligence and proposal
-capabilities" — resolves into these three, in this order. The order is a
-dependency, not a preference:
+The Change Intelligence phase resolves into these three, in this order. The
+order is a dependency, not a preference:
 
 - **Impact Analysis first.** It is the substrate the other two read, and it
   is mostly deterministic hardening of what already ships: `impact`
@@ -415,54 +733,13 @@ and a Decision are never the same event.
   keep. Order is the commitment; time is not.
 - **A feature list.** Features live in issues, where they can be discussed,
   rejected and closed without this document lying in the meantime.
-- **A phase 3.** When the capabilities above are real, what comes after them
-  will be visible from there, and not before.
-- **A second line, or a next generation.** The ladder is one development
-  line: gates, not versions. Nothing here produces a 1.x line beside a 2.x
-  line, a parallel `next` branch, or a second generation of the product — a
-  proposal framed as a generation change is refused the way a proposal to
-  move the authority is.
+- **A second line, a next generation, a sequel.** The maturity model is one
+  development line: phases, not versions. Nothing here produces a 1.x line
+  beside a 2.x line, a parallel `next` branch, or a second generation of the
+  product — a proposal framed as a generation change is refused the way a
+  proposal to move the authority is.
 - **Moving the authority.** Any capability that would let an agent, a provider,
   a skill or CI decide whether an architecture is valid — rather than report
   whether it holds — is refused by the boundary in
   [architecture-authority.md](architecture-authority.md). The
   roadmap stages breadth and reading; it never stages that line.
-
-### What the intelligence capabilities are not
-
-The three capabilities above are bounded in what they will and will not
-become. The following are explicit non-goals — not merely absent today, but
-refused on boundary and architectural grounds:
-
-- **ML-based architectural learning.** No statistical model, embedding
-  space, or learned pattern library will drive any verdict, proposal or
-  evaluation. The deterministic authority stays source-driven, not
-  data-driven.
-- **Autonomous architect.** No capability decides or executes
-  architectural changes on its own. Every path toward mutation — whether
-  migration, boundary edit, or constraint change — leads through a human
-  accepting a proposal.
-- **Optimizer.** No "find the best architecture" facility, no scoring
-  function, no multi-objective ranking over hypothetical topologies.
-  Archkeep evaluates and reports; it does not rank.
-- **Full runtime simulation.** No model of what the architecture does at
-  runtime — no load test, no latency prediction, no capacity model.
-  The view is structural; runtime belongs to observability.
-- **Generic architecture generation.** No facility that produces
-  architecture from a description, a conversation, or a document. Archkeep
-  governs an existing architecture; it does not author one.
-- **Runtime prediction.** No forecasting of what will break at runtime,
-  under what load, or at what scale. The structural view says what is
-  connected and what is governed; runtime belongs elsewhere.
-- **Autonomous migration planning or execution.** Scenarios are
-  read-only evaluations. If the advisor recommends a migration path, a
-  human still evaluates and applies it — Archkeep never executes a
-  migration itself.
-- **Vector or semantic memory for AI reasoning.** The advisor reads
-  canonical Archkeep sources — graph, diff, delta, evolution, decisions,
-  intent, evidence — not an embedding index. Uncertainty is labeled,
-  never smoothed by similarity.
-- **God-object architectural state.** Each capability reads from its
-  own deterministic substrate. There is no unified mutable "architectural
-  state" object that accumulates and conflates sources of truth — that
-  shape is how the boundary becomes invisible.

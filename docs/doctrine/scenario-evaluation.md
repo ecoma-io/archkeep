@@ -100,8 +100,8 @@ A Scenario is a structural and governance what-if. It is explicitly **not**:
 ## Dependencies
 
 Scenario Evaluation is gated behind Impact Analysis. It also relies on the
-foundation gates 1–4 (deterministic core, first-class state, deepened
-reconciliation, broadened change context), and on the proposal-only discipline
+foundation phases (Authority, Evidence, Governance) and the Change
+Intelligence phase's shipped substrate, and on the proposal-only discipline
 `discover --propose` / `reconcile --propose` already establish. The
 `EvolutionEvent`'s `affected` and `classifications` shapes are reused for the
 comparison, so a scenario delta speaks the same vocabulary as a concluded
