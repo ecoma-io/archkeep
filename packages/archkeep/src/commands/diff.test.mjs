@@ -690,25 +690,31 @@ describe("diffCommand", () => {
     ).toThrow(/cannot read the baseline snapshot/);
   });
 
-  it("includes blind spots in coverage from non-whole-file failures", () => {
-    const result = diffCommand(
-      "/baseline.json",
-      commandContext({
-        analysis: {
-          analyzed: 4,
-          imports: [],
-          failures: [
-            { sourceFile: "libs/alpha/a.go", line: 7, column: 2, reason: "unresolvable specifier" },
-          ],
-        },
-      }),
-      { readBaseline: () => baselineEnvelope() },
-    );
-    expect(result.coverage.blindSpots).toEqual([
-      { file: "libs/alpha/a.go", line: 7, column: 2, reason: "unresolvable specifier" },
-    ]);
-    // Not a whole-file failure, so coverage is still "complete" and the diff can run.
-    expect(result.coverage.complete).toBe(true);
+  it("refuses a diff over an unresolved site instead of reporting complete (#595)", () => {
+    // #595: a site the run saw but could not resolve may draw an edge the
+    // diff would miss — every "added" entry would be ambiguous. The refusal
+    // (not a warning beside a verdict) is the loud direction: a regression
+    // to a computed diff over this fixture would read as a clean compare.
+    expect(() =>
+      diffCommand(
+        "/baseline.json",
+        commandContext({
+          analysis: {
+            analyzed: 4,
+            imports: [],
+            failures: [
+              {
+                sourceFile: "libs/alpha/a.go",
+                line: 7,
+                column: 2,
+                reason: "unresolvable specifier",
+              },
+            ],
+          },
+        }),
+        { readBaseline: () => baselineEnvelope() },
+      ),
+    ).toThrow(/the head graph has incomplete coverage — 1 import site could not be resolved/);
   });
 
   it("reports boundary violations introduced by added edges", () => {

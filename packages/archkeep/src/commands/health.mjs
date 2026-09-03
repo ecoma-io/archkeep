@@ -43,7 +43,11 @@
  * It does not print, and it does not decide the process's exit code —
  * `../../cli.mjs` owns those (`./README.md`).
  */
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { buildDependencies, buildProjects } from "./graph.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatHealthReport } from "../report/health-text.mjs";
@@ -108,7 +112,12 @@ export function healthCommand(commandContext, io = {}) {
   const edges = buildDependencies(graph.dependencies);
 
   // The run's coverage facts, the same shape every command's envelope carries.
-  const fileComplete = analysis.failures.filter(isWholeFileFailure).length === 0;
+  // An unresolvable site is a fact the run saw but never judged (#595) —
+  // metrics measured over it would read precision the run does not have,
+  // so it defeats file completeness the way a whole-file failure does.
+  const fileComplete =
+    analysis.failures.filter(isWholeFileFailure).length === 0 &&
+    unresolvableLiteralCount(analysis.failures) === 0;
   // The graph is complete only when the files are AND the graph actually sees
   // every polyglot edge — an Nx workspace with an unregistered plugin carries
   // a graph with no Go/Rust/Python edges, which `graph`/`impact` refuse and
@@ -123,9 +132,7 @@ export function healthCommand(commandContext, io = {}) {
     notAnalyzed: analysis.failures
       .filter(isWholeFileFailure)
       .map(({ sourceFile, reason }) => ({ file: sourceFile, reason })),
-    blindSpots: analysis.failures
-      .filter((f) => !isWholeFileFailure(f))
-      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    blindSpots: blindSpotRows(analysis.failures),
     notes: graphComplete
       ? []
       : [

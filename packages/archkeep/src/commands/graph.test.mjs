@@ -364,7 +364,7 @@ describe("graphCommand", () => {
     expect(result.report.json).toContain('"command": "graph"');
   });
 
-  it("includes blind spots from non-whole-file failures", () => {
+  it("reports blind spots and flips to no-verdict over them (#595)", () => {
     const result = graphCommand(
       commandContext({
         analysis: {
@@ -381,8 +381,13 @@ describe("graphCommand", () => {
         },
       }),
     );
-    expect(result.status).toBe("ok");
-    expect(result.coverage.complete).toBe(true);
+    // #595: a site the run saw but could not resolve may have drawn an edge
+    // this snapshot is missing — the snapshot still reports, but it cannot
+    // claim a verdict over it. Asserting the flip (not only the disclosure)
+    // is the loud direction: a regression to `status: "ok"` over this fixture
+    // is byte-for-byte a clean workspace.
+    expect(result.status).toBe("no-verdict");
+    expect(result.coverage.complete).toBe(false);
     expect(result.coverage.blindSpots).toEqual([
       { file: "libs/alpha/a.go", line: 7, column: 2, reason: "unresolvable specifier" },
     ]);

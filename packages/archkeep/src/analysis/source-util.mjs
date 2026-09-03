@@ -352,6 +352,113 @@ export const refuseUnreadTree = (reader, failures) => {
 export const isWholeFileFailure = (failure) => failure.line === null;
 
 /**
+ * Whether a positioned failure is the declared dynamic limit rather than an
+ * unresolvable specifier.
+ *
+ * Both are permanent blind spots — a site the run saw and could not judge —
+ * and both are disclosed identically (`coverage.blindSpots`, the report's
+ * blind-spot section). They part ways at the verdict: an unresolvable LITERAL
+ * specifier is a concrete question the resolver was asked and could not answer
+ * (#595 — a missing workspace edge at site granularity, an uninstalled
+ * dependency), so it withholds the run's verdict; a non-literal
+ * `import()`/`require()` argument is the language itself declaring the target
+ * computed at runtime, which static analysis cannot answer in principle —
+ * every config loader that opens a consumer-named file contains one — so it
+ * is a declared limit the run states and moves past. Measured on this
+ * repository's own tree: ten such sites in config loaders, unfixable without
+ * giving up the feature that makes them config loaders.
+ *
+ * The field is set only by the TypeScript/Vue analyzer, the one analyzer whose
+ * language has the construct; every other analyzer's positioned failures are
+ * literal specifiers by construction and never set it.
+ *
+ * @param {{ line: number|null, dynamic?: true }} failure
+ * @returns {boolean}
+ */
+export const isDynamicSiteFailure = (failure) => failure.dynamic === true;
+
+/**
+ * Whether a positioned failure is an unresolvable literal pointing at the
+ * EXTERNAL dependency universe — the bare-package class that neither withholds
+ * the verdict nor may.
+ *
+ * A bare specifier (`vitest`, `zod`, a scoped package) resolves against an
+ * installed dependency tree, and a workspace without that tree — a fresh
+ * clone, a trimmed install, the native self-check's `git archive` copy, which
+ * by design carries no `node_modules` — is a normal state. Withholding the
+ * verdict over it would make the tree permanently un-green over dependencies
+ * nobody crossed: measured, that is exactly what this repository's own
+ * required boundary gate did under the unqualified flip, 284 such rows on the
+ * native face alone. The marker rides the row (the TypeScript/Vue analyzer
+ * sets it; `isExternalUnresolvable` holds the class line there — path-like,
+ * `#` subpath and `paths`-alias specifiers never get it, so a workspace-edge
+ * question can never masquerade as external), and every verdict lane counts
+ * by its absence, the same mechanism the `dynamic` marker uses.
+ *
+ * Only the TypeScript/Vue analyzer sets the field today. The other analyzers'
+ * unresolvable literals keep withholding — including legitimately external
+ * coordinates (a JVM package coordinate naming an uninstalled library) —
+ * which is the over-loud direction and is tracked as its own issue rather
+ * than silently tolerated.
+ *
+ * @param {{ line: number|null, external?: true }} failure
+ * @returns {boolean}
+ */
+export const isExternalSiteFailure = (failure) => failure.external === true;
+
+/**
+ * The count of positioned failures that WITHHOLD the run's verdict —
+ * unresolvable literal specifiers that reference the workspace's own surface,
+ * dynamic declared limits and external bare-package sites excluded.
+ *
+ * The one number every verdict lane and refusal guard reads (#595, narrowed):
+ * `check`'s `coverage.complete` and no-verdict lane, the refusal every
+ * descriptive and refuse-class command raises over an unjudged site, and the
+ * envelope builder's completeness law all read this class and nothing else.
+ * Centralized here so the class line cannot drift between the fifteen call
+ * sites the way a repeated inline filter would.
+ *
+ * @param {{ line: number|null, dynamic?: true, external?: true }[]} failures
+ * @returns {number}
+ */
+export const unresolvableLiteralCount = (failures) =>
+  failures.filter(
+    (failure) =>
+      !isWholeFileFailure(failure) &&
+      !isDynamicSiteFailure(failure) &&
+      !isExternalSiteFailure(failure),
+  ).length;
+
+/**
+ * The `coverage.blindSpots` rows every command's coverage block carries: one
+ * row per positioned failure, ALL permanent classes, the run's disclosure of
+ * every site it saw and did not judge.
+ *
+ * Disclosure is deliberately wider than the verdict's withholding: a dynamic
+ * or external site never flips an exit, but it is still named here — the
+ * fields that separate the classes ride the row, which is what lets the
+ * envelope builder's completeness law (`report/json.mjs`) tell a declared
+ * limit and an external bare package from unjudged work without a second
+ * classification.
+ *
+ * @param {{ sourceFile: string, line: number|null, column: number|null,
+ *   reason: string, dynamic?: true, external?: true }[]} failures
+ * @returns {{ file: string, line: number, column: number, reason: string,
+ *   dynamic?: true, external?: true }[]}
+ */
+export const blindSpotRows = (failures) =>
+  failures
+    .filter((failure) => !isWholeFileFailure(failure))
+    .map(({ sourceFile, line, column, reason, dynamic, external }) => ({
+      file: sourceFile,
+      line,
+      column,
+      reason,
+      ...(dynamic ? { dynamic: true } : {}),
+      ...(external ? { external: true } : {}),
+    }));
+
+/**
  * One whole-file failure per source file, first reason kept.
  *
  * The funnel that merges every failure source (`../commands/context.mjs`)

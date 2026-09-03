@@ -376,7 +376,7 @@ describe("explainCommand", () => {
     expect(result.status).not.toBe("findings");
   });
 
-  it("includes blind spots in coverage from non-whole-file failures", () => {
+  it("reports blind spots and flips to no-verdict (#595)", () => {
     const ctx = commandContext({
       analysis: {
         analyzed: 2,
@@ -405,8 +405,12 @@ describe("explainCommand", () => {
     expect(result.coverage.blindSpots).toEqual([
       { file: "libs/alpha/other.go", line: 7, column: 2, reason: "unresolvable specifier" },
     ]);
-    // Not a whole-file failure, so coverage is still "complete".
-    expect(result.coverage.complete).toBe(true);
+    // #595: the queried site resolved, but a blind spot anywhere in the tree
+    // leaves the graph short an edge that whole-graph rules (circularity)
+    // would judge over — the run cannot claim a verdict. Asserting the flip
+    // is the loud direction.
+    expect(result.coverage.complete).toBe(false);
+    expect(result.status).toBe("no-verdict");
   });
 
   it("renders the constraint row that matched in the explanation", () => {

@@ -388,7 +388,7 @@ describe("contextCommand", () => {
     expect(result.report.json).toContain('"command": "context"');
   });
 
-  it("includes blind spots from non-whole-file failures", () => {
+  it("reports blind spots and flips to no-verdict over them (#595)", () => {
     const result = contextCommand(
       "alpha",
       commandContext({
@@ -402,8 +402,10 @@ describe("contextCommand", () => {
       }),
       config(),
     );
-    expect(result.status).toBe("ok");
-    expect(result.coverage.complete).toBe(true);
+    // #595: same verdict law as `graph` — the disclosure stays, the clean
+    // verdict does not.
+    expect(result.status).toBe("no-verdict");
+    expect(result.coverage.complete).toBe(false);
     expect(result.coverage.blindSpots).toEqual([
       { file: "libs/alpha/a.go", line: 7, column: 2, reason: "unresolvable specifier" },
     ]);

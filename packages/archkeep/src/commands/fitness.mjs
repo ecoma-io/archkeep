@@ -45,7 +45,11 @@
  * sorted; JSON rides `canonicalizeJson`. Two runs over an unchanged tree and
  * policy produce byte-identical text and JSON.
  */
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatFitnessSection } from "../report/text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
@@ -134,10 +138,22 @@ export async function fitnessCommand(commandContext, io = {}) {
   const notAnalyzed = analysis.failures
     .filter(isWholeFileFailure)
     .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
+
+  const blindSpotCount = unresolvableLiteralCount(analysis.failures);
   if (notAnalyzed.length > 0) {
     throw new Error(
-      `archkeep: fitness has incomplete coverage — ${notAnalyzed.length} file` +
-        `${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed, so every coverage ` +
+      `archkeep: fitness has incomplete coverage — ` +
+        [
+          notAnalyzed.length > 0
+            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
+            : null,
+          blindSpotCount > 0
+            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(", ") +
+        `, so every coverage ` +
         `and graph claim would be ambiguous between "clean" and "never seen". Fix the ` +
         `unanalyzed files and re-run.`,
     );
@@ -192,9 +208,7 @@ export async function fitnessCommand(commandContext, io = {}) {
     analyzedFiles: analysis.analyzed,
     imports: analysis.imports.length,
     notAnalyzed: [],
-    blindSpots: analysis.failures
-      .filter((failure) => !isWholeFileFailure(failure))
-      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    blindSpots: blindSpotRows(analysis.failures),
     notes: [],
   };
 

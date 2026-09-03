@@ -74,7 +74,11 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { containmentViolation } from "../containment.mjs";
 import { classifyEvolution } from "../governance/evolution-event.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
@@ -558,10 +562,23 @@ export function historyCommand(
     const notAnalyzed = commandContext.analysis.failures
       .filter(isWholeFileFailure)
       .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
-    if (notAnalyzed.length > 0) {
+
+    const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
+    if (notAnalyzed.length > 0 || blindSpotCount > 0) {
       throw new Error(
-        `archkeep: the head graph has incomplete coverage — ${notAnalyzed.length} file` +
-          `${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed, so a captured snapshot ` +
+        `archkeep: the head graph has incomplete coverage — ` +
+          [
+            notAnalyzed.length > 0
+              ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
+              : null,
+            blindSpotCount > 0
+              ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(", ") +
+          `, so 
+a captured snapshot ` +
           `would under-represent the real architecture. Fix the unanalyzed files and re-run.`,
       );
     }
@@ -612,14 +629,7 @@ export function historyCommand(
           analyzedFiles: commandContext.analysis.analyzed,
           imports: commandContext.analysis.imports.length,
           notAnalyzed: [],
-          blindSpots: commandContext.analysis.failures
-            .filter((f) => !isWholeFileFailure(f))
-            .map(({ sourceFile, line, column, reason }) => ({
-              file: sourceFile,
-              line,
-              column,
-              reason,
-            })),
+          blindSpots: blindSpotRows(commandContext.analysis.failures),
           notes: [],
         },
         result: { ...head, policy: headPolicy ?? undefined },

@@ -35,7 +35,11 @@
  * under project roots, `impact` refuses loudly rather than returning a result
  * whose dependents silently under-represent the real architecture.
  */
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { UsageError } from "../errors.mjs";
 import { computeImpactConstraints } from "./edge-constraints.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
@@ -154,16 +158,27 @@ export function impactCommand(projectName, commandContext, config = null) {
     .filter(isWholeFileFailure)
     .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
 
-  if (notAnalyzed.length > 0) {
+  const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
+
+  if (notAnalyzed.length > 0 || blindSpotCount > 0) {
     throw new Error(
-      `archkeep: the graph has incomplete coverage — ${notAnalyzed.length} file` +
-        `${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed, so the impact set may ` +
+      `archkeep: the graph has incomplete coverage — ` +
+        [
+          notAnalyzed.length > 0
+            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
+            : null,
+          blindSpotCount > 0
+            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(", ") +
+        `, so 
+the impact set may ` +
         `under-represent the real architecture. Fix the unanalyzed files and re-run.`,
     );
   }
-  const blindSpots = commandContext.analysis.failures
-    .filter((f) => !isWholeFileFailure(f))
-    .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason }));
+  const blindSpots = blindSpotRows(commandContext.analysis.failures);
 
   const complete = true; // whole-file failures already threw above
   const status = "ok";

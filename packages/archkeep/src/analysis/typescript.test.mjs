@@ -310,6 +310,7 @@ describe("analyzeTypeScript — resolution through TypeScript's own resolver", (
         line: 1,
         column: 21,
         reason: "TypeScript cannot resolve 'left-pad' from 'apps/web/src/main.ts'",
+        external: true,
       },
     ]);
   });

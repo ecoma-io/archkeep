@@ -64,7 +64,11 @@ import { statSync } from "node:fs";
 import { join } from "node:path";
 
 import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { tsconfigPathsFacts } from "../analysis/typescript.mjs";
 import { compareGoWork, parseGoWorkUse } from "../go-work.mjs";
 import { judgeTsconfigPaths } from "../tsconfig-paths.mjs";
@@ -497,7 +501,10 @@ export async function planContextCommand(
         (a.messageId < b.messageId ? -1 : a.messageId > b.messageId ? 1 : 0),
     );
 
-  const complete = notAnalyzed.length === 0;
+  // An unresolvable literal site is work the run saw but never judged
+  // (#595, narrowed): a plan over it would present edges the run does not
+  // hold, so it defeats completeness the way a whole-file failure does.
+  const complete = notAnalyzed.length === 0 && unresolvableLiteralCount(failures) === 0;
   const status = complete ? "ok" : "no-verdict";
   const exitCode = complete ? 0 : 3;
 
@@ -525,9 +532,7 @@ export async function planContextCommand(
     analyzedFiles: wholeTree.analyzed,
     imports: wholeTree.imports.length,
     notAnalyzed,
-    blindSpots: failures
-      .filter((failure) => !isWholeFileFailure(failure))
-      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    blindSpots: blindSpotRows(failures),
     // Intent's own coverage notes ride the same seam `check` threads them on
     // (today only an `"optional": true` allowed row whose statement is absent),
     // so the plan's text and JSON reports read the same notes `check` does.

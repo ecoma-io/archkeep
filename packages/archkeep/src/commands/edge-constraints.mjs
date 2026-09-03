@@ -42,6 +42,7 @@
  * enough that merging them would blur the layer boundary the AGENTS.md guards.
  */
 
+import { edgeEvolutionIdentity } from "../governance/evolution-event.mjs";
 import { renderMessage } from "../rules/messages.mjs";
 import { buildReachability } from "../rules/reachability.mjs";
 import {
@@ -212,7 +213,9 @@ export function declaredEdgeViolationsForCheck(graph, depConstraints) {
  * constraint table. The constraint table is the current one — it is what `check`
  * would judge from today, not what some past version judged from.
  *
- * @param {{addedEdges: object[], removedEdges: object[]}} diff From `computeDiff`.
+ * @param {{addedEdges: object[], removedEdges: object[],
+ *   changedProjects?: {name: string, changes: {field: string, baseline?: unknown,
+ *   head?: unknown}[]}[]}} diff From `computeDiff`.
  * @param {object} headNodes The head graph's `nodes` map (for tag lookups).
  * @param {object} headDependencies The head graph's `dependencies` map (for reachability).
  * @param {object[]} baselineProjects The baseline snapshot's project list (each
@@ -282,6 +285,49 @@ export function computeRuleImpact(
     );
     for (const v of violations) {
       resolved.push(v);
+    }
+  }
+
+  // Standing edges whose legality a tags-only change can flip (#600): the
+  // edge moved in neither direction, so the loops above never see it, but
+  // the tags its judgment reads did. An edge adjacent to a project whose
+  // tags changed is judged under BOTH sides' tags — violating under head
+  // where it was legal under baseline is an introduced violation, the
+  // inverse is a resolved one, and a violation under both is pre-existing
+  // (unchanged legality is `check`'s finding, not this diff's). Edges the
+  // loops above already judged are skipped by identity, so no edge is ever
+  // reported twice.
+  const tagChangedNames = new Set(
+    (diff.changedProjects ?? [])
+      .filter((project) => (project.changes ?? []).some((change) => change.field === "tags"))
+      .map((project) => project.name),
+  );
+  if (tagChangedNames.size > 0) {
+    const judged = new Set(
+      [...diff.addedEdges, ...diff.removedEdges].map((edge) => edgeEvolutionIdentity(edge)),
+    );
+    for (const edge of baselineDependencies) {
+      if (!(tagChangedNames.has(edge.source) || tagChangedNames.has(edge.target))) continue;
+      if (judged.has(edgeEvolutionIdentity(edge))) continue;
+      const headViolations = judgeEdge(
+        edge,
+        headNodes,
+        headDependencies,
+        depConstraints,
+        headReachability,
+      );
+      const baselineViolations = judgeEdge(
+        edge,
+        baselineNodes,
+        baselineDepsMap,
+        depConstraints,
+        baselineReachability,
+      );
+      if (headViolations.length > 0 && baselineViolations.length === 0) {
+        introduced.push(...headViolations);
+      } else if (baselineViolations.length > 0 && headViolations.length === 0) {
+        resolved.push(...baselineViolations);
+      }
     }
   }
 

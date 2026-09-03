@@ -14,12 +14,14 @@ vi.mock("./analysis/source-util.mjs", () => ({
   fileFailure: (sourceFile, reason) => ({ sourceFile, line: null, column: null, reason }),
 }));
 
+import { LANGUAGE_BY_EXTENSION } from "./analysis/registry.mjs";
 import {
   analyzeWorkspace,
   annotateMFERemotes,
   annotatePackageFacts,
   createWorkspace,
   declaredPackages,
+  exemptFromUnsupportedLanguage,
   listTrackedFiles,
   packageEntryPoints,
   polyglotManifests,
@@ -630,5 +632,40 @@ describe("naming the polyglot manifests the unregistered-plugin gap turns on", (
       "go.mod",
       "nested/Cargo.toml",
     ]);
+  });
+});
+
+describe("the unsupported-language exemption (#601)", () => {
+  it("never exempts an extension a language analyzer claims", () => {
+    // The seam between the two tables is where the silent direction would
+    // live: an exemption row covering a format an analyzer claims would
+    // remove real source from the analysis universe while the analyzer kept
+    // claiming it. One loop over `LANGUAGE_BY_EXTENSION` covers every row
+    // either table grows.
+    for (const extension of Object.keys(LANGUAGE_BY_EXTENSION)) {
+      expect(exemptFromUnsupportedLanguage(`libs/a/f${extension}`)).toBe(false);
+    }
+  });
+
+  it("exempts furniture, data formats, dotfiles, and the manifests the engine reads", () => {
+    expect(exemptFromUnsupportedLanguage("README.md")).toBe(true);
+    expect(exemptFromUnsupportedLanguage("docs/plan.txt")).toBe(true);
+    expect(exemptFromUnsupportedLanguage("config/settings.json")).toBe(true);
+    expect(exemptFromUnsupportedLanguage("assets/logo.svg")).toBe(true);
+    expect(exemptFromUnsupportedLanguage("pnpm-lock.lock")).toBe(true);
+    expect(exemptFromUnsupportedLanguage("LICENSE")).toBe(true);
+    expect(exemptFromUnsupportedLanguage("Dockerfile")).toBe(true);
+    expect(exemptFromUnsupportedLanguage(".npmrc")).toBe(true);
+    expect(exemptFromUnsupportedLanguage("libs/a/go.mod")).toBe(true);
+    expect(exemptFromUnsupportedLanguage("crates/b/Cargo.toml")).toBe(true);
+  });
+
+  it("keeps a source-like unknown disclosed as unsupported language", () => {
+    // The cut is formats that cannot carry an import — not every file the
+    // analyzers do not read. A source-like unknown stays named.
+    expect(exemptFromUnsupportedLanguage("ext/plugin.rb")).toBe(false);
+    expect(exemptFromUnsupportedLanguage("ext/plugin.php")).toBe(false);
+    expect(exemptFromUnsupportedLanguage("src/thing.cpp")).toBe(false);
+    expect(exemptFromUnsupportedLanguage("api/thing.proto")).toBe(false);
   });
 });

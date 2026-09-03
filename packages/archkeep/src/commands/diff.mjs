@@ -40,7 +40,11 @@
  */
 import { readFileSync } from "node:fs";
 
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
 import { computeRuleImpact } from "./edge-constraints.mjs";
 import { SCHEMA_VERSION } from "../report/json.mjs";
@@ -385,10 +389,23 @@ export function diffCommand(
     .filter(isWholeFileFailure)
     .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
 
-  if (notAnalyzed.length > 0) {
+  const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
+
+  if (notAnalyzed.length > 0 || blindSpotCount > 0) {
     throw new Error(
-      `archkeep: the head graph has incomplete coverage — ${notAnalyzed.length} file` +
-        `${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed, so every "added" or ` +
+      `archkeep: the head graph has incomplete coverage — ` +
+        [
+          notAnalyzed.length > 0
+            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
+            : null,
+          blindSpotCount > 0
+            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(", ") +
+        `, so 
+every "added" or ` +
         `"removed" entry in the diff would be ambiguous between a real change and a coverage ` +
         `gap. Fix the unanalyzed files and re-run.`,
     );
@@ -404,9 +421,7 @@ export function diffCommand(
     analyzedFiles: commandContext.analysis.analyzed,
     imports: commandContext.analysis.imports.length,
     notAnalyzed: [],
-    blindSpots: commandContext.analysis.failures
-      .filter((f) => !isWholeFileFailure(f))
-      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    blindSpots: blindSpotRows(commandContext.analysis.failures),
     notes: [],
   };
 
@@ -525,8 +540,9 @@ export function diffCommand(
     // no depConstraints violations were introduced or resolved on the changed
     // edges. Run `check` for the complete verdict.
     coverage.notes.push(
-      "per-edge rule-impact covers only depConstraints (3 of 15 violation types). " +
-        "A dependency with no rule-impact may still violate npm-ban, circular-dependency, " +
+      "per-edge rule-impact covers only depConstraints (3 of 15 violation types; standing " +
+        "edges adjacent to a tags-changed project are re-judged under both sides' tags). A " +
+        "dependency with no rule-impact may still violate npm-ban, circular-dependency, " +
         "lazy-load, or other rules that require import-site details. Run check for the " +
         "complete verdict.",
     );
