@@ -45,14 +45,11 @@
  * sorted; JSON rides `canonicalizeJson`. Two runs over an unchanged tree and
  * policy produce byte-identical text and JSON.
  */
-import {
-  blindSpotRows,
-  isWholeFileFailure,
-  unresolvableLiteralCount,
-} from "../analysis/source-util.mjs";
+import { blindSpotRows } from "../analysis/source-util.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatFitnessSection } from "../report/text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { driftForCheck } from "./drift.mjs";
 import {
   evaluateFitness,
@@ -118,9 +115,13 @@ export function declaresFitness(config) {
  *
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{config?: object|null}} [io] The loaded policy, injectable for tests.
- * @returns {Promise<{status: "ok"|"findings"|"no-verdict", fitness: object, coverage: object,
- *   report: {text: string, json: string}}>}
- * @throws {Error} on every condition the header lists, all exit-3 class.
+ * @returns {Promise<{status: "ok"|"findings"|"no-verdict", fitness?: object,
+ *   coverage: object, report: {text: string, json: string}}>}
+ *   `status: "no-verdict"` from the coverage refusal carries no `fitness`
+ *   payload — the verdict was withheld, and the envelope's `coverage` block is
+ *   the whole answer (#608).
+ * @throws {Error} on every condition the header lists except the coverage one,
+ *   which returns instead of throwing.
  */
 export async function fitnessCommand(commandContext, io = {}) {
   const { root, provider, marker, analysis } = commandContext;
@@ -133,30 +134,16 @@ export async function fitnessCommand(commandContext, io = {}) {
     );
   }
 
-  // A verdict over a tree it could not fully read is a guess. Same refusal
-  // `drift`/`graph`/`diff` make for the same condition.
-  const notAnalyzed = analysis.failures
-    .filter(isWholeFileFailure)
-    .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
-
-  const blindSpotCount = unresolvableLiteralCount(analysis.failures);
-  if (notAnalyzed.length > 0) {
-    throw new Error(
-      `archkeep: fitness has incomplete coverage — ` +
-        [
-          notAnalyzed.length > 0
-            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
-            : null,
-          blindSpotCount > 0
-            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(", ") +
-        `, so every coverage ` +
-        `and graph claim would be ambiguous between "clean" and "never seen". Fix the ` +
-        `unanalyzed files and re-run.`,
-    );
+  // A verdict over a tree it could not fully read is a guess. Refused through
+  // the one structured contract `./coverage-verdict.mjs` builds (#608) — this
+  // gate used to check whole-file failures only and then claim
+  // `coverage.complete: true` beside `blindSpots` that could carry an unjudged
+  // site, which the envelope law refuses as a programming error. The unified
+  // completeness returns the no-verdict envelope instead, for every axis the
+  // envelope law already withholds over.
+  const completeness = coverageVerdict(commandContext);
+  if (!completeness.complete) {
+    return coverageRefusal({ command: "fitness", commandContext, what: "judging fitness" });
   }
 
   // `drift-free` judges the SAME verdict-shaped intent `check`'s fold builds —

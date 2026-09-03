@@ -438,44 +438,53 @@ describe("impactCommand", () => {
     );
   });
 
-  it("throws on incomplete coverage (whole-file failures)", () => {
-    expect(() =>
-      impactCommand(
-        "alpha",
-        commandContext({
-          analysis: {
-            analyzed: 3,
-            imports: [],
-            failures: [
-              {
-                sourceFile: "libs/beta/broken.go",
-                line: null,
-                column: null,
-                reason: "parse error",
-              },
-            ],
-          },
-        }),
-      ),
-    ).toThrow(/incomplete coverage/);
+  it("reports no-verdict on incomplete coverage (whole-file failures)", () => {
+    const result = impactCommand(
+      "alpha",
+      commandContext({
+        analysis: {
+          analyzed: 3,
+          imports: [],
+          failures: [
+            {
+              sourceFile: "libs/beta/broken.go",
+              line: null,
+              column: null,
+              reason: "parse error",
+            },
+          ],
+        },
+      }),
+    );
+    expect(result.status).toBe("no-verdict");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toEqual([
+      { file: "libs/beta/broken.go", reason: "parse error" },
+    ]);
+    expect(result.report.text).toContain("coverage incomplete");
   });
 
-  it("counts the unanalyzed files in the refusal", () => {
-    expect(() =>
-      impactCommand(
-        "alpha",
-        commandContext({
-          analysis: {
-            analyzed: 2,
-            imports: [],
-            failures: [
-              { sourceFile: "a.go", line: null, column: null, reason: "r1" },
-              { sourceFile: "b.go", line: null, column: null, reason: "r2" },
-            ],
-          },
-        }),
-      ),
-    ).toThrow(/2 files could not be analyzed/);
+  it("counts the unanalyzed files in the refusal reason", () => {
+    const result = impactCommand(
+      "alpha",
+      commandContext({
+        analysis: {
+          analyzed: 2,
+          imports: [],
+          failures: [
+            { sourceFile: "a.go", line: null, column: null, reason: "r1" },
+            { sourceFile: "b.go", line: null, column: null, reason: "r2" },
+          ],
+        },
+      }),
+    );
+    // The count survives the move from prose-on-stderr to a structured
+    // verdict: the text face names both files, the list names each one.
+    expect(result.report.text).toContain("2 files could not be analyzed — coverage incomplete");
+    expect(result.coverage.notAnalyzed).toHaveLength(2);
   });
 
   it("throws when the plugin is unregistered on a polyglot Nx workspace", () => {
@@ -519,28 +528,35 @@ describe("impactCommand", () => {
     expect(result.report.json).toContain('"command": "impact"');
   });
 
-  it("refuses an impact set over an unresolved site instead of reporting complete (#595)", () => {
+  it("reports no-verdict over an unresolved site instead of reporting complete (#595)", () => {
     // #595: an unresolved site may hide an edge the impact set needs — the
-    // refusal (not a warning beside the set) is the loud direction.
-    expect(() =>
-      impactCommand(
-        "alpha",
-        commandContext({
-          analysis: {
-            analyzed: 6,
-            imports: [],
-            failures: [
-              {
-                sourceFile: "libs/alpha/a.go",
-                line: 7,
-                column: 2,
-                reason: "unresolvable specifier",
-              },
-            ],
-          },
-        }),
-      ),
-    ).toThrow(/the graph has incomplete coverage — 1 import site could not be resolved/);
+    // withheld verdict (not a warning beside the set) is the loud direction.
+    const result = impactCommand(
+      "alpha",
+      commandContext({
+        analysis: {
+          analyzed: 6,
+          imports: [],
+          failures: [
+            {
+              sourceFile: "libs/alpha/a.go",
+              line: 7,
+              column: 2,
+              reason: "unresolvable specifier",
+            },
+          ],
+        },
+      }),
+    );
+    expect(result.status).toBe("no-verdict");
+    expect(result.coverage.complete).toBe(false);
+    // The site is named BY VALUE, not counted in prose.
+    expect(result.coverage.blindSpots).toEqual([
+      { file: "libs/alpha/a.go", line: 7, column: 2, reason: "unresolvable specifier" },
+    ]);
+    expect(result.report.text).toContain(
+      "1 import site could not be resolved — coverage incomplete",
+    );
   });
 
   it("never exits 1 — impact is descriptive", () => {

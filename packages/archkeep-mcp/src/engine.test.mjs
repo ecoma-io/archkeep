@@ -654,26 +654,36 @@ describe("archkeep_scenario", () => {
     expect(result.result.delta.dependentsAdded).toContain("adapter");
   });
 
-  it("propagates the engine's incomplete-coverage refusal verbatim", async () => {
+  it("answers the incomplete-coverage refusal as the no-verdict envelope (#608)", async () => {
     // The coverage gate is the scenario's loud direction: an agent must never
-    // get a what-if answer over a graph that under-represents the tree.
+    // get a what-if answer over a graph that under-represents the tree. The
+    // refusal arrives AS the envelope — status "no-verdict", exitCode 3, the
+    // unread file named in `coverage.notAnalyzed` — the same structured shape
+    // the graph family has answered since #602, not a tool error carrying
+    // only a sentence.
     const w = workspace({ violating: false });
     const withGhost = {
       ...w.io,
       listFiles: () => [...w.io.listFiles(), "libs/domain/ghost.go"],
     };
-    await expect(
-      scenarioTool(
-        {
-          workspaceRoot: w.root,
-          projectName: "domain",
-          scenarioJson: `${JSON.stringify({
-            changes: [{ type: "dependency_added", source: "domain", target: "app" }],
-          })}\n`,
-        },
-        withGhost,
-      ),
-    ).rejects.toThrow(/incomplete coverage/);
+    const result = await scenarioTool(
+      {
+        workspaceRoot: w.root,
+        projectName: "domain",
+        scenarioJson: `${JSON.stringify({
+          changes: [{ type: "dependency_added", source: "domain", target: "app" }],
+        })}\n`,
+      },
+      withGhost,
+    );
+    expect(result.command).toBe("scenario");
+    expect(result.status).toBe("no-verdict");
+    expect(result.exitCode).toBe(3);
+    expect(result.coverage.complete).toBe(false);
+    expect(result.coverage.notAnalyzed).toContainEqual(
+      expect.objectContaining({ file: "libs/domain/ghost.go" }),
+    );
+    expect(result.result).toBeUndefined();
   });
 
   it("propagates the parse refusal for a malformed scenario, never an answer", async () => {

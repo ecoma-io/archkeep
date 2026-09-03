@@ -40,13 +40,9 @@
  */
 import { readFileSync } from "node:fs";
 
-import {
-  blindSpotRows,
-  isWholeFileFailure,
-  unresolvableLiteralCount,
-} from "../analysis/source-util.mjs";
 import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
 import { computeRuleImpact } from "./edge-constraints.mjs";
+import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { SCHEMA_VERSION } from "../report/json.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatDiffReport } from "../report/diff-text.mjs";
@@ -353,11 +349,14 @@ export function computeDiff(baseline, head) {
  *   When omitted, reads from the real filesystem. `config` is the loaded
  *   boundary config; when provided, rule-impact analysis is computed alongside
  *   the structural diff.
- * @returns {{status: "ok"|"no-verdict", diff: object, coverage: object,
- *   report: {text: string, json: string}}}
- * @throws {Error} when the baseline cannot be read or is incomplete, when
- *   the head is incomplete, or when an Nx workspace has polyglot manifests
- *   but the plugin is not registered.
+ * @returns {{status: "ok"|"no-verdict", diff?: object, coverage: object,
+ *   report: {text: string, json: string}}} `diff` is absent under
+ *   `status: "no-verdict"` — the coverage refusal (#608) withholds the
+ *   comparison, and the envelope's `coverage` block is the whole answer.
+ * @throws {Error} when the baseline cannot be read or is incomplete, or when
+ *   an Nx workspace has polyglot manifests but the plugin is not registered
+ *   (the inline throw in the body). An incomplete head returns the
+ *   structured no-verdict envelope instead of throwing (#608).
  */
 export function diffCommand(
   baselinePath,
@@ -383,32 +382,18 @@ export function diffCommand(
   // is a caller error, not a workspace fact, and it should name the file.
   const baseline = readBaseline(baselinePath);
 
-  // Refuse an incomplete head — same reasoning as the incomplete baseline
-  // refusal: every "added" or "removed" entry would be ambiguous.
-  const notAnalyzed = commandContext.analysis.failures
-    .filter(isWholeFileFailure)
-    .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
-
-  const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
-
-  if (notAnalyzed.length > 0 || blindSpotCount > 0) {
-    throw new Error(
-      `archkeep: the head graph has incomplete coverage — ` +
-        [
-          notAnalyzed.length > 0
-            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
-            : null,
-          blindSpotCount > 0
-            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(", ") +
-        `, so 
-every "added" or ` +
-        `"removed" entry in the diff would be ambiguous between a real change and a coverage ` +
-        `gap. Fix the unanalyzed files and re-run.`,
-    );
+  // Refuse an incomplete head through the one structured contract
+  // `./coverage-verdict.mjs` builds (#608): the diff is withheld in-band —
+  // status "no-verdict", exit 3, a `coverage` block naming every file and
+  // site the run could not judge — where a parser and `--output` can read it.
+  // The reasoning is the incomplete-baseline refusal's: every "added" or
+  // "removed" entry would be ambiguous. That baseline refusal stays a throw —
+  // `parseBaseline` above throws it through the default reader — because a
+  // baseline nobody captured correctly is a caller error about a file, not a
+  // coverage fact about THIS tree.
+  const completeness = coverageVerdict(commandContext);
+  if (!completeness.complete) {
+    return coverageRefusal({ command: "diff", commandContext, what: "diffing the head graph" });
   }
 
   const head = buildHeadSnapshot(commandContext);
@@ -421,7 +406,7 @@ every "added" or ` +
     analyzedFiles: commandContext.analysis.analyzed,
     imports: commandContext.analysis.imports.length,
     notAnalyzed: [],
-    blindSpots: blindSpotRows(commandContext.analysis.failures),
+    blindSpots: completeness.blindSpots,
     notes: [],
   };
 
@@ -432,6 +417,12 @@ every "added" or ` +
       projects: baseline.projects.length,
       edges: baseline.dependencies.length,
       toolVersion: baseline.toolVersion,
+      // The provenance the baseline itself recorded — which commit, remote,
+      // and dirtiness the captured side names (#609). The head side's own
+      // provenance rides the envelope's `workspace.provenance`; without the
+      // baseline's, a consumer could not tell WHICH revision the empty or
+      // non-empty diff is measured against.
+      provenance: baseline.provenance ?? null,
     },
     head: { projects: head.projects.length, edges: head.dependencies.length },
     addedProjects: diff.addedProjects,

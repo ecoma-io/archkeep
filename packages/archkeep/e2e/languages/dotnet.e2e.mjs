@@ -163,7 +163,14 @@ describe(".NET language E2E", () => {
 
       const refused = archkeep(broken.root, ["diff", baseline, "--format", "json"]);
       expect(refused.exitCode, "diff refuses an unreadable head source").toBe(3);
-      expect(refused.stderr).toContain("could not be analyzed");
+      // #608 moved the refusal in-band — the envelope on stdout names the
+      // unreadable file; a stdout run keeps stderr silent.
+      expect(refused.json.status).toBe("no-verdict");
+      expect(refused.json.coverage.notAnalyzed.map((row) => row.file)).toEqual([
+        "libs/domain/Name.cs",
+      ]);
+      expect(refused.json.coverage.notAnalyzed[0].reason).toContain("could not be read");
+      expect(refused.json.result).toBeUndefined();
     } finally {
       broken.cleanup();
     }

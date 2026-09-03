@@ -35,13 +35,9 @@
  * under project roots, `impact` refuses loudly rather than returning a result
  * whose dependents silently under-represent the real architecture.
  */
-import {
-  blindSpotRows,
-  isWholeFileFailure,
-  unresolvableLiteralCount,
-} from "../analysis/source-util.mjs";
 import { UsageError } from "../errors.mjs";
 import { computeImpactConstraints } from "./edge-constraints.mjs";
+import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatImpactReport } from "../report/impact-text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
@@ -127,11 +123,14 @@ export function computeImpact(projectName, graph) {
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {object} [config] The loaded boundary config. When provided,
  *   constraint context and violations for each dependent edge are computed.
- * @returns {{status: "ok"|"no-verdict", impact: object, coverage: object,
+ * @returns {{status: "ok"|"no-verdict", impact?: object, coverage: object,
  *   report: {text: string, json: string}}}
+ *   `status: "no-verdict"` carries no `impact` payload — the verdict was
+ *   withheld, and the envelope's `coverage` block is the whole answer (#608).
  * @throws {Error} when an Nx workspace has polyglot manifests but the plugin
- *   is not registered, or when the named project does not exist in the graph,
- *   or when the graph has incomplete coverage.
+ *   is not registered, or when the named project does not exist in the graph.
+ *   Incomplete coverage returns the structured no-verdict envelope instead of
+ *   throwing (#608).
  */
 export function impactCommand(projectName, commandContext, config = null) {
   const { root, provider, marker, graph, pluginGap } = commandContext;
@@ -154,33 +153,18 @@ export function impactCommand(projectName, commandContext, config = null) {
   // project before the run invests in anything else.
   const impact = computeImpact(projectName, graph);
 
-  const notAnalyzed = commandContext.analysis.failures
-    .filter(isWholeFileFailure)
-    .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
-
-  const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
-
-  if (notAnalyzed.length > 0 || blindSpotCount > 0) {
-    throw new Error(
-      `archkeep: the graph has incomplete coverage — ` +
-        [
-          notAnalyzed.length > 0
-            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
-            : null,
-          blindSpotCount > 0
-            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(", ") +
-        `, so 
-the impact set may ` +
-        `under-represent the real architecture. Fix the unanalyzed files and re-run.`,
-    );
+  // The impact set is a claim about the tree the run read, refused through the
+  // one structured contract `./coverage-verdict.mjs` builds (#608): the
+  // verdict is withheld in-band — status "no-verdict", exit 3, a `coverage`
+  // block naming every file and site the run could not judge — where a parser
+  // and `--output` can read it, not on stderr where only a human can.
+  const completeness = coverageVerdict(commandContext);
+  if (!completeness.complete) {
+    return coverageRefusal({ command: "impact", commandContext, what: "computing impact" });
   }
-  const blindSpots = blindSpotRows(commandContext.analysis.failures);
+  const blindSpots = completeness.blindSpots;
 
-  const complete = true; // whole-file failures already threw above
+  const complete = true; // the incompleteness cases all returned above
   const status = "ok";
   const exitCode = 0;
 

@@ -23,8 +23,12 @@
  * exit 1, beside `check` and `fitness`; `./change.mjs` later became the
  * fourth, over a different question — declared intent versus observed delta.
  *
- * Refusals (each a throw, exit 3 upstream — a delta that could not honestly
- * classify must never read as "no change"):
+ * Refusals — a delta that could not honestly classify must never read as
+ * "no change". Incomplete CURRENT coverage on the compare side returns the
+ * structured no-verdict envelope `./coverage-verdict.mjs` builds (#608) —
+ * status "no-verdict", exit 3, a `coverage` block naming every file and site
+ * the run could not judge — where a parser and `--output` can read it; the
+ * rest are throws, exit 3 upstream:
  * - a baseline that cannot be read, parsed, or holds a foreign schemaVersion
  *   (`./delta-snapshot.mjs`'s loader owns those);
  * - a provider mismatch between baseline and this run (`providerMismatch`) —
@@ -32,8 +36,8 @@
  *   across two different project models is not trustworthy: the same tree
  *   attributed to different projects would classify a rename as an
  *   introduced/resolved pair the code does not contain;
- * - incomplete CURRENT coverage — a delta over a half-analyzed head is not a
- *   verdict, the same posture `check` takes on `unchecked` files;
+ * - incomplete coverage on the CAPTURE side (`refuseUnjudgeableHead`), where
+ *   there is no envelope to withhold — a baseline write has no verdict;
  * - an Nx workspace with polyglot manifests but no plugin registration — the
  *   same silently-under-representing graph `graph`/`diff` refuse.
  *
@@ -101,6 +105,7 @@ import {
 } from "./delta-snapshot.mjs";
 import { computeDiff } from "./diff.mjs";
 import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
+import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
 
@@ -109,20 +114,21 @@ const require = createRequire(import.meta.url);
 const { name: TOOL_NAME, version: TOOL_VERSION } = require("../../package.json");
 
 /**
- * Refuses the two head states no delta side may be built over, shared by both
- * modes: the unregistered-plugin graph and incomplete analysis coverage.
+ * Refuses the unregistered-plugin head state no delta side may be built over:
+ * on an Nx workspace whose `nx.json` does not register this plugin but whose
+ * tracked files include polyglot manifests under project roots.
  *
  * Exported since `change` arrived because that command builds its comparison
- * over the same two head states — a graph that under-represents the tree and
- * an analysis with holes would reconcile a declaration against architecture
- * nobody observed — and a second copy of the refusal is where the two
- * commands would drift into answering "may this head be judged?" differently.
+ * over the same head state — a graph that under-represents the tree would
+ * reconcile a declaration against architecture nobody observed — and a second
+ * copy of the refusal is where the two commands would drift into answering
+ * "may this head be judged?" differently.
  *
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {string} activity Which mode is refusing, for the message.
- * @throws {Error} on either condition.
+ * @throws {Error} on the unregistered-plugin graph.
  */
-export function refuseUnjudgeableHead(commandContext, activity) {
+export function refusePluginGapHead(commandContext, activity) {
   const { provider, pluginGap } = commandContext;
   if (provider === "nx" && !pluginGap.registered && pluginGap.manifests.length > 0) {
     throw new Error(
@@ -134,6 +140,28 @@ export function refuseUnjudgeableHead(commandContext, activity) {
         `manifests if they are not in use.`,
     );
   }
+}
+
+/**
+ * Refuses, as a throw, the two head states no delta side may be built over:
+ * the unregistered-plugin graph (`refusePluginGapHead`) and incomplete
+ * analysis coverage.
+ *
+ * The coverage half stayed a throw through #602's unification of the
+ * graph-family refusal, and it stays one here — but only for the CAPTURE
+ * side: `captureDelta` writes a baseline, and a write that cannot be honest
+ * has no verdict to withhold, so stderr is the only face it has. The compare
+ * side (`deltaCommand`, `changeCommand`) refuses coverage through
+ * `./coverage-verdict.mjs`'s structured envelope (#608) instead and calls only
+ * `refusePluginGapHead`, so a withheld verdict reaches a parser and
+ * `--output` in-band.
+ *
+ * @param {object} commandContext From `resolveCommandContext`.
+ * @param {string} activity Which mode is refusing, for the message.
+ * @throws {Error} on either condition.
+ */
+export function refuseUnjudgeableHead(commandContext, activity) {
+  refusePluginGapHead(commandContext, activity);
   const notAnalyzed = commandContext.analysis.failures.filter(isWholeFileFailure);
 
   const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
@@ -150,8 +178,7 @@ export function refuseUnjudgeableHead(commandContext, activity) {
         ]
           .filter(Boolean)
           .join(", ") +
-        `, so 
-the evidence would ` +
+        `, so the evidence would ` +
         `miss violations living there and a later classification would misread the gap as a ` +
         `code change. Fix the unanalyzed files and re-run.`,
     );
@@ -397,15 +424,21 @@ const short = (fingerprint) =>
  *   `loadIntent`; absent intent ⇒ no ids, an in-band note says so), and the
  *   custom-rule host's two injectable seams, passed through to
  *   `customRulesForDelta`.
- * @returns {Promise<{status: "ok"|"findings"|"no-verdict", delta: object,
+ * @returns {Promise<{status: "ok"|"findings"|"no-verdict", delta?: object,
  *   coverage: object,
- *   eventWrite: {id: string, duplicate: boolean}|null,
- *   report: {text: string, json: string, sarif: string}}>} `delta` carries
+ *   eventWrite?: {id: string, duplicate: boolean}|null,
+ *   report: {text: string, json: string, sarif?: string}}>} `delta` carries
  *   the additive `classifications`/`affected` fields (design §1); `eventWrite`
  *   is `null` unless `eventOut` was given, then the store's answer for the
- *   event that was (or already was) recorded.
+ *   event that was (or already was) recorded. `status: "no-verdict"` from the
+ *   coverage refusal (#608) carries neither `delta` nor `eventWrite` — the
+ *   comparison was withheld before any event work, and the envelope's
+ *   `coverage` block plus its `decision.reason` are the whole answer; the
+ *   report then has no `sarif` face (there are no findings to render).
  * @throws {Error} on every refusal the module header lists, and on a
  *   custom-rule LOAD failure (`./custom-rules.mjs` argues the split).
+ *   Incomplete head coverage returns the structured no-verdict envelope
+ *   instead of throwing (#608); the unregistered-plugin graph keeps its throw.
  */
 export async function deltaCommand(
   baselinePath,
@@ -421,7 +454,22 @@ export async function deltaCommand(
 ) {
   const { root, provider, marker, graph, analysis, tracked } = commandContext;
 
-  refuseUnjudgeableHead(commandContext, "compute a delta");
+  // The plugin-gap refusal stays a throw; the coverage refusal returns the one
+  // structured envelope `./coverage-verdict.mjs` builds (#608): a verdict
+  // withheld because the run could not read the tree belongs in-band, where a
+  // parser and `--output` can read it — the same contract the graph family has
+  // run since #602. The capture side keeps the throw (`refuseUnjudgeableHead`
+  // above), because a baseline write has no envelope to withhold.
+  refusePluginGapHead(commandContext, "compute a delta");
+  const completeness = coverageVerdict(commandContext);
+  if (!completeness.complete) {
+    return coverageRefusal({
+      command: "delta",
+      commandContext,
+      what: "computing a delta",
+      decision: true,
+    });
+  }
   if (!config) {
     throw new Error(
       "archkeep: cannot compute a delta without a boundary config — both sides are re-judged " +

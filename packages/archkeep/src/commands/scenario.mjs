@@ -11,11 +11,7 @@
  */
 import { resolveProvenance } from "./provenance.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
-import {
-  blindSpotRows,
-  isWholeFileFailure,
-  unresolvableLiteralCount,
-} from "../analysis/source-util.mjs";
+import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { evaluateScenario, parseScenarioInput } from "./scenario-evaluation.mjs";
 export { parseScenarioInput } from "./scenario-evaluation.mjs";
 
@@ -27,7 +23,10 @@ export { parseScenarioInput } from "./scenario-evaluation.mjs";
  * @param {string} scenarioJson The scenario description as JSON.
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {object} [config] The loaded boundary config.
- * @returns {{status: string, scenario: object, coverage: object, report: {text: string, json: string}}}
+ * @returns {{status: "ok"|"no-verdict", scenario?: object, coverage: object,
+ *   report: {text: string, json: string}}} `scenario` is absent under
+ *   `status: "no-verdict"` — the coverage refusal (#608) withholds the
+ *   evaluation, and the envelope's `coverage` block is the whole answer.
  */
 export function scenarioCommand(projectName, scenarioJson, commandContext, config = null) {
   const { root, provider, marker, graph, pluginGap } = commandContext;
@@ -48,30 +47,12 @@ export function scenarioCommand(projectName, scenarioJson, commandContext, confi
   // Parse the scenario input
   const scenarioInput = parseScenarioInput(scenarioJson);
 
-  // Check coverage
-  const notAnalyzed = commandContext.analysis.failures
-    .filter(isWholeFileFailure)
-    .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
-
-  const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
-
-  if (notAnalyzed.length > 0 || blindSpotCount > 0) {
-    throw new Error(
-      `archkeep: the graph has incomplete coverage — ` +
-        [
-          notAnalyzed.length > 0
-            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
-            : null,
-          blindSpotCount > 0
-            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(", ") +
-        `, so 
-the scenario may ` +
-        `under-represent the real architecture. Fix the unanalyzed files and re-run.`,
-    );
+  // Check coverage — refused through the one structured contract
+  // `./coverage-verdict.mjs` builds (#608): the evaluation is withheld
+  // in-band, where a parser and `--output` can read it.
+  const completeness = coverageVerdict(commandContext);
+  if (!completeness.complete) {
+    return coverageRefusal({ command: "scenario", commandContext, what: "evaluating a scenario" });
   }
 
   // Evaluate
@@ -83,7 +64,7 @@ the scenario may ` +
     analyzedFiles: commandContext.analysis.analyzed,
     imports: commandContext.analysis.imports.length,
     notAnalyzed: [],
-    blindSpots: blindSpotRows(commandContext.analysis.failures),
+    blindSpots: completeness.blindSpots,
     notes: [
       "scenario evaluation is virtual and not authoritative — run `check` for the real verdict",
       "per-edge verdicts cover only depConstraints (3 of 15 violation types)",
@@ -118,7 +99,7 @@ the scenario may ` +
     result,
   });
 
-  const text = formatScenarioReport(scenario);
+  const text = formatScenarioReport(scenario, coverage);
 
   return {
     status: "ok",
@@ -134,15 +115,29 @@ the scenario may ` +
 /**
  * Formats a scenario evaluation as terminal text.
  *
+ * The coverage line rides the same `coverageIncompleteReasons` clauses every
+ * other text face uses (`../verdict.mjs`), so a terminal reader is told how
+ * much of the tree the comparison inspected, in the one wording the JSON
+ * envelope's status also speaks (#609).
+ *
  * @param {object} scenario The scenario evaluation result.
+ * @param {object} coverage The run's coverage block.
  * @returns {string}
  */
-function formatScenarioReport(scenario) {
+function formatScenarioReport(scenario, coverage) {
   const lines = [];
 
   lines.push(`Scenario evaluation for "${scenario.project}"`);
   lines.push(`${"=".repeat(50)}`);
   lines.push(`Virtual: ${scenario.virtual}  |  Not authoritative: ${scenario.notAuthoritative}`);
+  // The "how much was inspected" line, derived from the same coverage block
+  // the envelope carries — never re-counted here.
+  lines.push(
+    `Coverage: ${coverage.imports} import${coverage.imports === 1 ? "" : "s"} in ` +
+      `${coverage.analyzedFiles} file${coverage.analyzedFiles === 1 ? "" : "s"} across ` +
+      `${coverage.projects} project${coverage.projects === 1 ? "" : "s"}` +
+      (coverage.complete ? "" : " — coverage incomplete"),
+  );
   lines.push("");
 
   if (scenario.changes.length > 0) {

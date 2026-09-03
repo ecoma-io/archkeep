@@ -71,11 +71,15 @@
  * change lives in `./change-intent.mjs`'s validation (`parseChangeIntent`),
  * the same loud lane as every other malformed declaration.
  *
- * Refusals (each a throw → exit 3 upstream): a manifest that fails shape or
- * reference validation, an unreadable/malformed/foreign-schema baseline,
- * incomplete baseline coverage, a provider mismatch, incomplete head
- * coverage, an unregistered-plugin graph over polyglot manifests, and a run
- * with no boundary law (constraints and the law fingerprint need one).
+ * Refusals: incomplete head coverage returns the structured no-verdict
+ * envelope `./coverage-verdict.mjs` builds (#608) — status "no-verdict",
+ * exit 3, a `coverage` block naming every file and site the run could not
+ * judge — where a parser and `--output` can read it; the rest are throws →
+ * exit 3 upstream: a manifest that fails shape or reference validation, an
+ * unreadable/malformed/foreign-schema baseline, incomplete baseline coverage,
+ * a provider mismatch, an unregistered-plugin graph over polyglot manifests,
+ * and a run with no boundary law (constraints and the law fingerprint need
+ * one).
  *
  * This module computes and returns; `../../cli.mjs`'s `runChange` owns argv,
  * output destination and the process exit code (`./README.md`).
@@ -91,10 +95,12 @@ import {
 } from "./change-intent.mjs";
 import {
   evidenceGraphToProjectGraph,
-  refuseUnjudgeableHead,
+  refusePluginGapHead,
   sourceProjectAttributor,
 } from "./delta.mjs";
 import { providerMismatch, readEvidenceSnapshot } from "./delta-snapshot.mjs";
+import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
+import { blindSpotRows } from "../analysis/source-util.mjs";
 import { cyclicProjects } from "../governance/fitness-rules.mjs";
 import { fitnessVerdict } from "../governance/verdict.mjs";
 import { buildDecision } from "../report/evidence.mjs";
@@ -481,8 +487,14 @@ function judgeDeclaredConstraints(intent, io) {
  *   change event's `debt` diff judges the intent over this run's base and
  *   head graphs and would be untestable without it.
  * @returns {Promise<{status: "ok"|"findings"|"no-verdict",
- *   changeIntent: object, coverage: object, report: {text: string, json: string}}>}
- * @throws {Error} on every refusal the module header lists.
+ *   changeIntent?: object, coverage: object, report: {text: string, json: string}}>}
+ *   `status: "no-verdict"` from the coverage refusal (#608) carries no
+ *   `changeIntent` payload — the reconciliation was withheld, and the
+ *   envelope's `coverage` block plus its `decision.reason` are the whole
+ *   answer.
+ * @throws {Error} on every refusal the module header lists. Incomplete head
+ *   coverage returns the structured no-verdict envelope instead of throwing
+ *   (#608); the unregistered-plugin graph keeps its throw.
  */
 export async function changeCommand(
   baselinePath,
@@ -521,7 +533,23 @@ export async function changeCommand(
     );
   }
 
-  refuseUnjudgeableHead(commandContext, "reconcile a change intent");
+  // The plugin-gap refusal stays a throw; the coverage refusal returns the one
+  // structured envelope `./coverage-verdict.mjs` builds (#608) — status
+  // "no-verdict", exit 3, a `coverage` block naming every file and site the
+  // run could not judge — instead of the throw `refuseUnjudgeableHead` used to
+  // carry here. Reconciling a declaration over a half-read tree would answer
+  // "undeclared" about architecture the run never observed, and that refusal
+  // belongs in-band, where a parser and `--output` can read it.
+  refusePluginGapHead(commandContext, "reconcile a change intent");
+  const completeness = coverageVerdict(commandContext);
+  if (!completeness.complete) {
+    return coverageRefusal({
+      command: "change",
+      commandContext,
+      what: "reconciling a change intent",
+      decision: true,
+    });
+  }
 
   const intent = await (readIntent ? readIntent(intentPath) : readChangeIntent(intentPath));
 
@@ -709,7 +737,12 @@ export async function changeCommand(
     analyzedFiles: analysis.analyzed,
     imports: analysis.imports.length,
     notAnalyzed: [],
-    blindSpots: [],
+    // The positioned failures the run SAW — including the dynamic and external
+    // sites that never withhold a verdict. This used to be hardcoded `[]`
+    // (#609): a declared limit named nowhere is a disclosure gap, and
+    // `blindSpotRows` is the one mapping every other command's coverage block
+    // carries.
+    blindSpots: blindSpotRows(analysis.failures),
     notes,
   };
 

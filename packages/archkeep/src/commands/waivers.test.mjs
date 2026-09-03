@@ -325,23 +325,31 @@ describe("waiversCommand", () => {
   it("refuses a tree it could not fully read — incomplete coverage must not read as a stale surface", async () => {
     // A whole-file failure (line: null) means the analyzer never judged the
     // file, so a waiver naming it would read as "covers nothing" about a
-    // finding the run never looked at — the silent direction. The command
-    // throws, which `cli.mjs`'s `runWaivers` surfaces as exit 3.
-    await expect(
-      waiversCommand(
-        commandContext({
-          analysis: {
-            analyzed: 1,
-            imports: [],
-            failures: [
-              { sourceFile: "area/alpha/src/index.ts", line: null, reason: "could not parse" },
-            ],
-          },
-        }),
-        policy([waiver()]),
-        { now: NOW },
-      ),
-    ).rejects.toThrow(/incomplete coverage/);
+    // finding the run never looked at — the silent direction. The verdict is
+    // withheld through the structured no-verdict envelope now, so a parser
+    // sees the refusal the terminal reader sees.
+    const result = await waiversCommand(
+      commandContext({
+        analysis: {
+          analyzed: 1,
+          imports: [],
+          failures: [
+            { sourceFile: "area/alpha/src/index.ts", line: null, reason: "could not parse" },
+          ],
+        },
+      }),
+      policy([waiver()]),
+      { now: NOW },
+    );
+    expect(result.status).toBe("no-verdict");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toEqual([
+      { file: "area/alpha/src/index.ts", reason: "could not parse" },
+    ]);
+    expect(result.report.text).toContain("coverage incomplete");
   });
 
   it("names an expired waiver against the injected clock, and a run of only waivers is still not clean", async () => {
@@ -485,9 +493,21 @@ describe("waiversCommand — the coverage.unowned acceptance surface", () => {
   });
 
   it("still refuses the same tree once the policy stops accepting it — the silent-direction guard", async () => {
-    await expect(waiversCommand(orphanContext(), policy(), { now: NOW })).rejects.toThrow(
-      /incomplete coverage/,
-    );
+    // The refusal used to be a throw; #608 unified it with the graph family's
+    // structured envelope, so the same withdrawal refusal now rides
+    // `status: "no-verdict"` with the unaccepted file named in
+    // `coverage.notAnalyzed` — where `--output` and a parser can read it.
+    const result = await waiversCommand(orphanContext(), policy(), { now: NOW });
+    expect(result.status).toBe("no-verdict");
+    expect(result.report.text).toMatch(/coverage incomplete/);
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toContainEqual({
+      file: "tools/gen.go",
+      reason: "is not owned by any project in the Nx project graph",
+    });
   });
 
   it("keeps the all-empty claim away from a table that declares an acceptance", async () => {

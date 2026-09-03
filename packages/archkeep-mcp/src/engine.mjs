@@ -17,10 +17,17 @@
  * agent learns ONE schema from both faces and the two cannot disagree. A tool
  * may add keys BESIDE the envelope's own (never inside `result`, never
  * replacing one); those additions are named in each adapter below. A call the
- * engine refused does not fabricate an envelope: `archkeep_check` states its
- * could-not-run as a structured `unknown` verdict, and every other tool
- * surfaces the refusal as the tool error it is, message verbatim — the CLI's
- * exit 3 and the MCP error are the same fact wearing two transports.
+ * engine refused does not fabricate a verdict: the could-not-look refusal —
+ * an analysis with whole-file failures or unjudged import sites, or a run
+ * that analyzed nothing — arrives AS the envelope for every command that
+ * answers this way, `status: "no-verdict"`, `exitCode: 3`, no `result`, the
+ * unread files and sites named in `coverage` (#608 unified it across the
+ * graph family and the verdict commands alike). `archkeep_check` states the
+ * same could-not-look as its structured `unknown` verdict. What still
+ * surfaces as a tool error, message verbatim, is the input and plugin-gap
+ * refusals — a malformed baseline, a missing intent, an unregistered plugin
+ * over polyglot manifests — and the CLI's exit 3 for those and the MCP error
+ * are the same fact wearing two transports.
  *
  * ## The seams, threaded the way the CLI threads them
  *
@@ -235,7 +242,9 @@ export async function checkTool({ workspaceRoot, paths = [] }, io = {}) {
  *
  * @param {{workspaceRoot?: string, project: string}} input
  * @param {{readGraph?: Function, listFiles?: Function}} [io]
- * @returns {Promise<object>} The `impact` envelope.
+ * @returns {Promise<object>} The `impact` envelope. Incomplete analysis
+ *   coverage arrives as `status: "no-verdict"` with the unread files and
+ *   sites named in `coverage` (#608) — not as a throw.
  * @throws {UsageError} when the project is not in the graph.
  * @throws {Error} on the engine's refusals (incomplete graph coverage among
  *   them), message verbatim.
@@ -263,9 +272,11 @@ export async function impactTool({ workspaceRoot, project }, io = {}) {
  *
  * @param {{workspaceRoot?: string}} input
  * @param {{readGraph?: Function, listFiles?: Function}} [io]
- * @returns {Promise<object>} The `drift` envelope.
- * @throws {Error} on the engine's refusals (no tracked intent, incomplete
- *   coverage, an intent that cannot be verified), message verbatim.
+ * @returns {Promise<object>} The `drift` envelope. Incomplete analysis
+ *   coverage arrives as `status: "no-verdict"` with the unread files and
+ *   sites named in `coverage` (#608) — not as a throw.
+ * @throws {Error} on the engine's refusals (no tracked intent, an intent that
+ *   cannot be verified), message verbatim.
  */
 export async function driftTool({ workspaceRoot }, io = {}) {
   const cwd = cwdOf(workspaceRoot);
@@ -461,9 +472,11 @@ export async function proposeTool({ workspaceRoot, mode }, io = {}) {
  *
  * @param {{workspaceRoot?: string, projectName: string, scenarioJson: string}} input
  * @param {{readGraph?: Function, listFiles?: Function}} [io]
- * @returns {Promise<object>} The scenario evaluation envelope.
- * @throws {Error} on the engine's refusals (incomplete coverage), message
- *   verbatim.
+ * @returns {Promise<object>} The scenario evaluation envelope. Incomplete
+ *   analysis coverage arrives as `status: "no-verdict"` with the unread files
+ *   and sites named in `coverage` (#608) — not as a throw.
+ * @throws {Error} on the engine's refusals (the unregistered-plugin polyglot
+ *   graph among them), message verbatim.
  */
 export async function scenarioTool({ workspaceRoot, projectName, scenarioJson }, io = {}) {
   const cwd = cwdOf(workspaceRoot);

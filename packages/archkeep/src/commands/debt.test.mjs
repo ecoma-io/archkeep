@@ -153,17 +153,24 @@ describe("debtCommand", () => {
     );
   });
 
-  it("refuses over incomplete coverage", async () => {
+  it("reports no-verdict over incomplete coverage", async () => {
     const ctx = commandContext();
     ctx.analysis.failures = [
       { sourceFile: "x.go", line: null, column: null, reason: "parse error" },
     ];
-    await expect(
-      debtCommand("/ws/hist", ctx, {
-        config: null,
-        io: ioWith(),
-      }),
-    ).rejects.toThrow(/incomplete coverage/);
+    const result = await debtCommand("/ws/hist", ctx, {
+      config: null,
+      io: ioWith(),
+    });
+    // The refusal keeps its meaning but speaks the graph family's contract:
+    // a structured no-verdict envelope, not a throw with no envelope at all.
+    expect(result.status).toBe("no-verdict");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toEqual([{ file: "x.go", reason: "parse error" }]);
+    expect(result.report.text).toContain("coverage incomplete");
   });
 
   it("refuses when the snapshot directory cannot be read", async () => {

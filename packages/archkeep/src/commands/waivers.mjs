@@ -37,14 +37,11 @@
  * `now` and the output is reproducible byte-for-byte. Defaults to the wall
  * clock, the same injection `evaluate` uses for waiver expiry.
  */
-import {
-  blindSpotRows,
-  isWholeFileFailure,
-  unresolvableLiteralCount,
-} from "../analysis/source-util.mjs";
+import { blindSpotRows } from "../analysis/source-util.mjs";
 import { suppressionCovers } from "../config.mjs";
 import { referenceTime } from "../governance/clock.mjs";
 import { isWaiver, remainingMs, waiverStatus } from "../governance/waiver.mjs";
+import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatWaiversReport } from "../report/waivers-text.mjs";
 import { partitionUnownedCoverage } from "./coverage-acceptance.mjs";
@@ -154,10 +151,13 @@ export function computeWaivers(suppressions, rawViolations, now = referenceTime(
  *   clock, and — from `cli.mjs`'s `runWaivers` — the workspace-relative path
  *   the run's law actually resolved from, so the `coverage.unowned` matching
  *   below subtracts the same configuration files `check` subtracts.
- * @returns {Promise<{status: "ok", waivers: object, report: {text: string, json: string}}>}
- * @throws {Error} whenever the run's law is malformed, or the tree has
- *   whole-file analysis failures — exit-3 class, the same posture `check` takes
- *   on a malformed config and `impact`/`drift` take on incomplete coverage.
+ * @returns {Promise<{status: "ok"|"no-verdict", waivers?: object, coverage: object,
+ *   report: {text: string, json: string}}>}
+ *   `status: "no-verdict"` carries no `waivers` payload — the verdict was
+ *   withheld, and the envelope's `coverage` block is the whole answer (#608).
+ * @throws {Error} whenever the run's law is malformed — exit-3 class, the same
+ *   posture `check` takes on a malformed config. Incomplete coverage returns
+ *   the structured no-verdict envelope instead of throwing (#608).
  */
 export async function waiversCommand(commandContext, boundaryConfig, io = {}) {
   const { root, provider, marker, analysis, graph } = commandContext;
@@ -184,40 +184,23 @@ export async function waiversCommand(commandContext, boundaryConfig, io = {}) {
   // A waiver surface over a tree it could not fully read is a lottery ticket,
   // not a surface: a file the analyzer never judged contributes no raw
   // violation, so every waiver that names it reads as stale and the report
-  // says "covers nothing" about a finding the run never looked at. Refuse
-  // loudly on whole-file failures, the same posture `impact`, `drift`, and
-  // `history` take — "could not look" must never read as "looked and found
-  // nothing" (`./impact.mjs`'s refusal names the same silence). A whole-file
-  // failure whose file a `coverage.unowned` row accepts is withdrawn first,
-  // exactly as `check` withdraws it (`./check.mjs`'s `acceptedUnclaimed`):
-  // its state is a recorded acceptance this very report is about to name,
-  // not a hole the run failed to look at.
-  const notAnalyzed = analysis.failures
-    .filter(isWholeFileFailure)
-    .filter(({ sourceFile }) => !unownedCoverage.acceptedFiles.has(sourceFile))
-    .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
-
-  // Site-level failures count in full — the `coverage.unowned` withdrawal
-  // above is a whole-file acceptance, and no site-level counterpart exists
-  // yet. Counting an unresolvable site is the fail-closed direction (#595).
-  const blindSpotCount = unresolvableLiteralCount(analysis.failures);
-
-  if (notAnalyzed.length > 0) {
-    throw new Error(
-      `archkeep: waivers has incomplete coverage — ` +
-        [
-          notAnalyzed.length > 0
-            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
-            : null,
-          blindSpotCount > 0
-            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(", ") +
-        `, so every waiver naming one ` +
-        `would read as covering nothing it never saw. Fix the unanalyzed files and re-run.`,
-    );
+  // says "covers nothing" about a finding the run never looked at. Refused
+  // through the one structured contract `./coverage-verdict.mjs` builds
+  // (#608) — "could not look" must never read as "looked and found nothing".
+  // A whole-file failure whose file a `coverage.unowned` row accepts is
+  // withdrawn first, exactly as `check` withdraws it (`./check.mjs`'s
+  // `acceptedUnclaimed`): its state is a recorded acceptance this very report
+  // is about to name, not a hole the run failed to look at.
+  const completeness = coverageVerdict(commandContext, {
+    acceptedFiles: unownedCoverage.acceptedFiles,
+  });
+  if (!completeness.complete) {
+    return coverageRefusal({
+      command: "waivers",
+      commandContext,
+      what: "measuring the waiver surface",
+      acceptedFiles: unownedCoverage.acceptedFiles,
+    });
   }
 
   // F07: a waiver surface measured against a graph that cannot see the
@@ -245,7 +228,12 @@ export async function waiversCommand(commandContext, boundaryConfig, io = {}) {
     projects: Object.keys(graph.nodes).length,
     analyzedFiles: analysis.analyzed,
     imports: analysis.imports.length,
-    notAnalyzed,
+    // The withdrawn list — whole-file failures a `coverage.unowned` row
+    // accepts are already named in `result.unownedAcceptances` below, so
+    // repeating them here would double-count the same acceptance. On this
+    // path the list is empty by construction: anything unwithdrawn refused
+    // above.
+    notAnalyzed: completeness.notAnalyzed,
     blindSpots: blindSpotRows(analysis.failures),
     // `remainingMs` reflects the wall clock at the moment of THIS run, not the
     // workspace — it is expected to differ between two runs of an unchanged
@@ -299,6 +287,9 @@ export async function waiversCommand(commandContext, boundaryConfig, io = {}) {
   return {
     status: "ok",
     waivers: result,
+    // The same `coverage` block the envelope carries, so both return shapes —
+    // this one and the no-verdict refusal's (#608) — expose it under one key.
+    coverage,
     report: {
       text: formatWaiversReport(result),
       json: renderJson(envelope),

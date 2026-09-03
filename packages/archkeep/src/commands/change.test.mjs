@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -531,15 +531,25 @@ describe("refusals — every could-not-look path says so", () => {
 
   it("refuses incomplete head coverage — a hole reads as a removal it may not be", async () => {
     const baseline = baselineOf();
-    await expect(
-      run({
-        ctx: contextOf({
-          failures: [{ sourceFile: "libs/db/broken.go", line: null, reason: "parse error" }],
-        }),
-        baseline,
-        intent: manifest(),
+    const result = await run({
+      ctx: contextOf({
+        failures: [{ sourceFile: "libs/db/broken.go", line: null, reason: "parse error" }],
       }),
-    ).rejects.toThrow(/could not be analyzed/);
+      baseline,
+      intent: manifest(),
+    });
+    // The refusal keeps its meaning — the reconciliation is never computed —
+    // but it now arrives as the structured no-verdict envelope, the same
+    // machine contract the graph family speaks, not a bare throw.
+    expect(result.status).toBe("no-verdict");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toEqual([
+      { file: "libs/db/broken.go", reason: "parse error" },
+    ]);
+    expect(result.report.text).toContain("coverage incomplete");
   });
 
   it("throws when the manifest references architecture the baseline does not contain", async () => {
@@ -717,6 +727,13 @@ export const moduleBoundaryOptions = {
 `;
       writeFileSync(join(root, "nx.json"), "{}\n");
       writeFileSync(join(root, "module-boundaries.config.mjs"), `${law}\n`);
+      // One project-owned source file: the run has to have JUDGED something
+      // for its verdict to be a claim (#599 — a workspace whose scope selects
+      // no analyzable file is the no-verdict lane, not a matched
+      // reconciliation). Import-free, so it adds no blind spot and no
+      // violation to a fixture pinned on `matched`.
+      mkdirSync(join(root, "libs", "api", "src"), { recursive: true });
+      writeFileSync(join(root, "libs", "api", "src", "index.js"), 'export const api = "api";\n');
       const { text } = captureDelta(contextOf(), { config: config() });
       writeFileSync(join(root, "baseline.json"), text);
       writeFileSync(join(root, "intent.json"), `${JSON.stringify(manifest(), null, 2)}\n`);
@@ -733,6 +750,7 @@ export const moduleBoundaryOptions = {
           listFiles: () => [
             "nx.json",
             "module-boundaries.config.mjs",
+            "libs/api/src/index.js",
             "baseline.json",
             "intent.json",
           ],

@@ -383,13 +383,23 @@ describe("deltaCommand", () => {
     const failures = [
       { sourceFile: "libs/alpha/src/broken.go", line: null, column: null, reason: "unreadable" },
     ];
-    await expect(
-      deltaCommand("/invented/base.json", contextOf({ failures }), {
-        config: config(),
-        readBaseline,
-        now: NOW,
-      }),
-    ).rejects.toThrow(/could not be analyzed/u);
+    const result = await deltaCommand("/invented/base.json", contextOf({ failures }), {
+      config: config(),
+      readBaseline,
+      now: NOW,
+    });
+    // The verdict is withheld through the structured no-verdict envelope, the
+    // same machine contract the graph family speaks — never a clean delta.
+    expect(result.status).toBe("no-verdict");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.decision.verdict).toBe("unknown");
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toEqual([
+      { file: "libs/alpha/src/broken.go", reason: "unreadable" },
+    ]);
+    expect(result.report.text).toContain("coverage incomplete");
   });
 
   it("refuses to compare without a boundary config", async () => {
