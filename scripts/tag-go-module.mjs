@@ -31,6 +31,15 @@
 //     new version's name is not. Same commit is success, different commit is a
 //     hard failure.
 //
+// One thing the script tolerates rather than refuses: a read-back that
+// answers Not Found moments after its own POST. GitHub refs propagate, and
+// release 0.21.0's lane went red exactly there — the tag existed at the
+// released SHA (`git ls-remote` showed it) while the first read-back was
+// answered 404. The read-back below therefore retries across a short backoff
+// before it concludes anything, and only then fails, naming the tag and the
+// POST that reported success. The tolerance bounds the same silence the
+// refusals bound: a POST that never becomes a readable ref still exits 1.
+//
 // The proxy is deliberately not polled afterwards. proxy.golang.org is a cache
 // that fetches from GitHub on first request, not a gatekeeper that grants
 // publication: once the tag exists and points at the right commit, the version
@@ -44,6 +53,55 @@ import { fileURLToPath } from "node:url";
 import { requestGit } from "./push-reformatted-files.mjs";
 
 export const GO_SDK_DIR = "packages/archkeep-rule-sdk-go";
+
+/**
+ * How many times the freshly created ref is read back before the script
+ * concludes the write never landed. Five reads across the backoff below
+ * cover roughly fifteen seconds of propagation — the 0.21.0 race resolved
+ * within seconds — while a genuinely failed write stays a loud exit 1.
+ *
+ * @type {number}
+ */
+export const READ_BACK_ATTEMPTS = 5;
+
+/**
+ * The default wait between read-back attempts, doubling per attempt.
+ *
+ * @param {number} attempt zero-based attempt just completed
+ * @returns {number} milliseconds to wait before the next read
+ */
+export function readBackDelay(attempt) {
+  return 1000 * 2 ** attempt;
+}
+
+/**
+ * Read the freshly created ref back, retrying across GitHub's propagation
+ * window. A Not Found (or an empty answer) immediately after the POST is not
+ * obeyed as "the write failed" — it is retried; after the final attempt the
+ * caller receives `null` and refuses loudly. The injected `readRef`/`sleep`
+ * keep this testable with no network and no clock.
+ *
+ * @param {() => {object?: {sha: string}} | null | undefined} readRef one read
+ *   attempt; a throw or a falsy result means "not visible yet"
+ * @param {{attempts?: number, delayMs?: number, sleep?: (ms: number) => Promise<void>}} [options]
+ * @returns {Promise<{object?: {sha: string}} | null>} the ref once it reads
+ *   back, or `null` when every attempt failed
+ */
+export async function readCreatedRef(readRef, options = {}) {
+  const attempts = options.attempts ?? READ_BACK_ATTEMPTS;
+  const delayMs = options.delayMs ?? 1000;
+  const sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (attempt > 0) await sleep(delayMs * 2 ** (attempt - 1));
+    try {
+      const ref = await readRef();
+      if (ref) return ref;
+    } catch {
+      // Retried, then refused by the caller — never rounded into a verdict.
+    }
+  }
+  return null;
+}
 
 /**
  * The `module` directive's path from a go.mod.
@@ -103,7 +161,7 @@ export function goModuleTag(prefix, version) {
  * Reads go.mod, computes the tag, and creates it. The only function here that
  * touches the outside world.
  */
-export function main() {
+export async function main() {
   const args = process.argv.slice(2);
   const argOf = (name) => {
     const index = args.indexOf(name);
@@ -198,15 +256,22 @@ export function main() {
     sha,
   });
 
-  // Read it back rather than trusting the write. A 2xx that created nothing is
-  // the shape of failure this whole file exists to refuse.
-  const created = requestGit(
-    owner,
-    repo,
-    "GET",
-    `/git/ref/tags/${tag}`,
-    /** @type {string} */ (token),
+  // Read it back rather than trusting the write — and retry across the
+  // propagation window, because a ref is visible to the next reader later
+  // than the POST's own 2xx admits (the 0.21.0 failure is the header story).
+  // A 2xx that created nothing, or a ref that never becomes readable, is the
+  // shape of failure this whole file exists to refuse.
+  const created = await readCreatedRef(() =>
+    requestGit(owner, repo, "GET", `/git/ref/tags/${tag}`, /** @type {string} */ (token)),
   );
+  if (created === null) {
+    console.error(
+      `created ${tag} but it did not read back after ${READ_BACK_ATTEMPTS} attempts. ` +
+        `The POST above reported success; trusting it without a read is the failure ` +
+        `this file refuses.`,
+    );
+    process.exit(1);
+  }
   if (created.object?.sha !== sha) {
     console.error(
       `created ${tag} but it reads back pointing at ${created.object?.sha} rather than ${sha}.`,
@@ -232,4 +297,4 @@ function isProgramEntry(moduleUrl, argv1 = process.argv[1]) {
   return real(argv1) === real(fileURLToPath(moduleUrl));
 }
 
-if (isProgramEntry(import.meta.url)) main();
+if (isProgramEntry(import.meta.url)) void main();
