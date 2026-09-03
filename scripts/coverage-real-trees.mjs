@@ -59,7 +59,9 @@ import { analyzeFile } from "../packages/archkeep/src/analysis/analyze.mjs";
  * cannot reach.
  *
  * The counts are MEASURED facts about the pinned commit — taken by running
- * this script's own reader on 2026-08-22 and 2026-08-29 — not targets anybody
+ * this script's own reader on 2026-08-22 and 2026-08-29, with docker-cli and
+ * spectre-console re-measured on 2026-09-04 after #480 and #481 fixed the
+ * defects their first measurement had recorded (#606) — not targets anybody
  * chose. Each tree names why its `unreadable` count is what it is, because
  * an unexplained failure count is a number nobody can act on:
  *
@@ -78,12 +80,15 @@ import { analyzeFile } from "../packages/archkeep/src/analysis/analyze.mjs";
  *   import whose argument is not a literal resolves to nothing and is reported
  *   unresolvable rather than dropped (`packages/archkeep/src/analysis/contract.md`).
  *   That is correct behaviour, and the count is pinned so it stays two.
- * - **docker-cli** carries the Go reader's keyword-vs-identifier limit three
+ * - **docker-cli** pinned the Go reader's keyword-vs-identifier limit three
  *   times: a line-head identifier whose name begins with `import`
- *   (`importContentType`, the vendored `importPath`, `imports`) reads as the
- *   keyword, which then states no path. Loud, not silent — valid code
- *   reported unreadable — and pinned so it cannot move without a human
- *   deciding.
+ *   (`importContentType`, the vendored `importPath`, `imports`) read as the
+ *   keyword, which then stated no path — valid code reported unreadable, and
+ *   pinned so it could not move without a human deciding. #480 (`ce5d931`)
+ *   bound the keyword to statement position, and all three disclosures went
+ *   to zero while every other count held exactly — 2967 files and 12746
+ *   records before and after — so the pin had recorded the analyzer's
+ *   defect, not the tree's. Repinned 3 → 0 on 2026-09-04 (#606).
  * - **tokio** writes `use` statements inside macro bodies — `use
  *   #crate_path::…` and `use $crate::…` — which name no crate any resolver
  *   could check; all three are reported rather than guessed at, the refusal
@@ -95,10 +100,14 @@ import { analyzeFile } from "../packages/archkeep/src/analysis/analyze.mjs";
  * - **okhttp** reads clean: zero failures over 648 JVM sources, 71 `.java`
  *   and 577 `.kt` — one package index over both extensions, which is the
  *   reason the lane wants a mixed tree.
- * - **spectre-console** hits the C# `using`-statement boundary three times: a
- *   `using var` declaration whose `;` sits behind an object-initializer brace
- *   group is read by the malformation scan as a directive that never
+ * - **spectre-console** pinned the C# `using`-statement boundary three times:
+ *   a `using var` declaration whose `;` sits behind an object-initializer
+ *   brace group was read by the malformation scan as a directive that never
  *   terminates. All three live in the bundled source generator's emitters.
+ *   #481 (`cb1486d`) reads a declaration's initializer braces as statements,
+ *   and the three disclosures went to zero while every other count held
+ *   exactly — 466 files and 165 records before and after — the docker-cli
+ *   event again, in C#. Repinned 3 → 0 on 2026-09-04 (#606).
  */
 export const TREES = Object.freeze([
   Object.freeze({
@@ -117,7 +126,7 @@ export const TREES = Object.freeze([
     license: "Apache-2.0",
     language: "go",
     extensions: Object.freeze([".go"]),
-    expected: Object.freeze({ sources: 2967, records: 12746, unreadable: 3 }),
+    expected: Object.freeze({ sources: 2967, records: 12746, unreadable: 0 }),
   }),
   Object.freeze({
     name: "ripgrep",
@@ -171,7 +180,7 @@ export const TREES = Object.freeze([
     license: "MIT",
     language: "csharp",
     extensions: Object.freeze([".cs"]),
-    expected: Object.freeze({ sources: 466, records: 165, unreadable: 3 }),
+    expected: Object.freeze({ sources: 466, records: 165, unreadable: 0 }),
   }),
 ]);
 
