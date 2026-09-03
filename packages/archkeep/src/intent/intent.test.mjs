@@ -23,11 +23,16 @@
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..", "..");
+
+/** The manifest under validation, loaded once for the gate and its meta-tests. */
+const MANIFEST_PATH = join(__dirname, "intent-manifest.json");
+const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf-8"));
 
 /** Vitest include patterns for unit and e2e suites. */
 const UNIT_INCLUDE = "src/**/*.test.mjs";
@@ -242,10 +247,12 @@ function stripComments(src) {
   return out;
 }
 
-describe("Intent manifest validation", () => {
-  const manifestPath = join(__dirname, "intent-manifest.json");
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+/** The content digest an evidence entry's `sha256` field records. */
+function sha256Hex(content) {
+  return createHash("sha256").update(content, "utf-8").digest("hex");
+}
 
+describe("Intent manifest validation", () => {
   /** Evidence types that count as executable proof. */
   const EXECUTABLE_TYPES = new Set(["behavioral-test", "e2e-test", "architecture-test"]);
 
@@ -394,6 +401,52 @@ describe("Intent manifest validation", () => {
       for (const ev of contract.evidence) {
         if (!ev.path || ev.path.trim() === "") {
           violations.push(`Contract ${contract.id}: evidence entry has empty path`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("every evidence entry carries a sha256 content hash", () => {
+    // Evidence identity is content-addressed, not path-addressed (E5): a path
+    // alone cannot tell "the artifact this claim was certified against" from
+    // "an artifact that happens to live there now". A missing or malformed
+    // hash is a manifest defect in itself, so the shape is checked before the
+    // digests are compared.
+    const violations = [];
+    for (const contract of manifest.contracts) {
+      for (const ev of contract.evidence) {
+        if (typeof ev.sha256 !== "string" || !/^[0-9a-f]{64}$/u.test(ev.sha256)) {
+          violations.push(
+            `Contract ${contract.id}: evidence entry for ${ev.path} carries ` +
+              `${JSON.stringify(ev.sha256 ?? null)} where a 64-hex-char sha256 is required — ` +
+              `evidence is content-addressed, and a hash-less entry cannot be verified`,
+          );
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it("every evidence entry's sha256 matches the artifact it names", () => {
+    // The verification half of content-addressing: recompute each artifact's
+    // digest and compare. The message names all three facts a maintainer
+    // needs — the contract, the artifact, and both digests — because a bare
+    // mismatch would send them hunting for which side moved.
+    const violations = [];
+    for (const contract of manifest.contracts) {
+      for (const ev of contract.evidence) {
+        if (typeof ev.sha256 !== "string") continue; // caught by the shape test above
+        const resolved = join(ROOT, ev.path);
+        if (!existsSync(resolved)) continue; // caught by the path test above
+        const actual = sha256Hex(readFileSync(resolved, "utf-8"));
+        if (actual !== ev.sha256) {
+          violations.push(
+            `Contract ${contract.id}: evidence artifact ${ev.path} has digest ${actual} but the ` +
+              `manifest records ${ev.sha256} — the artifact changed after the claim was ` +
+              `certified. Re-read the evidence, re-certify the assertion if it still holds, ` +
+              `and update the entry's sha256`,
+          );
         }
       }
     }
@@ -1162,6 +1215,21 @@ describe("Intent gate meta-tests", () => {
     expect(matchesIncludePattern("scripts/verify-package.mjs", UNIT_INCLUDE)).toBe(false);
     expect(matchesIncludePattern("src/commands/diff.test.js", UNIT_INCLUDE)).toBe(false);
     expect(matchesIncludePattern("src/intent/intent.test.mjs", UNIT_INCLUDE)).toBe(true);
+  });
+
+  it("the sha256 comparison detects a one-byte drift in an evidence artifact", () => {
+    // The content-addressing gate compares a recorded constant against a
+    // computed digest; a comparator that could not disagree would make that a
+    // constant-to-constant check and the gate would pass over any drift. So
+    // the mechanism itself is pinned: a real evidence artifact's digest
+    // recomputes to exactly what the manifest records, and one changed byte
+    // of that artifact produces a different digest — the state the gate
+    // exists to catch.
+    const [firstContract] = manifest.contracts;
+    const [firstEvidence] = firstContract.evidence;
+    const content = readFileSync(join(ROOT, firstEvidence.path), "utf-8");
+    expect(sha256Hex(content)).toBe(firstEvidence.sha256);
+    expect(sha256Hex(`${content} `)).not.toBe(firstEvidence.sha256);
   });
 });
 

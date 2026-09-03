@@ -1,7 +1,7 @@
 {
   "version": 2,
   "generatedAt": "v1.0.0-hardening",
-  "description": "Machine-readable manifest declaring every v1.0 intent and the evidence that supports it. A contract is 'proven' only when at least one evidence entry is an executable proof (behavioral-test, e2e-test, or architecture-test). Source-evidence and documentation support the claim but cannot prove it alone.",
+  "description": "Machine-readable manifest declaring every v1.0 intent and the evidence that supports it. A contract is 'proven' only when at least one evidence entry is an executable proof (behavioral-test, e2e-test, or architecture-test). Source-evidence and documentation support the claim but cannot prove it alone. Every evidence entry carries the sha256 of the artifact it names, and the gate recomputes each digest, so evidence is content-addressed: an artifact that changed after its claim was certified is a loud mismatch, not a silent swap.",
   "evidenceTaxonomy": {
     "behavioral-test": "A unit or integration test that imports and calls the code, asserting on runtime behavior (not source text). Proves the intent is regression-protected.",
     "e2e-test": "A CLI subprocess test that exercises the real binary against a consumer workspace. Proves the intent holds end-to-end.",
@@ -19,12 +19,14 @@
         {
           "type": "architecture-test",
           "path": "src/conformance/boundary.test.mjs",
-          "assertion": "SHIPPED_PACKAGES allow-list prevents unapproved dependencies; specifiersIn() walk catches all imports including createRequire; no provider import found in core layers"
+          "assertion": "SHIPPED_PACKAGES allow-list prevents unapproved dependencies; specifiersIn() walk catches all imports including createRequire; no provider import found in core layers",
+          "sha256": "12d4e179f88de2622a41e56f42b2bab1c88a677ec2232430752138c57ba5fb18"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/context.mjs",
-          "assertion": "Only commands/context.mjs imports providers — the designated orchestration layer"
+          "assertion": "Only commands/context.mjs imports providers — the designated orchestration layer",
+          "sha256": "a881d92b6ddacf8650d7a3e5071bf3176ccacc9d9cb788e1faf241e462e3d055"
         }
       ],
       "status": "proven"
@@ -37,17 +39,20 @@
         {
           "type": "behavioral-test",
           "path": "src/report/json.test.mjs",
-          "assertion": "JSON envelope throws on status=ok + incomplete coverage, status/exitCode disagreement, coverage.complete/notAnalyzed disagreement"
+          "assertion": "JSON envelope throws on status=ok + incomplete coverage, status/exitCode disagreement, coverage.complete/notAnalyzed disagreement",
+          "sha256": "53313e4904ff97309a43bd8ed2f37bfd74fa87862f898eb75d5351f526e692d2"
         },
         {
           "type": "source-evidence",
           "path": "src/lsp/diagnose.mjs",
-          "assertion": "analyzed:false on every non-verdict path; empty diagnostic list only from two named places"
+          "assertion": "analyzed:false on every non-verdict path; empty diagnostic list only from two named places",
+          "sha256": "4eea19bf245c33963cd292e02f676eb9c5238a5783a3a960976f53afc7cf8b27"
         },
         {
           "type": "source-evidence",
           "path": "cli.mjs",
-          "assertion": "Exit codes 0/1/3 distinguish clean/findings/cannot-look"
+          "assertion": "Exit codes 0/1/3 distinguish clean/findings/cannot-look",
+          "sha256": "e64ef4b622a2e2053227104839a4b48dccff53194fe6fe8c33999c4bd4760764"
         }
       ],
       "status": "proven"
@@ -60,22 +65,26 @@
         {
           "type": "behavioral-test",
           "path": "src/intent/intent.test.mjs",
-          "assertion": "analysis output conforms to the frozen contract schema (no extra verdict/policy fields); analysis output is invariant under project tag changes (three workspaces differing only in project tag fields compared byte-for-byte)"
+          "assertion": "analysis output conforms to the frozen contract schema (no extra verdict/policy fields); analysis output is invariant under project tag changes (three workspaces differing only in project tag fields compared byte-for-byte)",
+          "sha256": "2463a5b8f92de98562360eb3c5defe6703160b81e43c572ee4d21800594d1fa6"
         },
         {
           "type": "architecture-test",
           "path": "src/intent/intent.test.mjs",
-          "assertion": "the gate walks every production analysis module and fails when judging vocabulary (judge/forbid/permit/allow/ban) appears in code"
+          "assertion": "the gate walks every production analysis module and fails when judging vocabulary (judge/forbid/permit/allow/ban) appears in code",
+          "sha256": "2463a5b8f92de98562360eb3c5defe6703160b81e43c572ee4d21800594d1fa6"
         },
         {
           "type": "source-evidence",
           "path": "src/analysis/contract.md",
-          "assertion": "Analysis record is a superset of a graph edge — 5 of 15 violations decided on raw specifier"
+          "assertion": "Analysis record is a superset of a graph edge — 5 of 15 violations decided on raw specifier",
+          "sha256": "ecab7d49267cba1959bb19b63c61e472f5612e1ef60543b88980cb30c7a84f09"
         },
         {
           "type": "source-evidence",
           "path": "AGENTS.md",
-          "assertion": "src/graph/ is a lossy view of analysis, on purpose; src/analysis/ never judges"
+          "assertion": "src/graph/ is a lossy view of analysis, on purpose; src/analysis/ never judges",
+          "sha256": "c20c79f05254bc059b355627e56b85fab39a759434cde048597d85952963a097"
         }
       ],
       "status": "proven"
@@ -88,17 +97,20 @@
         {
           "type": "e2e-test",
           "path": "e2e/determinism.e2e.mjs",
-          "assertion": "Graph, check, impact run twice — byte-identical JSON output"
+          "assertion": "Graph, check, impact run twice — byte-identical JSON output",
+          "sha256": "90c0f2a62a111013990ff96ec07042e961c1aae50710c597192657cc270df5ec"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/graph.mjs",
-          "assertion": "Plain string comparison, never localeCompare; INTERNAL_DATA_FIELDS stripped; SCHEMA_VERSION = 2"
+          "assertion": "Plain string comparison, never localeCompare; INTERNAL_DATA_FIELDS stripped; SCHEMA_VERSION = 2",
+          "sha256": "93649d4a317c7c0952d12920227bfc43fbdd614ed49b6fc88fc79d26569f5519"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/graph.mjs",
-          "assertion": "computePolicyFingerprint produces SHA-256 of canonicalized policy"
+          "assertion": "computePolicyFingerprint produces SHA-256 of canonicalized policy",
+          "sha256": "93649d4a317c7c0952d12920227bfc43fbdd614ed49b6fc88fc79d26569f5519"
         }
       ],
       "status": "proven"
@@ -111,12 +123,14 @@
         {
           "type": "e2e-test",
           "path": "e2e/diff.e2e.mjs",
-          "assertion": "Invalid baseline schemaVersion exits 3; incompatible version exits 3"
+          "assertion": "Invalid baseline schemaVersion exits 3; incompatible version exits 3",
+          "sha256": "3c14beb578680ce53c5b03d408136f5a466c5ae17a3c591acd13e6ba6613550c"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
-          "assertion": "parseBaseline validates schemaVersion; refuses unknown versions"
+          "assertion": "parseBaseline validates schemaVersion; refuses unknown versions",
+          "sha256": "1210a6be721d1e8a4f47c5961239b26ea980544eac051ec8206ef804b7c6e96e"
         }
       ],
       "status": "proven"
@@ -129,12 +143,14 @@
         {
           "type": "e2e-test",
           "path": "e2e/diff.e2e.mjs",
-          "assertion": "Self-baseline exits 0; added/removed edges reported; policy mismatch warned; rule-impact with config"
+          "assertion": "Self-baseline exits 0; added/removed edges reported; policy mismatch warned; rule-impact with config",
+          "sha256": "3c14beb578680ce53c5b03d408136f5a466c5ae17a3c591acd13e6ba6613550c"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
-          "assertion": "computeDiff returns structural diff; policyMismatch detected via fingerprint; computeRuleImpact for depConstraints-only context"
+          "assertion": "computeDiff returns structural diff; policyMismatch detected via fingerprint; computeRuleImpact for depConstraints-only context",
+          "sha256": "1210a6be721d1e8a4f47c5961239b26ea980544eac051ec8206ef804b7c6e96e"
         }
       ],
       "status": "proven"
@@ -147,12 +163,14 @@
         {
           "type": "e2e-test",
           "path": "e2e/determinism.e2e.mjs",
-          "assertion": "Impact --format json produces identical output on two runs"
+          "assertion": "Impact --format json produces identical output on two runs",
+          "sha256": "90c0f2a62a111013990ff96ec07042e961c1aae50710c597192657cc270df5ec"
         },
         {
           "type": "behavioral-test",
           "path": "src/commands/impact.test.mjs",
-          "assertion": "Sorts results using plain string comparison (never localeCompare)"
+          "assertion": "Sorts results using plain string comparison (never localeCompare)",
+          "sha256": "293cba26d3841b26f3d2b9adc387932e175ac102899878b5dcb9ad32012bf2bd"
         }
       ],
       "status": "proven"
@@ -165,17 +183,20 @@
         {
           "type": "behavioral-test",
           "path": "src/commands/context-command.test.mjs",
-          "assertion": "Returns tags, matched constraints, per-edge violations; coverage.notes warns about depConstraints-only scope"
+          "assertion": "Returns tags, matched constraints, per-edge violations; coverage.notes warns about depConstraints-only scope",
+          "sha256": "c04a310022c9d50cc8a3de19a73b7ad2fee52c56d0c55e7dd3b4d1efbfaac4f3"
         },
         {
           "type": "e2e-test",
           "path": "e2e/context.e2e.mjs",
-          "assertion": "Native consumer: tags, constraints, coverage.notes verified; Moon consumer: context E2E"
+          "assertion": "Native consumer: tags, constraints, coverage.notes verified; Moon consumer: context E2E",
+          "sha256": "336994ea66e2b7b7ff1d374e3127b478d530508b8c8e5ef927805c5aa11b6cb8"
         },
         {
           "type": "documentation",
           "path": "../../docs/concepts/agentic-development.md",
-          "assertion": "Section 'What context and impact do not check' warns agents about the semantic gap"
+          "assertion": "Section 'What context and impact do not check' warns agents about the semantic gap",
+          "sha256": "a42bca1e927a59d28160eb947a285c20d1a6cc9633a69c91a45e9d46bbe1686b"
         }
       ],
       "status": "proven"
@@ -188,12 +209,14 @@
         {
           "type": "behavioral-test",
           "path": "src/commands/explain.test.mjs",
-          "assertion": "Returns all violations at a site; unresolvable site returns unresolvable:true with reason"
+          "assertion": "Returns all violations at a site; unresolvable site returns unresolvable:true with reason",
+          "sha256": "0d0a06faae662529f3ff0c62b746cd89015f5371e3fc8f0c740d7ef8e007f1cb"
         },
         {
           "type": "e2e-test",
           "path": "e2e/explain.e2e.mjs",
-          "assertion": "Native and Moon consumers: specifier, sourceProject, targetProject, violations verified"
+          "assertion": "Native and Moon consumers: specifier, sourceProject, targetProject, violations verified",
+          "sha256": "857e198249c0614af643f784d985ae782ab8dfa9906f92f44193e2570ee0c343"
         }
       ],
       "status": "proven"
@@ -206,37 +229,44 @@
         {
           "type": "behavioral-test",
           "path": "src/intent/intent.test.mjs",
-          "assertion": "depConstraints verdicts from judgeEdge agree with evaluate in both directions (violating edge found by both, legal edge reported by neither); explain includes the same violations as evaluate at a given site"
+          "assertion": "depConstraints verdicts from judgeEdge agree with evaluate in both directions (violating edge found by both, legal edge reported by neither); explain includes the same violations as evaluate at a given site",
+          "sha256": "2463a5b8f92de98562360eb3c5defe6703160b81e43c572ee4d21800594d1fa6"
         },
         {
           "type": "behavioral-test",
           "path": "src/commands/context-command.test.mjs",
-          "assertion": "Test verifies coverage.notes contains depConstraints warning"
+          "assertion": "Test verifies coverage.notes contains depConstraints warning",
+          "sha256": "c04a310022c9d50cc8a3de19a73b7ad2fee52c56d0c55e7dd3b4d1efbfaac4f3"
         },
         {
           "type": "e2e-test",
           "path": "e2e/context.e2e.mjs",
-          "assertion": "E2E verifies coverage.notes in JSON envelope"
+          "assertion": "E2E verifies coverage.notes in JSON envelope",
+          "sha256": "336994ea66e2b7b7ff1d374e3127b478d530508b8c8e5ef927805c5aa11b6cb8"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/context-command.mjs",
-          "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)"
+          "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)",
+          "sha256": "09fd5bd16835f50f8065a72df34aadb5e17644d3d43007ad0a734c26ea5026af"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/impact.mjs",
-          "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)"
+          "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)",
+          "sha256": "9ab56d847567b0d50b4431f3029318b295dde290e098034dc7aad1f0d47ee281"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
-          "assertion": "coverage.notes warns when ruleImpact is computed (depConstraints only, 3 of 15)"
+          "assertion": "coverage.notes warns when ruleImpact is computed (depConstraints only, 3 of 15)",
+          "sha256": "1210a6be721d1e8a4f47c5961239b26ea980544eac051ec8206ef804b7c6e96e"
         },
         {
           "type": "documentation",
           "path": "../../docs/concepts/agentic-development.md",
-          "assertion": "Section warns agents: violations:[] means allowed by constraint table, not free of all boundary violations"
+          "assertion": "Section warns agents: violations:[] means allowed by constraint table, not free of all boundary violations",
+          "sha256": "a42bca1e927a59d28160eb947a285c20d1a6cc9633a69c91a45e9d46bbe1686b"
         }
       ],
       "status": "proven"
@@ -249,12 +279,14 @@
         {
           "type": "e2e-test",
           "path": "e2e/determinism.e2e.mjs",
-          "assertion": "Graph, check, impact: two runs produce byte-identical JSON"
+          "assertion": "Graph, check, impact: two runs produce byte-identical JSON",
+          "sha256": "90c0f2a62a111013990ff96ec07042e961c1aae50710c597192657cc270df5ec"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/graph.mjs",
-          "assertion": "Plain string comparison throughout; never localeCompare"
+          "assertion": "Plain string comparison throughout; never localeCompare",
+          "sha256": "93649d4a317c7c0952d12920227bfc43fbdd614ed49b6fc88fc79d26569f5519"
         }
       ],
       "status": "proven"
@@ -267,22 +299,26 @@
         {
           "type": "e2e-test",
           "path": "e2e/parity.e2e.mjs",
-          "assertion": "Nx vs Native: project names, edge source/target/type, violation rule IDs, envelope structure"
+          "assertion": "Nx vs Native: project names, edge source/target/type, violation rule IDs, envelope structure",
+          "sha256": "106f59315e4661ae67f5c1e44895d56f7f7562eacd4c44101a9ed4b0e56f774e"
         },
         {
           "type": "e2e-test",
           "path": "e2e/moon.e2e.mjs",
-          "assertion": "Moon: check, graph, diff, impact, explain, context verified against Moon provider (conditional on moon CLI availability)"
+          "assertion": "Moon: check, graph, diff, impact, explain, context verified against Moon provider (conditional on moon CLI availability)",
+          "sha256": "8293a65ff407ea43a3985c742ae6333970ec3b0400f3df46189793a3dc87af6b"
         },
         {
           "type": "source-evidence",
           "path": "src/providers/moon.mjs",
-          "assertion": "inferWorkspaceLayout returns null for partial layouts — same all-or-nothing contract as Nx and Native"
+          "assertion": "inferWorkspaceLayout returns null for partial layouts — same all-or-nothing contract as Nx and Native",
+          "sha256": "232dd8e2cbe70c9149ba3a75a03dcebe0db355894c280964ebbf6a5a536b5567"
         },
         {
           "type": "behavioral-test",
           "path": "src/providers/moon.test.mjs",
-          "assertion": "Partial layout (apps-only, libs-only) returns undefined workspaceLayout"
+          "assertion": "Partial layout (apps-only, libs-only) returns undefined workspaceLayout",
+          "sha256": "084a0061b3236e680274d837fb2f12d27dd4b5a379040157f7afe2be5088e8ac"
         }
       ],
       "status": "proven"
@@ -295,17 +331,20 @@
         {
           "type": "behavioral-test",
           "path": "src/commands/drift.test.mjs",
-          "assertion": "driftCommand returns status ok with observed facts and findings; refuses incomplete coverage, absent intent, and unregistered-plugin incomplete graph; buildObserved counts implicit edges separately"
+          "assertion": "driftCommand returns status ok with observed facts and findings; refuses incomplete coverage, absent intent, and unregistered-plugin incomplete graph; buildObserved counts implicit edges separately",
+          "sha256": "9dabdd88026324b991a6d76b364c50892ead362347ba641629f5eb9722001686"
         },
         {
           "type": "behavioral-test",
           "path": "src/report/drift-text.test.mjs",
-          "assertion": "formatDriftReport states comparison facts even when clean (no-drift is a claim about coverage); groups findings by rule in taxonomy order; byte-identical determinism"
+          "assertion": "formatDriftReport states comparison facts even when clean (no-drift is a claim about coverage); groups findings by rule in taxonomy order; byte-identical determinism",
+          "sha256": "767d395c40cb0fa61f19ec06d587708e4ba065323bb1ee170254365847b49cc5"
         },
         {
           "type": "e2e-test",
           "path": "e2e/drift.e2e.mjs",
-          "assertion": "Through the installed CLI: drift exits 0 on a matching tree and names fingerprint/rows; reports dependencyForbidden and projectMissing; JSON envelope carries findings; malformed intent exits 3 for both drift and check"
+          "assertion": "Through the installed CLI: drift exits 0 on a matching tree and names fingerprint/rows; reports dependencyForbidden and projectMissing; JSON envelope carries findings; malformed intent exits 3 for both drift and check",
+          "sha256": "1e060ba0f02497259fdde2481dc59bd74bf6658f2fc354100de4f89ff6ffb926"
         }
       ],
       "status": "proven"
