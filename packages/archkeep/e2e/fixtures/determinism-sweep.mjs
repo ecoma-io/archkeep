@@ -89,6 +89,41 @@ const WITH_WAIVER = MONOREPO_BOUNDARY_CONFIG.replace(
 );
 
 /**
+ * A fitness export the monorepo's graph SATISFIES: the three linear projects
+ * hold no cycle, so `fitness` reaches a real `pass` verdict (exit 0) — the
+ * judged lane, not the no-policy refusal lane the sweep pinned before.
+ */
+const PASSING_FITNESS = `export const fitness = [
+  {
+    name: "cycle-free",
+    match: ["*"],
+    condition: { type: "cycle-free" },
+    reason: "a cycle makes every layer statement unfalsifiable",
+  },
+];
+`;
+
+/**
+ * A fitness export the monorepo's graph VIOLATES: the direct `app → api` edge
+ * carries both tags, so a forbidden `layer-dependency` between them fails —
+ * the loud direction, `fitness` exiting 1 on a real judged finding.
+ */
+const FAILING_FITNESS = `export const fitness = [
+  {
+    name: "app-must-not-reach-api",
+    match: ["*"],
+    condition: {
+      type: "layer-dependency",
+      from: "layer:app",
+      to: "layer:api",
+      direction: "forbidden",
+    },
+    reason: "the app layer is being decomposed away from the api layer",
+  },
+];
+`;
+
+/**
  * The sweep consumer: the native monorepo plus intent and ADR for the command
  * surface that reads them.
  *
@@ -96,8 +131,10 @@ const WITH_WAIVER = MONOREPO_BOUNDARY_CONFIG.replace(
  * @param {Record<string, string>} peers The package's declared peer ranges.
  * @param {string} packageManager This repository's pnpm pin.
  * @param {object} intent The intended-architecture object to serialize.
- * @param {{withWaiver?: boolean}} [options] Carry a `boundarySuppressions`
- *   waiver on the law, so `waivers` lists a live waiver.
+ * @param {{withWaiver?: boolean, withFitness?: "passing"|"failing"}} [options]
+ *   Carry a `boundarySuppressions` waiver on the law, so `waivers` lists a live
+ *   waiver, or a real judged `fitness` export on the law — `"passing"` the
+ *   graph satisfies, `"failing"` the direct app→api edge violates.
  * @returns {Record<string, string>} Relative path → contents.
  */
 export function determinismSweepFiles(packageName, peers, packageManager, intent, options = {}) {
@@ -105,6 +142,12 @@ export function determinismSweepFiles(packageName, peers, packageManager, intent
   files["architecture-intent.json"] = `${JSON.stringify(intent, null, 2)}\n`;
   files[`${ADR_DIR}/0001-layers.md`] = SWEEP_ADR;
   if (options.withWaiver) files["module-boundaries.config.mjs"] = WITH_WAIVER;
+  if (options.withFitness === "passing") {
+    files["module-boundaries.config.mjs"] = `${MONOREPO_BOUNDARY_CONFIG}\n${PASSING_FITNESS}`;
+  }
+  if (options.withFitness === "failing") {
+    files["module-boundaries.config.mjs"] = `${MONOREPO_BOUNDARY_CONFIG}\n${FAILING_FITNESS}`;
+  }
   return files;
 }
 

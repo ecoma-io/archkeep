@@ -19,7 +19,7 @@
 // readable field, the always-present `result.captured.duplicate` boolean
 // (E-F05), so it lives in `history.e2e.mjs`, which pins that one-field
 // contract instead.
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -39,6 +39,8 @@ let cleanWaiver; // clean tree whose law carries a live waiver
 let violating; // same tree, intent forbids the observed app→api edge
 let malformed; // same tree, intent is strict JSON but not a valid intent
 let profile; // Nx consumer selecting the "strict" profile by name
+let fitnessPassing; // clean tree whose law carries a real, satisfied fitness export
+let fitnessFailing; // clean tree whose law carries a real, violated fitness export
 
 const MALFORMED_INTENT = { dependencies: { allowed: [] } };
 
@@ -52,6 +54,8 @@ beforeAll(() => {
   artifact = packArtifact();
   clean = makeSweep(artifact, sweepIntents.CLEAN_INTENT);
   cleanWaiver = makeSweep(artifact, sweepIntents.CLEAN_INTENT, { withWaiver: true });
+  fitnessPassing = makeSweep(artifact, sweepIntents.CLEAN_INTENT, { withFitness: "passing" });
+  fitnessFailing = makeSweep(artifact, sweepIntents.CLEAN_INTENT, { withFitness: "failing" });
   violating = makeSweep(artifact, sweepIntents.VIOLATING_INTENT);
   malformed = makeSweep(artifact, MALFORMED_INTENT);
   profile = createNxLanguageConsumer(artifact, determinismSweepProfilesFiles);
@@ -63,6 +67,8 @@ afterAll(() => {
   violating?.cleanup();
   malformed?.cleanup();
   profile?.cleanup();
+  fitnessPassing?.cleanup();
+  fitnessFailing?.cleanup();
   artifact?.cleanup();
 });
 
@@ -145,6 +151,27 @@ function assertDeterministic(root, args, options = {}) {
 
   expect(first.stdout).toBe(second.stdout);
 }
+
+/**
+ * A change intent that moves nothing, pinned to `commit`: the change command's
+ * matched lane — every declared change already present in the baseline's own
+ * provenance — which is the lane a real consumer's no-op intent hits.
+ *
+ * @param {string} commit The provenance commit the manifest declares as base.
+ * @returns {string} The manifest text.
+ */
+const changeManifestFor = (commit) =>
+  `${JSON.stringify(
+    {
+      version: "1",
+      base: { commit },
+      projects: { add: [], remove: [] },
+      edges: { add: [], remove: [] },
+      constraints: {},
+    },
+    null,
+    2,
+  )}\n`;
 
 describe("determinism sweep", () => {
   it("drift --format json is byte-identical, matching intent, exit 0", () => {
@@ -245,6 +272,93 @@ describe("determinism sweep", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("delta <baseline> --format json is byte-identical against its own capture", () => {
+    const dir = freshHistoryDir();
+    try {
+      const baseline = join(dir, "baseline.json");
+      const capture = archkeep(clean.root, ["delta", "--capture", "--output", baseline]);
+      expect(capture.exitCode).toBe(0);
+      assertDeterministic(clean.root, ["delta", baseline, "--format", "json"], { expectExit: 0 });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("change <baseline> --intent is byte-identical on a matched manifest", () => {
+    const dir = freshHistoryDir();
+    try {
+      const baseline = join(dir, "baseline.json");
+      const capture = archkeep(clean.root, ["delta", "--capture", "--output", baseline]);
+      expect(capture.exitCode).toBe(0);
+      // The manifest's base commit is read out of the capture itself, so the
+      // matched lane is exercised against the tree's real provenance rather
+      // than a SHA spelled into the fixture.
+      const capturedCommit = JSON.parse(readFileSync(baseline, "utf8")).provenance.commit;
+      const manifest = join(dir, "change-intent.json");
+      writeFileSync(manifest, changeManifestFor(capturedCommit), "utf8");
+      assertDeterministic(
+        clean.root,
+        ["change", baseline, "--intent", manifest, "--format", "json"],
+        { expectExit: 0 },
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rules verify --format json is byte-identical, exit 3, with no catalog to load", () => {
+    // The sweep tree ships no rules catalog, so verify must refuse to look
+    // rather than report zero findings — the no-verdict lane has to be as
+    // deterministic as a clean verdict.
+    assertDeterministic(clean.root, ["rules", "verify", "--format", "json"], { expectExit: 3 });
+  });
+
+  it("rules verify --catalog is byte-identical, exit 1, on an artifact the catalog names but the disk lacks", () => {
+    const dir = freshHistoryDir();
+    try {
+      // The catalog lives OUTSIDE the consumer's git tree, so the run stays
+      // clean; its one entry names an artifact that does not exist, which is
+      // the verdict lane — verify reports the finding and exits 1.
+      const catalog = join(dir, "catalog.json");
+      writeFileSync(
+        catalog,
+        `${JSON.stringify(
+          {
+            version: 1,
+            rules: [
+              {
+                name: "no-nested-imports",
+                artifact: "rules/no-such-rule.wasm",
+                sha256: `${"a".repeat(64)}`,
+                contract: "1",
+              },
+            ],
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+      assertDeterministic(
+        clean.root,
+        ["rules", "verify", "--catalog", catalog, "--format", "json"],
+        {
+          expectExit: 1,
+        },
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("fitness --format json is byte-identical, exit 0, on a policy the graph satisfies", () => {
+    assertDeterministic(fitnessPassing.root, ["fitness", "--format", "json"], { expectExit: 0 });
+  });
+
+  it("fitness --format json is byte-identical, exit 1, on a policy the graph violates", () => {
+    assertDeterministic(fitnessFailing.root, ["fitness", "--format", "json"], { expectExit: 1 });
   });
 
   it("check --format json is byte-identical and stays exit 0 on the sweep tree", () => {

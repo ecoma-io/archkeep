@@ -23,6 +23,7 @@ import {
   historyTool,
   impactTool,
   proposeTool,
+  scenarioTool,
 } from "./engine.mjs";
 
 /** Every fixture root, removed once at the end — each test names its own. */
@@ -624,5 +625,64 @@ describe("archkeep_propose", () => {
     await expect(proposeTool({ workspaceRoot: w.root, mode: "reconcile" }, w.io)).rejects.toThrow(
       /reconcile requires a tracked architecture-intent\.json/,
     );
+  });
+});
+
+describe("archkeep_scenario", () => {
+  it("evaluates a virtual change over the seam graph, never authoritative", async () => {
+    const w = workspace({ violating: false });
+    // `adapter` does not depend on `domain` yet; the scenario adds that edge
+    // virtually, so `domain`'s dependent set grows by exactly one.
+    const scenarioJson = `${JSON.stringify({
+      changes: [
+        { type: "dependency_added", source: "adapter", target: "domain", edgeType: "static" },
+      ],
+    })}\n`;
+    const result = await scenarioTool(
+      { workspaceRoot: w.root, projectName: "domain", scenarioJson },
+      w.io,
+    );
+    expect(result.command).toBe("scenario");
+    // The tool face adds nothing and flattens nothing: the envelope is the
+    // engine's own, virtual and not authoritative.
+    expect(result.result.virtual).toBe(true);
+    expect(result.result.notAuthoritative).toBe(true);
+    // The evaluation really applied the change: the current dependent set is
+    // exactly `app`, and the scenario's adds `adapter` — the delta names it.
+    expect(result.result.current.impact.direct).toEqual(["app"]);
+    expect(result.result.scenario.impact.direct).toContain("adapter");
+    expect(result.result.delta.dependentsAdded).toContain("adapter");
+  });
+
+  it("propagates the engine's incomplete-coverage refusal verbatim", async () => {
+    // The coverage gate is the scenario's loud direction: an agent must never
+    // get a what-if answer over a graph that under-represents the tree.
+    const w = workspace({ violating: false });
+    const withGhost = {
+      ...w.io,
+      listFiles: () => [...w.io.listFiles(), "libs/domain/ghost.go"],
+    };
+    await expect(
+      scenarioTool(
+        {
+          workspaceRoot: w.root,
+          projectName: "domain",
+          scenarioJson: `${JSON.stringify({
+            changes: [{ type: "dependency_added", source: "domain", target: "app" }],
+          })}\n`,
+        },
+        withGhost,
+      ),
+    ).rejects.toThrow(/incomplete coverage/);
+  });
+
+  it("propagates the parse refusal for a malformed scenario, never an answer", async () => {
+    const w = workspace({ violating: false });
+    await expect(
+      scenarioTool(
+        { workspaceRoot: w.root, projectName: "domain", scenarioJson: "{ not json" },
+        w.io,
+      ),
+    ).rejects.toThrow(/invalid JSON/);
   });
 });
