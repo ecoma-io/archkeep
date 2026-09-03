@@ -282,9 +282,33 @@ describe("analysis failures", () => {
     const text = formatFailures([
       { sourceFile: "a/b.ts", line: 3, column: 8, reason: "TypeScript cannot resolve 'x'" },
     ]);
-    expect(text).toContain("not verdicts");
-    expect(text).toContain("the run does not fail on them");
+    expect(text).toContain("blind spots inside files that were analyzed");
+    // The class line is load-bearing (#595, narrowed): a blind spot without
+    // the dynamic marker is an unresolvable literal specifier, and the run
+    // DID fail over it — a reader must not read "could not be resolved" as
+    // "and the run moved on".
+    expect(text).toContain("withheld the run's verdict");
     expect(text).toContain("a/b.ts:3:8  TypeScript cannot resolve 'x'");
+  });
+
+  it("names the external class on its own line, so the exit code is not discovered", () => {
+    // An unresolvable bare package is the class the verdict stands over —
+    // resolvability there is a property of the installed dependency tree, not
+    // the governed graph. The report must say so where the rows print, or a
+    // reader cannot tell this block from the verdict-withholding one above it.
+    const text = formatFailures([
+      {
+        sourceFile: "a/b.ts",
+        line: 3,
+        column: 8,
+        reason: "TypeScript cannot resolve 'vitest'",
+        external: true,
+      },
+    ]);
+    expect(text).toContain("blind spots inside files that were analyzed");
+    expect(text).toContain("disclosed without withholding");
+    expect(text).not.toContain("withheld the run's verdict");
+    expect(text).toContain("a/b.ts:3:8  TypeScript cannot resolve 'vitest'");
   });
 
   it("prints a whole-file failure without a position, rather than inventing line 1", () => {

@@ -214,11 +214,14 @@ export const WORKSPACE_MARKERS = [
  *   `createWorkspace` returns.
  * @property {string[]} tracked Every tracked file, from `listFiles(root)`.
  * @property {{imports: object[], failures: object[], analyzed: number,
- *   analyzedFiles: string[], exemptedFiles: string[]}} analysis The
+ *   analyzedFiles: string[], exemptedFiles: string[],
+ *   unsupportedLanguageFiles: string[]}} analysis The
  *   whole-tree-then-scoped (native) or scoped-then-analyzed (nx/moon) result —
  *   see the branches below for why the order is not the same on all three.
  *   `exemptedFiles` is always `[]` on nx/moon: `coverage.exempt` is a
- *   native-only `archkeep.json` key.
+ *   native-only `archkeep.json` key. `unsupportedLanguageFiles` is scoped to
+ *   the selected files on every branch (#601): a gap row names only files the
+ *   selected scope could have judged.
  * @property {{boundaryConfig: string|object, tsConfig: object|undefined,
  *   boundaryConfigDeclared: boolean, profiles?: string, inline?: boolean}} options
  *   What this workspace names its boundary law, its shared tsconfig, and —
@@ -549,6 +552,7 @@ export function resolveCommandContext(
   let failures;
   let analyzed;
   let analyzedFiles;
+  let unsupportedLanguageFiles;
   let pluginGap;
   let unownedGap;
   let unclaimedGap;
@@ -664,6 +668,12 @@ export function resolveCommandContext(
       ...jvmIndexFailures(workspace),
     ]);
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
+    // Scoped exactly like `analyzedFiles` above (#601): a gap row must name
+    // only files the selected scope could have judged, and leaving this
+    // undefined here would crash `check`'s gap assembly instead of reporting.
+    unsupportedLanguageFiles = wholeTreeAnalysis.unsupportedLanguageFiles.filter((file) =>
+      selectedFiles.has(file),
+    );
     analyzed = analyzedFiles.length;
     // Unaffected by `paths`: an exempted file is by definition unowned by any
     // project, so it was never a candidate for `owned`/`selected` in the
@@ -787,6 +797,13 @@ export function resolveCommandContext(
     ]);
     unclaimedGap = { files: unclaimedFiles };
     analyzedFiles = wholeTreeAnalysis.analyzedFiles.filter((file) => selectedFiles.has(file));
+    // Scoped exactly like the native branch's own filter above (#601): a gap
+    // row must name only files the selected scope could have judged, and
+    // leaving this undefined here would crash `check`'s gap assembly instead
+    // of reporting.
+    unsupportedLanguageFiles = wholeTreeAnalysis.unsupportedLanguageFiles.filter((file) =>
+      selectedFiles.has(file),
+    );
     analyzed = analyzedFiles.length;
     // `coverage.exempt` is a native-only key (`../providers/native/coverage.mjs`'s
     // header: "Nx has no equivalent question") — Moon carries no such list.
@@ -835,7 +852,10 @@ export function resolveCommandContext(
       paths,
       { root, cwd, tracked },
     );
-    ({ imports, failures, analyzed, analyzedFiles } = analyzeWorkspace(workspace, selected));
+    ({ imports, failures, analyzed, analyzedFiles, unsupportedLanguageFiles } = analyzeWorkspace(
+      workspace,
+      selected,
+    ));
     // Unclaimed analyzable files — `unclaimedFileFailures` above — join
     // unconditionally, the same workspace-wide posture native's own
     // `discovered.failures` has, so a scoped `check <path>` cannot hide an
@@ -876,7 +896,14 @@ export function resolveCommandContext(
     graph,
     workspace,
     tracked,
-    analysis: { imports, failures, analyzed, analyzedFiles, exemptedFiles },
+    analysis: {
+      imports,
+      failures,
+      analyzed,
+      analyzedFiles,
+      exemptedFiles,
+      unsupportedLanguageFiles,
+    },
     options,
     pluginGap,
     unownedGap,

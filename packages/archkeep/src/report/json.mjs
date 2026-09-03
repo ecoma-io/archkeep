@@ -94,12 +94,39 @@ export function jsonEnvelope({ command, context, status, exitCode, coverage, res
         `them disagree would make one of them a lie.`,
     );
   }
-  if (coverage.complete !== (coverage.notAnalyzed.length === 0)) {
+  // Completeness law, one-directional (#595, #599): `complete: true`
+  // claims the run judged everything its coverage block describes, and a
+  // whole-file failure or an unresolvable import site is exactly the kind
+  // of thing it did not judge — so the claim is refused over either. The
+  // reverse is deliberately allowed: `complete: false` with both lists
+  // empty is the zero-analysis state (a scope that selected no owned file,
+  // in-scope files no analyzer claims), which names its reason in the
+  // envelope's status and decision rather than in these lists, and refusing
+  // it would leave a run that judged nothing unable to say so. blindSpots
+  // is optional because not every command's coverage carries it; where it
+  // is present, the law is enforced.
+  //
+  // Within blindSpots only the unresolvable-LITERAL class counts as unjudged
+  // work (#595, narrowed): a row carrying `dynamic: true` is the declared
+  // non-literal-import limit — the language itself saying the target is
+  // computed at runtime, unknowable to static analysis in principle — and a
+  // declared limit is disclosed, not withheld over. The classifier lives once
+  // in `analysis/source-util.mjs`; this guard reads the row field the same
+  // helper that built the rows set, so the two can never disagree.
+  const blindSpotList = Array.isArray(coverage.blindSpots) ? coverage.blindSpots : [];
+  const unjudgedBlindSpots = blindSpotList.filter(
+    (row) => row.dynamic !== true && row.external !== true,
+  );
+  if (
+    coverage.complete === true &&
+    (coverage.notAnalyzed.length > 0 || unjudgedBlindSpots.length > 0)
+  ) {
     throw new Error(
-      `archkeep: refusing to build a JSON envelope where coverage.complete (${coverage.complete}) ` +
-        `disagrees with coverage.notAnalyzed (${coverage.notAnalyzed.length} entr${coverage.notAnalyzed.length === 1 ? "y" : "ies"}) ` +
-        `— the two must always agree, or a reader checking only one of them could mistake a partial ` +
-        `run for a complete one.`,
+      `archkeep: refusing to build a JSON envelope claiming coverage.complete (${coverage.complete}) ` +
+        `over unjudged work (notAnalyzed: ${coverage.notAnalyzed.length} entr${coverage.notAnalyzed.length === 1 ? "y" : "ies"}, ` +
+        `blindSpots: ${unjudgedBlindSpots.length}) — a run ` +
+        `that could not read everything cannot claim to have. This is a bug in the command that built ` +
+        `this envelope, not a fact about the workspace being judged.`,
     );
   }
   // A bare `null` decision is the same programming error as a hand-built

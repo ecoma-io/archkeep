@@ -373,6 +373,57 @@ function namesDeclaredProject(specifier, workspace) {
   return workspace.projects.some((project) => project.name === name || project.name === specifier);
 }
 
+/**
+ * Whether an unresolvable LITERAL specifier points at the external dependency
+ * universe rather than at the workspace's own governed surface — the row class
+ * that the loud-coverage contract (#595, narrowed) discloses without
+ * withholding the verdict, marked `external: true` on the failure.
+ *
+ * Three shapes always reference the workspace surface and never get the
+ * marker, so a run cannot go quiet over an edge the graph should carry:
+ *
+ * - a path-like specifier (`./`, `../`, `/`): it names a file in the
+ *   workspace's own namespace, and failing to resolve it means that path
+ *   cannot be proven to exist — a broken import, which is loud on purpose;
+ * - a `#` subpath import: package-internal by definition, never an external
+ *   dependency. This is #595's own reported shape
+ *   (`#canary-review/index.mjs`): `packageNameOf` keeps the `#` prefix, so
+ *   the whole-file lane's name test cannot catch it, and without this branch
+ *   the subpath would silently read as external;
+ * - a `paths` alias: the mapping declares the prefix workspace-internal, so
+ *   a specifier under a failed alias is an unproven workspace edge. A `paths`
+ *   key with `*` matches by its prefix (`@app/*` catches `@app/x/y`); an
+ *   exact key matches exactly. (`baseUrl` alone is not consulted — its bare
+ *   results are npm-shaped and read as external.)
+ *
+ * Everything else — `vitest`, `zod`, a scoped package no `paths` row claims —
+ * resolves against an installed dependency tree, and a workspace without that
+ * tree installed (a fresh clone, a trimmed install, the native self-check's
+ * `git archive` copy, which by design carries no `node_modules`) is a normal
+ * state. Those are the rows the native self-check's 284 blind spots are made
+ * of, and treating them as verdict-withholding would make that required CI
+ * step permanently exit 3 over dependencies nobody crossed.
+ *
+ * @param {string} specifier The raw specifier as written.
+ * @param {ts.CompilerOptions} options The resolution options in force.
+ * @returns {boolean}
+ */
+function isExternalUnresolvable(specifier, options) {
+  if (
+    specifier.startsWith("./") ||
+    specifier.startsWith("../") ||
+    specifier.startsWith("/") ||
+    specifier.startsWith("#")
+  ) {
+    return false;
+  }
+  for (const key of Object.keys(options.paths ?? {})) {
+    const star = key.indexOf("*");
+    if (star === -1 ? key === specifier : specifier.startsWith(key.slice(0, star))) return false;
+  }
+  return true;
+}
+
 /** The dialect to parse `sourceFile` as; `lang` wins when the caller knows it. */
 function scriptKindFor(sourceFile, lang) {
   if (lang) return SCRIPT_KIND_BY_LANG[lang] ?? ts.ScriptKind.TS;
@@ -784,7 +835,7 @@ function parseFailures(sourceFile, workspaceRelativePath) {
  * nested `node_modules/`, which every package that declares its own
  * `dependencies` has; the branch below says why, with the measurement.
  *
- * @returns {{ resolved: object|null, reason: string|null }}
+ * @returns {{ resolved: object|null, reason: string|null, external?: boolean }}
  */
 function resolveSpecifier(specifier, sourceFile, workspace) {
   const context = contextFor(workspace);
@@ -905,6 +956,12 @@ function resolveSpecifier(specifier, sourceFile, workspace) {
     if (sibling === null) {
       return {
         resolved: null,
+        // A failed literal is classified here, where the resolution options
+        // are in scope: `external: true` marks the bare-package class the
+        // contract discloses without withholding (`isExternalUnresolvable`
+        // holds the class line). The failure-push site forwards the flag to
+        // the row, and every verdict lane counts withholds from its absence.
+        external: isExternalUnresolvable(specifier, context.options),
         reason: `TypeScript cannot resolve '${specifier}' from '${sourceFile}'`,
       };
     }
@@ -992,7 +1049,7 @@ export function analyzeTypeScript({ sourceFile, text, workspace, lang }) {
       // a grammar error there — and `import x = require(y)` is the form that
       // makes `require` the right word for it.
       const callee = site.callee ?? (site.kind === "dynamic" ? "import" : "require");
-      const { resolved, reason } = site.literal
+      const { resolved, reason, external } = site.literal
         ? resolveSpecifier(site.specifier, sourceFile, workspace)
         : {
             resolved: null,
@@ -1023,13 +1080,37 @@ export function analyzeTypeScript({ sourceFile, text, workspace, lang }) {
       // site failures — the "blind spot" the contract documents as legitimately
       // permanent (`report/text.mjs`'s `formatFailures` is where the report
       // explains the two, and `cli.mjs` counts `unchecked` by
-      // `failure.line === null`). A NON-LITERAL argument keeps its line/column
-      // for the same reason: it is genuinely not statically knowable.
+      // `failure.line === null`).
+      //
+      // The positioned rows then part ways by class, and the markers on the
+      // row are what every verdict lane counts by:
+      //
+      // - a positioned literal that still references the workspace's own
+      //   surface — path-like, `#` subpath, or a `paths` alias — carries NO
+      //   marker and withholds the run's verdict (#595, narrowed): a `#`
+      //   subpath naming a declared project is exactly the shape #595
+      //   reported, and `packageNameOf` keeps the `#`, so the whole-file
+      //   lane's name test above cannot catch it;
+      // - a positioned literal pointing at the bare-package universe carries
+      //   `external: true` (`isExternalUnresolvable` holds the class line)
+      //   and discloses without withholding — the native self-check's 284
+      //   bare rows are this class, and withholding them would make that
+      //   required CI step permanently exit 3;
+      // - a NON-LITERAL argument keeps its line/column for the same reason:
+      //   it is genuinely not statically knowable, and carries
+      //   `dynamic: true` (contract.md).
       if (reason) {
         result.failures.push(
           site.literal && namesDeclaredProject(site.specifier, workspace)
             ? fileFailure(sourceFile, reason)
-            : { sourceFile, line: line + 1, column: character + 1, reason },
+            : {
+                sourceFile,
+                line: line + 1,
+                column: character + 1,
+                reason,
+                ...(site.literal ? {} : { dynamic: true }),
+                ...(site.literal && external ? { external: true } : {}),
+              },
         );
       }
     }

@@ -2170,7 +2170,9 @@ export const depConstraints = [
     // legitimate package dependencies, NOT missing workspace edges — no
     // declared project is named `left-pad`. Failing the whole run on them would
     // make every package-owning workspace uncheckable. They stay positioned
-    // blind spots (reported loudly, exit 0).
+    // blind spots: reported loudly in the report, and — since #595 — named by
+    // the exit too (3, no-verdict), because the run saw a site it could not
+    // judge and must not present that as a pass.
     const pkgRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-native-unresolvable-pkg-"));
     const writeP = (relativePath, text) => {
       mkdirSync(join(pkgRoot, relativePath, ".."), { recursive: true });
@@ -2225,17 +2227,28 @@ export const boundarySuppressions = [];
       );
       expect(violations).toBe(0);
       expect(unchecked).toBe(0);
-      // The blind spot is still reported — loud, never silent — but the verdict
-      // stays `ok` because the import names no declared project.
+      // The blind spot is still reported — loud, never silent — under its
+      // own class line: the import names no declared project, so it asks the
+      // external dependency universe, not the governed graph (#595,
+      // narrowed: `external` row class). The verdict stands over the
+      // statically judgeable surface; withholding over an uninstalled
+      // package would make every fresh-clone or git-archive face of this
+      // tree permanently un-green over dependencies nobody crossed.
       expect(report).toContain("left-pad");
       expect(report).toContain("TypeScript cannot resolve 'left-pad'");
+      expect(report).toContain("disclosed without withholding");
       expect(report).not.toContain("could not be analyzed at all");
+      expect(report).not.toContain("withheld the run's verdict");
 
       const cliStreams = {
         ...nativeEnv(),
         cwd: pkgRoot,
         listFiles: () => pFiles,
       };
+      // exit 0 over an external-only tree — exit 3 here would withhold the
+      // verdict over the dependency universe, not the governed graph. The
+      // loud half lives one class over: a `#` subpath or broken relative
+      // path (workspace-referencing literals) IS the no-verdict lane.
       expect(await runCli(["check"], cliStreams)).toBe(EXIT.ok);
     } finally {
       rmSync(pkgRoot, { recursive: true, force: true });
@@ -6153,13 +6166,18 @@ var _ = a.Name
     expect(streams.lines.err.join("\n")).toContain("matches no tracked file");
   });
 
-  it("still selects cleanly when scoped to a real, tracked, merely unowned path", async () => {
-    // `module-boundaries.config.mjs` is tracked but owned by no project (no
-    // declared project's root covers it) — a legitimate, genuinely empty
-    // slice, and must not be refused the way the untracked case above is.
+  it("runs — not usage-refused — and answers no-verdict over a scope with nothing to judge", async () => {
+    // `module-boundaries.config.mjs` is tracked and the model exempts it, so
+    // the scoped run selects it and then judges nothing. The P1-04 contrast
+    // with the untracked case above survives — the usage refusal is for paths
+    // no tracked file matches, and this path runs — but since #599 a run that
+    // analyzed nothing cannot report exit 0: judged nothing is not clean.
     const streams = { ...env(), cwd: untrackedRoot, listFiles: () => trackedFiles };
-    expect(await runCli(["check", "module-boundaries.config.mjs"], streams)).toBe(EXIT.ok);
-    expect(streams.lines.out.join("\n")).toContain("no boundary violations");
+    expect(await runCli(["check", "module-boundaries.config.mjs"], streams)).toBe(EXIT.error);
+    const out = streams.lines.out.join("\n");
+    // The loud direction: the ✔ line alone was exactly the old silence.
+    expect(out).toContain("no boundary violations");
+    expect(out).toContain("no file in scope could be analyzed — coverage incomplete");
   });
 });
 
@@ -6760,7 +6778,9 @@ export const moduleBoundaryOptions = {
   // so it names no crate to resolve (`../src/analysis/rust.mjs`'s
   // `braceGroupArms` returns null and the caller keeps the loud answer) — the
   // file is analyzed, this one site is not, and that is a blind spot rather
-  // than a whole-file failure: `coverage.complete` must stay true over it.
+  // than a whole-file failure: the site is named in `coverage.blindSpots`,
+  // and the run itself moves to the no-verdict lane (#595) — a verdict the
+  // run could not reach is not a `pass`.
   //
   // A WELL-FORMED group is deliberately not the fixture any more: it resolves
   // now, one record per arm, so using it here would leave this case asserting
@@ -6787,7 +6807,7 @@ export const moduleBoundaryOptions = {
     ],
   };
 
-  it("names the unsplittable-group site in coverage.blindSpots, and leaves coverage.complete true", async () => {
+  it("names the unsplittable-group site in coverage.blindSpots, and moves the run to the no-verdict lane", async () => {
     const { report, violations, unchecked } = await check(
       { format: "json", config: null, paths: [] },
       rustContext,
@@ -6795,9 +6815,15 @@ export const moduleBoundaryOptions = {
     expect(violations).toBe(0);
     expect(unchecked).toBe(0);
     const envelope = JSON.parse(report);
-    expect(envelope.status).toBe("ok");
-    expect(envelope.coverage.complete).toBe(true);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.decision.verdict).toBe("unknown");
+    expect(envelope.decision.reason).toBe(
+      "1 import site could not be resolved — coverage incomplete",
+    );
+    expect(envelope.coverage.complete).toBe(false);
     expect(envelope.coverage.notAnalyzed).toEqual([]);
+    // The disclosure half did not move: the site is named exactly as before.
     expect(envelope.coverage.blindSpots).toEqual([
       {
         file: "libs/widget/src/lib.rs",

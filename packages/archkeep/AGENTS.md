@@ -412,9 +412,25 @@ Nothing that cannot enforce reports success — see the invariant in
   non-waived violation `delta` classifies as introduced; so is a change that
   produced consequences its declaration did not cover; so is a rule artifact
   that fails catalog integrity — and each of the four exits 3 where it could
-  not look. Every other verb in `cli.mjs`'s `COMMANDS` table only ever reads,
-  so a command that finds something reports it without claiming the
-  boundary-violation exit code.
+  not look. Blind spots ride that lane too, with one class line
+  (`src/analysis/contract.md` owns it): an unresolvable LITERAL specifier
+  that references the workspace's own surface — path-like, `#` subpath,
+  `paths` alias — withholds the verdict (#595 — a concrete question about the
+  governed graph the run could not answer), while a bare-package specifier
+  that names no declared project carries `external: true` and a non-literal
+  `import()` argument carries `dynamic: true` — both disclosed without
+  withholding, because the first asks the dependency universe rather than the
+  governed graph (the native self-check's `git archive` copy, which by design
+  carries no `node_modules`, holds 284 such rows) and the second is the
+  language saying the target is computed at runtime (this repository's own
+  ten config-loader sites are why that line exists). The
+  loud-coverage contract covers every command: `graph`/`discover`/`explain`/
+  `context` report `no-verdict` over unjudged work, and
+  `drift`/`reconcile`/`debt`/`fitness`/`waivers`/`impact`/`scenario`/`diff`/
+  `history`/`delta` refuse loudly rather than print a verdict over a graph
+  the run could not fully read. Every other verb in `cli.mjs`'s `COMMANDS`
+  table only ever reads, so a command that finds something reports it without
+  claiming the boundary-violation exit code.
   `--format json` wraps the same verdict in the versioned envelope
   `src/report/json.mjs` builds and `docs/reference/json-output.md`
   documents — a third rendering, changing no exit code and no byte of the text

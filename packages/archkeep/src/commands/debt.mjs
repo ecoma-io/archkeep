@@ -45,7 +45,11 @@
  * when the ledger was taken; the aging itself is snapshot-relative
  * (`../governance/debt-ledger.mjs`).
  */
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { judgeIntent } from "../architecture-intent/judge.mjs";
 import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
 import { computeDebtLedger } from "../governance/debt-ledger.mjs";
@@ -89,10 +93,22 @@ export async function debtCommand(dir, commandContext, options = {}) {
   const notAnalyzed = analysis.failures
     .filter(isWholeFileFailure)
     .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
+
+  const blindSpotCount = unresolvableLiteralCount(analysis.failures);
   if (notAnalyzed.length > 0) {
     throw new Error(
-      `archkeep: debt has incomplete coverage — ${notAnalyzed.length} file` +
-        `${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed, so every "project missing" ` +
+      `archkeep: debt has incomplete coverage — ` +
+        [
+          notAnalyzed.length > 0
+            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
+            : null,
+          blindSpotCount > 0
+            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(", ") +
+        `, so every "project missing" ` +
         `would be ambiguous between "gone" and "never seen". Fix the unanalyzed files and re-run.`,
     );
   }
@@ -173,9 +189,7 @@ export async function debtCommand(dir, commandContext, options = {}) {
     analyzedFiles: analysis.analyzed,
     imports: analysis.imports.length,
     notAnalyzed: [],
-    blindSpots: analysis.failures
-      .filter((failure) => !isWholeFileFailure(failure))
-      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    blindSpots: blindSpotRows(analysis.failures),
     // The ledger names what it could not age — a reader can tell "aged" from
     // "observed, not yet aged". The second note discloses `sampleTime`'s own
     // nature: it reflects the wall clock at the moment of THIS run, not the
