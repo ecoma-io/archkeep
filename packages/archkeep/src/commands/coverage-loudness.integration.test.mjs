@@ -14,10 +14,16 @@ import { check } from "../../cli.mjs";
 // - scoped to files no project owns, or over files no analyzer claims →
 //   nothing was judged → status "no-verdict", exit 3, `coverage.complete`
 //   false (#599).
-// - analyzed files, but an import site could not be resolved → that site was
-//   never judged → also the no-verdict lane (#595). The site stays named in
-//   `coverage.blindSpots`; what changes is that the run stops claiming
-//   `pass` over it.
+// - analyzed files, but an import site the workspace's own surface references
+//   could not be resolved → that site was never judged → also the no-verdict
+//   lane (#595). The site stays named in `coverage.blindSpots`; what changes
+//   is that the run stops claiming `pass` over it. An unresolvable
+//   bare-package specifier names the EXTERNAL dependency universe instead —
+//   resolvability there depends on an installed dependency tree a workspace
+//   legitimately may not have — so it is disclosed (`external: true`) without
+//   withholding; and a non-literal `import()` argument is the language
+//   declaring the target computed at runtime — `dynamic: true`, likewise
+//   disclosed without withholding.
 // - analyzed files, and a project-owned file carries an extension no analyzer
 //   claims → the analyzable surface was judged; the unclaimed file is
 //   DISCLOSED, not failed (#601): a `coverageGaps` row names it, `complete`
@@ -243,5 +249,97 @@ describe("#595 — an unresolvable site moves the run to the no-verdict lane", (
     expect(envelope.coverage.complete).toBe(false);
     // The disclosure half did not move: the site is named exactly as before.
     expect(envelope.coverage.blindSpots).toHaveLength(1);
+  });
+});
+
+describe("#595, external class — a bare package import withholds nothing", () => {
+  const ext = makeRoot("external-bare");
+  ext.write("nx.json", "{}\n");
+  ext.write("module-boundaries.config.mjs", CONFIG);
+  ext.write("libs/widget/Cargo.toml", '[package]\nname = "widget"\nversion = "0.1.0"\n');
+  ext.write("libs/widget/src/lib.rs", "use other::thing;\n");
+  // A bare specifier no installed dependency tree answers. The same tree
+  // exited 3 under the narrowed-to-literal flip this class line replaced:
+  // the native self-check's `git archive` copy carries no `node_modules` by
+  // design, so every bare import in this repository failed there at once and
+  // the required gate went permanently exit 3. The class line: a specifier
+  // that names no project the workspace declares asks the dependency
+  // universe, not the governed graph — `external: true`, disclosed, and the
+  // verdict stands over the statically judgeable surface.
+  ext.write(
+    "libs/widget/src/dep.js",
+    'import x from "archkeep-fixture-uninstalled-package";\nexport const use = () => x;\n',
+  );
+
+  it("an external-only blind-spot tree is ok and complete, with the site still named", async () => {
+    const { report } = await check(
+      { format: "json", config: null, paths: [] },
+      contextFor(
+        ext.root,
+        [
+          "nx.json",
+          "module-boundaries.config.mjs",
+          "libs/widget/src/lib.rs",
+          "libs/widget/src/dep.js",
+        ],
+        widgetNode(),
+      ),
+    );
+    const envelope = JSON.parse(report);
+    expect(envelope.status).toBe("ok");
+    expect(envelope.exitCode).toBe(0);
+    expect(envelope.decision.verdict).toBe("pass");
+    expect(envelope.coverage.complete).toBe(true);
+    expect(envelope.coverage.blindSpots).toHaveLength(1);
+    expect(envelope.coverage.blindSpots[0]).toMatchObject({
+      file: "libs/widget/src/dep.js",
+      external: true,
+    });
+    expect(envelope.coverage.blindSpots[0].dynamic).toBeUndefined();
+  });
+});
+
+describe("#595, TypeScript face — a # subpath or broken relative path withholds", () => {
+  const sub = makeRoot("subpath-relative");
+  sub.write("nx.json", "{}\n");
+  sub.write("module-boundaries.config.mjs", CONFIG);
+  sub.write("libs/widget/Cargo.toml", '[package]\nname = "widget"\nversion = "0.1.0"\n');
+  sub.write("libs/widget/src/lib.rs", "use other::thing;\n");
+  // #595's own reported shape: `#canary-review/index.mjs` names a declared
+  // project through the subpath convention, but `packageNameOf` keeps the
+  // `#`, so the whole-file lane's name test cannot catch it — it lands as a
+  // positioned row, and the positioned literal that references the
+  // workspace's own surface is the class that withholds. A broken relative
+  // path names a workspace file that cannot be proven to exist — the same
+  // lane. Neither row carries a marker.
+  sub.write("libs/widget/src/subpath.js", 'import { x } from "#widget/index.mjs";\n');
+  sub.write("libs/widget/src/relative.js", 'import { y } from "./ghost.mjs";\n');
+
+  it("workspace-referencing literal failures are the no-verdict lane, rows unmarked", async () => {
+    const { report } = await check(
+      { format: "json", config: null, paths: [] },
+      contextFor(
+        sub.root,
+        [
+          "nx.json",
+          "module-boundaries.config.mjs",
+          "libs/widget/src/lib.rs",
+          "libs/widget/src/subpath.js",
+          "libs/widget/src/relative.js",
+        ],
+        widgetNode(),
+      ),
+    );
+    const envelope = JSON.parse(report);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.decision.verdict).toBe("unknown");
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.blindSpots).toHaveLength(2);
+    for (const row of envelope.coverage.blindSpots) {
+      expect(row.external).toBeUndefined();
+      expect(row.dynamic).toBeUndefined();
+      expect(["libs/widget/src/subpath.js", "libs/widget/src/relative.js"]).toContain(row.file);
+    }
   });
 });

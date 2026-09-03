@@ -114,7 +114,9 @@ export function jsonEnvelope({ command, context, status, exitCode, coverage, res
   // in `analysis/source-util.mjs`; this guard reads the row field the same
   // helper that built the rows set, so the two can never disagree.
   const blindSpotList = Array.isArray(coverage.blindSpots) ? coverage.blindSpots : [];
-  const unjudgedBlindSpots = blindSpotList.filter((row) => row.dynamic !== true);
+  const unjudgedBlindSpots = blindSpotList.filter(
+    (row) => row.dynamic !== true && row.external !== true,
+  );
   if (
     coverage.complete === true &&
     (coverage.notAnalyzed.length > 0 || unjudgedBlindSpots.length > 0)

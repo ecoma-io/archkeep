@@ -2227,21 +2227,29 @@ export const boundarySuppressions = [];
       );
       expect(violations).toBe(0);
       expect(unchecked).toBe(0);
-      // The blind spot is still reported — loud, never silent — but the
-      // verdict is no longer `ok`: the import names no declared project, and
-      // the run still saw a site it could not judge (#595).
+      // The blind spot is still reported — loud, never silent — under its
+      // own class line: the import names no declared project, so it asks the
+      // external dependency universe, not the governed graph (#595,
+      // narrowed: `external` row class). The verdict stands over the
+      // statically judgeable surface; withholding over an uninstalled
+      // package would make every fresh-clone or git-archive face of this
+      // tree permanently un-green over dependencies nobody crossed.
       expect(report).toContain("left-pad");
       expect(report).toContain("TypeScript cannot resolve 'left-pad'");
+      expect(report).toContain("disclosed without withholding");
       expect(report).not.toContain("could not be analyzed at all");
+      expect(report).not.toContain("withheld the run's verdict");
 
       const cliStreams = {
         ...nativeEnv(),
         cwd: pkgRoot,
         listFiles: () => pFiles,
       };
-      // #595: exit 3 over a blind-spot tree — exit 0 here would be a pass
-      // over a site nobody looked at, byte-for-byte a clean workspace.
-      expect(await runCli(["check"], cliStreams)).toBe(EXIT.error);
+      // exit 0 over an external-only tree — exit 3 here would withhold the
+      // verdict over the dependency universe, not the governed graph. The
+      // loud half lives one class over: a `#` subpath or broken relative
+      // path (workspace-referencing literals) IS the no-verdict lane.
+      expect(await runCli(["check"], cliStreams)).toBe(EXIT.ok);
     } finally {
       rmSync(pkgRoot, { recursive: true, force: true });
     }

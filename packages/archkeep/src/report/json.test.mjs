@@ -117,6 +117,41 @@ describe("jsonEnvelope", () => {
       /coverage\.complete \(true\) over unjudged work \(notAnalyzed: 0 entries, blindSpots: 1\)/,
     );
 
+    // The two marker classes ride the row precisely so the law can accept
+    // them: a dynamic declared limit and an external bare package never
+    // withhold the verdict, so neither may refuse completeness. A row with
+    // NEITHER marker is unjudged work and still refuses it — a marker-less
+    // row is the class #595 withholds over.
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "findings",
+        exitCode: 1,
+        coverage: {
+          ...cleanCoverage(),
+          complete: true,
+          blindSpots: [{ file: "a.ts", reason: "unresolved", dynamic: true }],
+        },
+        result: {},
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "findings",
+        exitCode: 1,
+        coverage: {
+          ...cleanCoverage(),
+          complete: true,
+          blindSpots: [{ file: "a.ts", reason: "unresolved", external: true }],
+        },
+        result: {},
+      }),
+    ).not.toThrow();
+
     expect(() =>
       jsonEnvelope({
         command: "check",

@@ -21,7 +21,11 @@
  * wearing a formatter's name, and it would disagree with the engine the first
  * time either changed (`README.md` beside this file).
  */
-import { isDynamicSiteFailure, isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  isDynamicSiteFailure,
+  isExternalSiteFailure,
+  isWholeFileFailure,
+} from "../analysis/source-util.mjs";
 
 /** Two spaces of indent for a violation's detail lines, four for wrapped text. */
 const DETAIL = "  ";
@@ -128,16 +132,19 @@ const formatFailure = (failure) =>
  * consequences and one heading for both hid that for as long as it existed.
  *
  * A SITE failure is a blind spot: the file was analyzed, and one specifier in
- * it is not statically knowable — a literal package import that names no
- * declared project and cannot resolve (an uninstalled third-party dependency:
- * a workspace with packages is a normal state), or a non-literal
- * `import()`/`require()` argument. Both are legitimately permanent, and the
- * rest of the file still got a verdict — but since #595 the two classes part
- * ways at the verdict: the literal specifier is a concrete question the run
- * could not answer, so it WITHHELD the verdict (exit 3 on a findings-free
- * run), while the non-literal argument is a language-declared limit the run
- * states and moves past. The section says which class did what, instead of
- * leaving the exit code to be discovered.
+ * it is not statically knowable. Three classes, and the section says which
+ * class did what instead of leaving the exit code to be discovered. An
+ * unresolvable literal referencing the workspace's own surface — path-like,
+ * `#` subpath, `paths` alias — is a concrete question the resolver was asked
+ * about the governed graph and could not answer: it WITHHELD the verdict
+ * (exit 3 on a findings-free run, #595). An unresolvable bare-package
+ * specifier names no project the workspace declares — `external: true`, the
+ * resolvability question an installed dependency tree answers, which a
+ * workspace legitimately may not have (the native self-check's `git archive`
+ * copy is the measured case: 284 rows) — disclosed without withholding. A
+ * non-literal `import()`/`require()` argument is the language declaring the
+ * target computed at runtime — a declared limit, `dynamic: true`, disclosed
+ * without withholding.
  *
  * A WHOLE-FILE failure is a hole: nothing was read, parsed, or analyzed — or a
  * literal import that names a DECLARED project could not be resolved, so the
@@ -170,12 +177,13 @@ export function formatFailures(failures) {
 
   if (blind.length > 0) {
     const dyn = blind.filter(isDynamicSiteFailure).length;
-    const literal = blind.length - dyn;
+    const ext = blind.filter(isExternalSiteFailure).length;
+    const literal = blind.length - dyn - ext;
     sections.push(
       [
         `${blind.length} import${blind.length === 1 ? "" : "s"} could not be resolved — ` +
           `blind spots inside files that were analyzed:`,
-        // Both permanent classes are disclosed; the verdict treats them
+        // All permanent classes are disclosed; the verdict treats them
         // differently, and the report says which class did what instead of
         // leaving the exit code to be discovered (the same posture the
         // whole-file section's heading holds).
@@ -184,7 +192,16 @@ export function formatFailures(failures) {
               `${literal} unresolvable literal import${literal === 1 ? "" : "s"} withheld the run's verdict (#595):`,
             ]
           : []),
-        ...blind.filter((failure) => !isDynamicSiteFailure(failure)).map(formatFailure),
+        ...blind
+          .filter((failure) => !isDynamicSiteFailure(failure) && !isExternalSiteFailure(failure))
+          .map(formatFailure),
+        ...(ext > 0
+          ? [
+              `${ext} unresolvable package import${ext === 1 ? "" : "s"} name${ext === 1 ? "s" : ""} ` +
+                `no project the workspace declares — external, disclosed without withholding:`,
+            ]
+          : []),
+        ...blind.filter(isExternalSiteFailure).map(formatFailure),
         ...(dyn > 0
           ? [
               `${dyn} non-literal import() argument${dyn === 1 ? "" : "s"} — a declared limit static analysis cannot answer; ` +

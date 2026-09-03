@@ -631,10 +631,12 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
   // site was not, and a pass over it would claim a verdict the run does not
   // hold. Counted beside `unchecked` from one classifier
   // (`unresolvableLiteralCount`) so the exit, the report and the envelope all
-  // agree from one number. The declared dynamic limit — a non-literal
-  // `import()` argument, unknowable in principle — is disclosed in
-  // `coverage.blindSpots` but does not count here: it withholds nothing
-  // (`isDynamicSiteFailure` in source-util.mjs owns the class line).
+  // agree from one number. The two classes that withholds nothing are
+  // excluded from the count: the declared dynamic limit — a non-literal
+  // `import()` argument, unknowable in principle — and the external
+  // bare-package site, whose resolvability depends on an installed dependency
+  // tree a workspace legitimately may not have (`isDynamicSiteFailure` and
+  // `isExternalSiteFailure` in source-util.mjs own the class line).
   const blindSpotCount = unresolvableLiteralCount(failures);
 
   // A row of the boundary law that covers nothing is a boundary that stopped
