@@ -6760,7 +6760,9 @@ export const moduleBoundaryOptions = {
   // so it names no crate to resolve (`../src/analysis/rust.mjs`'s
   // `braceGroupArms` returns null and the caller keeps the loud answer) — the
   // file is analyzed, this one site is not, and that is a blind spot rather
-  // than a whole-file failure: `coverage.complete` must stay true over it.
+  // than a whole-file failure: the site is named in `coverage.blindSpots`,
+  // and the run itself moves to the no-verdict lane (#595) — a verdict the
+  // run could not reach is not a `pass`.
   //
   // A WELL-FORMED group is deliberately not the fixture any more: it resolves
   // now, one record per arm, so using it here would leave this case asserting
@@ -6787,7 +6789,7 @@ export const moduleBoundaryOptions = {
     ],
   };
 
-  it("names the unsplittable-group site in coverage.blindSpots, and leaves coverage.complete true", async () => {
+  it("names the unsplittable-group site in coverage.blindSpots, and moves the run to the no-verdict lane", async () => {
     const { report, violations, unchecked } = await check(
       { format: "json", config: null, paths: [] },
       rustContext,
@@ -6795,9 +6797,15 @@ export const moduleBoundaryOptions = {
     expect(violations).toBe(0);
     expect(unchecked).toBe(0);
     const envelope = JSON.parse(report);
-    expect(envelope.status).toBe("ok");
-    expect(envelope.coverage.complete).toBe(true);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.decision.verdict).toBe("unknown");
+    expect(envelope.decision.reason).toBe(
+      "1 import site could not be resolved — coverage incomplete",
+    );
+    expect(envelope.coverage.complete).toBe(false);
     expect(envelope.coverage.notAnalyzed).toEqual([]);
+    // The disclosure half did not move: the site is named exactly as before.
     expect(envelope.coverage.blindSpots).toEqual([
       {
         file: "libs/widget/src/lib.rs",

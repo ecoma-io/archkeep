@@ -428,6 +428,130 @@ describe("computeRuleImpact", () => {
     expect(result.resolved).toHaveLength(1);
     expect(result.resolved[0].messageId).toBe("projectWithoutTagsCannotHaveDependencies");
   });
+
+  it("re-judges a standing edge whose legality a tags-only change flipped (#600)", () => {
+    // beta moves layer:util → layer:app; the standing alpha→beta edge was
+    // legal under the baseline tags and violates alpha's constraint under the
+    // head tags. The edge is in neither addedEdges nor removedEdges.
+    const head = headNodes({
+      beta: { name: "beta", data: { root: "libs/beta", tags: ["layer:app"] } },
+    });
+    const baselineProjects = [
+      { name: "alpha", root: "libs/alpha", tags: ["layer:domain"] },
+      { name: "beta", root: "libs/beta", tags: ["layer:util"] },
+    ];
+    const result = computeRuleImpact(
+      {
+        addedEdges: [],
+        removedEdges: [],
+        changedProjects: [
+          {
+            name: "beta",
+            changes: [{ field: "tags", baseline: ["layer:util"], head: ["layer:app"] }],
+          },
+        ],
+      },
+      head,
+      { alpha: [{ target: "beta", type: "static" }] },
+      baselineProjects,
+      [{ source: "alpha", target: "beta", type: "static" }],
+      depConstraints,
+    );
+    expect(result.introduced).toHaveLength(1);
+    expect(result.introduced[0].messageId).toBe("onlyTagsConstraintViolation");
+    expect(result.introduced[0].source).toBe("alpha");
+    expect(result.introduced[0].target).toBe("beta");
+    expect(result.resolved).toEqual([]);
+  });
+
+  it("classifies a tags-only flip back to legal as resolved (#600)", () => {
+    // beta moves layer:app → layer:util; the standing edge violated under the
+    // baseline tags and is legal under the head tags.
+    const baselineProjects = [
+      { name: "alpha", root: "libs/alpha", tags: ["layer:domain"] },
+      { name: "beta", root: "libs/beta", tags: ["layer:app"] },
+    ];
+    const result = computeRuleImpact(
+      {
+        addedEdges: [],
+        removedEdges: [],
+        changedProjects: [
+          {
+            name: "beta",
+            changes: [{ field: "tags", baseline: ["layer:app"], head: ["layer:util"] }],
+          },
+        ],
+      },
+      headNodes(),
+      { alpha: [{ target: "beta", type: "static" }] },
+      baselineProjects,
+      [{ source: "alpha", target: "beta", type: "static" }],
+      depConstraints,
+    );
+    expect(result.resolved).toHaveLength(1);
+    expect(result.resolved[0].messageId).toBe("onlyTagsConstraintViolation");
+    expect(result.resolved[0].source).toBe("alpha");
+    expect(result.resolved[0].target).toBe("beta");
+    expect(result.introduced).toEqual([]);
+  });
+
+  it("judges an added edge once even when its project also carries a tags change (#600)", () => {
+    // The edge is new AND adjacent to a tags-changed project — one judgment,
+    // not two. Guards the deduplication the standing-edge re-judge needs.
+    const head = headNodes({
+      beta: { name: "beta", data: { root: "libs/beta", tags: ["layer:app"] } },
+    });
+    const baselineProjects = [
+      { name: "alpha", root: "libs/alpha", tags: ["layer:domain"] },
+      { name: "beta", root: "libs/beta", tags: ["layer:util"] },
+    ];
+    const result = computeRuleImpact(
+      {
+        addedEdges: [{ source: "alpha", target: "beta", type: "static" }],
+        removedEdges: [],
+        changedProjects: [
+          {
+            name: "beta",
+            changes: [{ field: "tags", baseline: ["layer:util"], head: ["layer:app"] }],
+          },
+        ],
+      },
+      head,
+      { alpha: [{ target: "beta", type: "static" }] },
+      baselineProjects,
+      [],
+      depConstraints,
+    );
+    expect(result.introduced).toHaveLength(1);
+    expect(result.introduced[0].messageId).toBe("onlyTagsConstraintViolation");
+  });
+
+  it("does not re-judge standing edges for a change that moves no tag (#600)", () => {
+    // A root move changes no legality input — the standing edge stays
+    // unjudged, exactly as before this contract existed.
+    const result = computeRuleImpact(
+      {
+        addedEdges: [],
+        removedEdges: [],
+        changedProjects: [
+          {
+            name: "beta",
+            changes: [{ field: "root", baseline: "libs/beta", head: "libs/beta-moved" }],
+          },
+        ],
+      },
+      headNodes(),
+      { alpha: [{ target: "beta", type: "static" }] },
+      [
+        { name: "alpha", root: "libs/alpha", tags: ["layer:domain"] },
+        { name: "beta", root: "libs/beta", tags: ["layer:util"] },
+      ],
+      [{ source: "alpha", target: "beta", type: "static" }],
+      depConstraints,
+    );
+    expect(result.introduced).toEqual([]);
+    expect(result.resolved).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------

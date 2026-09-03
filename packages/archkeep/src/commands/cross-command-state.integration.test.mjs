@@ -46,6 +46,18 @@ const CROSSING = edgeEvolutionIdentity({
 });
 
 /**
+ * The virtual edge the scenario's `dependency_added` must create. The e3
+ * change below needs this to be a real edge in the scenario alignment — the
+ * assertion naming it is RED until the change carries `edgeType`, because a
+ * refused change never produces the edge (#598).
+ */
+const VIRTUAL = edgeEvolutionIdentity({
+  source: "beta",
+  target: "alpha",
+  type: "static",
+});
+
+/**
  * Runs git in `cwd` through the same environment guard production uses, with
  * the single-spawn budget on every child (the same arrangement
  * `./evolution.cli.integration.test.mjs` states in full).
@@ -289,6 +301,12 @@ describe("e3 — impact and scenario alignments name what the events name", () =
       expect(run.exitCode).toBe(EXIT.ok);
       expect(run.envelope.result.current.evolutionAlignment.boundaries).toContain(CROSSING);
       expect(run.envelope.result.scenario.evolutionAlignment.boundaries).toContain(CROSSING);
+      // The applied direction (#598): the virtual edge must EXIST in the
+      // scenario alignment, not only the standing edge survive. RED until
+      // the change object carries `edgeType` — a refused `dependency_added`
+      // never produces it, and the standing-edge assertions above pass
+      // either way.
+      expect(run.envelope.result.scenario.evolutionAlignment.boundaries).toContain(VIRTUAL);
     } finally {
       rmSync(scenarioFile, { force: true });
     }
