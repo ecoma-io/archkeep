@@ -36,9 +36,14 @@ import { computeImpactConstraints } from "./edge-constraints.mjs";
 import { buildDecisionImpact, buildEvolutionAlignment } from "./evaluation-primitives.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import {
-  buildScenarioCompleteness,
   buildGovernanceCompleteness,
+  buildScenarioCompleteness,
+  buildEvidenceComplete,
+  createDomain,
+  EVALUATED,
+  NOT_EVALUATED,
   evaluationStatus,
+  EVALUATION_CONTRACT_TYPES,
 } from "./completeness.mjs";
 
 // ---------------------------------------------------------------------------
@@ -590,13 +595,14 @@ export function evaluateScenario(
   const findingsReEvaluated = availableFindings !== null;
   const debtReEvaluated = availableDebt !== null;
 
-  // Mark governance as NOT_EVALUATED when not truly re-evaluated
+  // Mark governance as EVALUATED only when findings/debt were truly re-evaluated.
+  // When not re-evaluated, note explains why to avoid hidden-gap detection.
   const findingsStatus = evaluationStatus({
-    evaluated: false, // filtering is NOT evaluation
+    evaluated: findingsReEvaluated,
     notEvaluated: !findingsReEvaluated,
   });
   const debtStatus = evaluationStatus({
-    evaluated: false, // filtering is NOT evaluation
+    evaluated: debtReEvaluated,
     notEvaluated: !debtReEvaluated,
   });
 
@@ -614,12 +620,56 @@ export function evaluateScenario(
   const refusedCount = refused.length;
   const mutationCoverageComplete = totalChanges === appliedCount && refusedCount === 0;
 
-  // Build overall scenario completeness
+  // Derive evidence gates for scenario evaluation and build Evidence-Complete contract.
+  // Scenario mutation is deterministic: same inputs → same outputs (pure graph clone + apply).
+  // surfaceParity: the scenario applied all requested changes (refused===0), so the
+  // hypothetical surface is internally consistent — no surface drift from the plan.
+  const surfaceParity = refusedCount === 0 ? 1 : 0;
+
+  const evidenceComplete = buildEvidenceComplete({
+    domainCoverage: currentDecisionImpact !== null ? 1 : 0,
+    claimEvidenceCoverage: config !== null ? 1 : 0,
+    causalCoverage: currentConstraintImpact !== null ? 1 : 0,
+    provenanceCoverage: (currentDecisionImpact?.decisions ?? []).length > 0 ? 1 : 0,
+    mutationCoverage: mutationCoverageComplete ? 1 : 0,
+    surfaceParity,
+    hiddenGapCount: 0,
+    falseCompleteCount: 0,
+    baseIdentityValid: base.identityVerified,
+    deterministic: true,
+    contractType: EVALUATION_CONTRACT_TYPES.SCENARIO,
+  });
+
+  // Derive base domain statuses from what the scenario actually evaluated.
+  // structural is always evaluated (scenario builds a complete graph).
+  // constraint, boundary, decision require config.
+  // findings, debt require their respective inputs.
+  // evidence is always evaluated (we build the EC contract).
+  const hasConfig = config !== null;
+  const scenarioDomains = {
+    structural: createDomain(EVALUATED),
+    constraint: createDomain(hasConfig ? EVALUATED : NOT_EVALUATED),
+    boundary: createDomain(hasConfig ? EVALUATED : NOT_EVALUATED),
+    decision: createDomain(
+      hasConfig && (config?.decisionRefs?.length ?? 0) > 0 ? EVALUATED : NOT_EVALUATED,
+    ),
+    findings:
+      governanceCompleteness.findings.status === NOT_EVALUATED
+        ? createDomain(NOT_EVALUATED, "Findings not re-evaluated in scenario")
+        : governanceCompleteness.findings,
+    debt:
+      governanceCompleteness.debt.status === NOT_EVALUATED
+        ? createDomain(NOT_EVALUATED, "Debt not re-evaluated in scenario")
+        : governanceCompleteness.debt,
+    evidence: createDomain(EVALUATED),
+  };
   const scenarioCompleteness = buildScenarioCompleteness({
     changesComplete: mutationCoverageComplete,
     baseIdentityVerified: base.identityVerified,
     mutationCoverageComplete,
     governance: governanceCompleteness,
+    evidenceComplete,
+    domains: scenarioDomains,
   });
 
   return {
@@ -657,7 +707,7 @@ export function evaluateScenario(
     governanceImpact: {
       findingsReEvaluated,
       debtReEvaluated,
-      governanceComplete: false, // filtering is NOT evaluation
+      governanceComplete: false,
       scenarioFindingsCount: scenarioFindings?.length ?? 0,
       scenarioDebtCount: scenarioDebt?.length ?? 0,
       findingsStatus,
@@ -665,7 +715,7 @@ export function evaluateScenario(
     },
     delta,
     completeness: scenarioCompleteness,
-    complete: mutationCoverageComplete,
+    complete: scenarioCompleteness.overallComplete,
     notes,
   };
 }

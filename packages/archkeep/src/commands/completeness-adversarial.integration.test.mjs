@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCompleteness,
+  buildEvidenceComplete,
   buildScenarioCompleteness,
   buildGovernanceCompleteness,
   createDomain,
@@ -49,7 +50,7 @@ function fixturePath(...segments) {
 // ---------------------------------------------------------------------------
 
 describe("no-op invariant — buildCompleteness", () => {
-  it("all eight domains EVALUATED → overallComplete: true", () => {
+  it("all eight domains EVALUATED but no evidenceComplete → overallComplete: false", () => {
     const result = buildCompleteness({
       structural: domain(EVALUATED),
       constraint: domain(EVALUATED),
@@ -60,8 +61,10 @@ describe("no-op invariant — buildCompleteness", () => {
       governance: domain(EVALUATED),
       evidence: domain(EVALUATED),
     });
-    expect(result.overallComplete).toBe(true);
-    expect(result.overallStatus).toBe(EVALUATED);
+    // Without evidenceComplete, overallComplete MUST be false — the evaluation
+    // has not proven its evidence gates.
+    expect(result.overallComplete).toBe(false);
+    expect(result.overallStatus).toBe(NOT_EVALUATED);
   });
 
   it("only structural EVALUATED → overallComplete: false (missing domains default NOT_EVALUATED)", () => {
@@ -104,16 +107,30 @@ describe("round-trip invariant — evaluateArchitectureState", () => {
 
 // ---------------------------------------------------------------------------
 describe("completeness conservation — buildScenarioCompleteness", () => {
-  it("all complete → overallComplete: true", () => {
+  it("all complete with evidenceComplete → overallComplete: true", () => {
     const governance = buildGovernanceCompleteness({
       findingsStatus: EVALUATED,
       debtStatus: EVALUATED,
+    });
+    const ec = buildEvidenceComplete({
+      domainCoverage: 1,
+      claimEvidenceCoverage: 1,
+      causalCoverage: 1,
+      provenanceCoverage: 1,
+      mutationCoverage: 1,
+      surfaceParity: 1,
+      hiddenGapCount: 0,
+      falseCompleteCount: 0,
+      baseIdentityValid: true,
+      deterministic: true,
+      contractType: "canonical",
     });
     const result = buildScenarioCompleteness({
       changesComplete: true,
       baseIdentityVerified: true,
       mutationCoverageComplete: true,
       governance,
+      evidenceComplete: ec,
       domains: {
         structural: domain(EVALUATED),
         constraint: domain(EVALUATED),
@@ -197,13 +214,16 @@ describe("refusal isolation — evaluateScenario", () => {
     expect(result.completeness.scenarioDomains.changes.status).toBe(PARTIAL);
   });
 
-  it("no refused changes → complete: true AND scenarioDomains.changes.status === evaluated", () => {
+  it("no refused changes → complete: false (no config/evidence gates) AND scenarioDomains.changes.status === evaluated", () => {
     const result = evaluateScenario(projectName, commandContext, {
       base: "test-revision",
       changes: [],
     });
-    expect(result.complete).toBe(true);
+    // Without config/evidence gates, overallComplete is false.
+    // But mutation coverage (all changes applied) is complete.
+    expect(result.complete).toBe(false);
     expect(result.completeness.scenarioDomains.changes.status).toBe(EVALUATED);
+    expect(result.completeness.scenarioDomains.mutationCoverage.status).toBe(EVALUATED);
   });
 });
 
