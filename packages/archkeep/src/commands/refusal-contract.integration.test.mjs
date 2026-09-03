@@ -390,6 +390,40 @@ describe("change and delta compare over a real captured baseline", () => {
   });
 });
 
+describe("the gates that refused only whole-file failures (#608)", () => {
+  // `waivers`/`debt`/`fitness` gated their throw on whole-file failures alone,
+  // then built `coverage.complete: true` over `coverage.blindSpots` that can
+  // carry an unjudged site — which the envelope builder's completeness law
+  // refuses as a programming error. Measured before the unification: a
+  // blind-spot-only tree crashed all three with "refusing to build a JSON
+  // envelope claiming coverage.complete over unjudged work". The unified
+  // completeness turns that crash into the same structured refusal every
+  // other command returns.
+  const blindSpotOnly = () =>
+    commandContext({
+      analysis: {
+        analyzed: 2,
+        analyzedFiles: [],
+        exemptedFiles: [],
+        imports: [],
+        failures: [{ ...UNRESOLVED_SITE }],
+      },
+    });
+
+  it("waivers refuses instead of crashing over a blind-spot-only tree", async () => {
+    expectRefusal(await waiversCommand(blindSpotOnly(), LAW), "waivers");
+  });
+
+  it("debt refuses instead of crashing over a blind-spot-only tree", async () => {
+    expectRefusal(await debtCommand("/no-such-history", blindSpotOnly(), {}), "debt");
+  });
+
+  it("fitness refuses instead of crashing over a blind-spot-only tree", async () => {
+    const law = { ...LAW, fitness: [{ name: "always-applies", condition: { type: "always" } }] };
+    expectRefusal(await fitnessCommand(blindSpotOnly(), { config: law }), "fitness");
+  });
+});
+
 describe("usage errors are not refusals", () => {
   it("a project missing from the graph stays a UsageError", () => {
     expect(() => impactCommand("nope", commandContext(), LAW)).toThrow(UsageError);
