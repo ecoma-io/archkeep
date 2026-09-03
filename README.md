@@ -1,11 +1,11 @@
 <p align="center">
-  <img src=".github/assets/banner.png" alt="Archkeep — architecture governance for human and agentic software development: a deterministic authority that keeps the architecture your team declared aligned with the code your team keeps changing" width="100%" />
+  <img src=".github/assets/banner.png" alt="Archkeep — an architecture authority for human and agentic software development: a deterministic authority that keeps the architecture your team declared aligned with the code your team keeps changing" width="100%" />
 </p>
 
 <h1 align="center">Archkeep</h1>
 
 <p align="center">
-  <strong>The contract between the architecture you intended and the code you actually have.</strong><br />
+  <strong>An architecture authority for human and agentic software development.</strong><br />
   Declare your architecture once — layers, scopes, allowed dependencies — and Archkeep judges
   every import in Go, Rust, Python, TypeScript and JavaScript, Vue, Java, Kotlin and C# against it: deterministic
   verdicts with evidence attached, in any repository, with or without Nx or Moon.<br />
@@ -20,15 +20,39 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start"><strong>Quick&nbsp;start&nbsp;→</strong></a> ·
+  <a href="#in-30-seconds"><strong>In&nbsp;30&nbsp;seconds&nbsp;→</strong></a> ·
   <a href="docs/doctrine/why.md">Why&nbsp;it&nbsp;exists</a> ·
-  <a href="docs/doctrine/north-star.md">North&nbsp;star</a> ·
+  <a href="docs/doctrine/architecture-authority.md">The&nbsp;authority&nbsp;model</a> ·
   <a href="docs/doctrine/roadmap.md">Roadmap</a> ·
   <a href="docs/README.md">Docs</a> ·
   <a href="https://ecoma.io">About&nbsp;Ecoma</a>
 </p>
 
 ---
+
+## In 30 seconds
+
+- **What it is.** An **architecture authority** — the system a repository consults to learn whether
+  the code that exists agrees with the architecture the team declared. Not a linter, not a
+  dependency-graph viewer, not an AI reviewer: a deterministic authority that keeps the intended
+  architecture and the observed one from quietly parting ways.
+- **The problem.** Declared architecture lives in heads, docs and Slack threads; the repository's
+  real architecture lives in its imports. Nothing compares the two — until a change crosses a line
+  nobody encoded anywhere, and the build stays green. Coding agents multiply the rate at which this
+  happens.
+- **The mechanism.** You declare intent as reviewed files. Archkeep reads every import site
+  statically, computes evidence (graphs, coverage counts, provenance), and one command — `check` —
+  issues the authoritative verdict. Same tree, same config, same verdict.
+- **Why agents care.** Humans, CI and coding agents consume the **same** authority: agents read the
+  governing constraints before editing, verify with `check`, and cannot weaken the law or accept
+  their own proposals — there is no override anywhere.
+- **Where it runs.** An Nx plugin, a Moonrepo provider, or bare `archkeep.json` discovery — the
+  verdict does not change with the provider. Eight languages, analyzed statically; your lint-only
+  CI needs no Go, Cargo, uv, JDK or .NET installed.
+
+```bash
+npm install -D @ecoma-io/archkeep && npx archkeep check
+```
 
 ## Architecture doesn't break. It erodes.
 
@@ -79,19 +103,45 @@ Dependency tools draw the graph but carry no law about what the graph may do.
 And the hand-written scripts teams bolt on to compensate rot quietly beside
 the pipelines they police.
 
-## The missing layer
+## The mental model
 
-What closes the gap is not another tool watching code. It is making intent
-itself executable — an explicit contract between two things that today only
-coincidentally agree:
+Archkeep turns architecture from something people remember into something the
+repository can compute. One chain, six links:
 
 ```text
-WHAT WE INTEND          declared once, reviewed like code
-        ↕               ← this comparison is the missing layer
-WHAT ACTUALLY EXISTS    read from every real import site
+ARCHITECTURE INTENT      declared once, reviewed like code
+        ↓
+OBSERVED REALITY         every real import site, read statically
+        ↓
+DETERMINISTIC EVIDENCE   graphs, coverage counts, provenance — reproducible
+        ↓
+RECONCILIATION           the gap between intent and reality, element by element
+        ↓
+ENFORCEMENT              one authority issues the verdict
+        ↓
+HUMAN + CODING AGENT     CI gates on it, editors show it, agents act on it
 ```
 
-For that comparison to govern anything, it has to be:
+The words are kept precise, because loose synonyms are where governance
+decays ([the full model](docs/doctrine/architecture-authority.md)):
+
+- **Intent** — the declared, normative architecture: boundary policy and
+  `architecture-intent.json`, reviewed like code.
+- **Reality** — the architecture the repository actually has, read from its
+  sources and manifests.
+- **Evidence** — a reproducible fact about that reality: a graph snapshot, a
+  coverage count, a provenance record.
+- **Verdict** — the deterministic, authoritative result of judging reality
+  against intent.
+- **Prediction, proposal, judgment** — a statement about the future, a possible
+  change, a heuristic output. Never a verdict; all three are marked as such
+  wherever Archkeep produces them.
+- **Decision** — a governance record: a waiver accepted, an ADR cited, an
+  intent row changed. Made by humans, in reviewed diffs.
+- **Waiver** — an explicit, expiring exception to intent. Accepting a breach is
+  a tracked decision, not a shrug.
+
+For the chain to govern anything, it has to be:
 
 - **explicit** — boundaries stated as declarations, not folklore
 - **machine-readable** — consumable by CI, editors and agents without parsing prose
@@ -100,8 +150,6 @@ For that comparison to govern anything, it has to be:
 - **enforceable** — exit codes a pipeline gates on, where _could not look_ never passes as _clean_
 - **explainable** — verdicts cite the rule, the constraint row, the recorded decision behind them
 - **evolvable** — drift, debt and history tracked, so exceptions stay decisions instead of decaying into accidents
-
-That layer is what Archkeep implements.
 
 ## What Archkeep is
 
@@ -113,6 +161,11 @@ verdict:
 
 > Does the code that exists agree with the architecture that was declared?
 
+And the same question in the form agentic development makes urgent:
+
+> When a coding agent changes a repository, how does the system **deterministically verify** that
+> the change still conforms to the architecture the team declared?
+
 It is worth saying what Archkeep is **not**, because its neighbours each own
 something else: not a linter (style and language rules stay with your linters),
 not a dependency visualizer (it holds law, not just a picture), not an AI judge
@@ -120,6 +173,28 @@ not a dependency visualizer (it holds law, not just a picture), not an AI judge
 are providers of the project graph — a repository with neither still gets the
 full verdict). [Architecture authority](docs/doctrine/architecture-authority.md)
 owns that boundary.
+
+## One enforcement authority
+
+Every surface Archkeep exposes produces evidence, records, or a verdict — and
+exactly one of them decides:
+
+| Surface                                                                                                                                                                                                      | What it answers                                         | Authoritative?                                      | Output                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- | --------------------------------------------------- | --------------------------------- |
+| `check`                                                                                                                                                                                                      | Does this tree conform to the declared law?             | **Yes — the enforcement authority**                 | verdict + exit code (0 / 1 / 3)   |
+| `fitness`                                                                                                                                                                                                    | Do the workspace's own declared predicates hold?        | a verdict on its own question, under the same law   | failing function exits 1          |
+| `delta`, `change`                                                                                                                                                                                            | Did this change introduce violations, break its intent? | verdicts on the change, judged against the same law | classified delta · reconciliation |
+| `rules verify`                                                                                                                                                                                               | Are the shipped rule artifacts what they claim?         | a verdict on catalog integrity                      | digest-level verification         |
+| `graph`, `diff`, `drift`, `history`, `trajectory`, `evolution`, `health`, `debt`, `report`, `impact`, `explain`, `context`, `provenance`, `adr`, `decisions`, `waivers`, `discover`, `reconcile`, `scenario` | evidence, analysis, governance records, projections     | descriptive — they inform, they never gate          | findings without the exit code    |
+
+`check` is the gate, and the only command holding all four exit codes.
+`fitness`, `delta`, `change` and `rules verify` are verdict-carriers on their
+own questions — a failing fitness function, a non-waived introduced violation,
+an unfulfilled change declaration, a rule artifact that fails integrity — and
+they answer under the same law and the same verdict vocabulary
+([exit codes](docs/reference/exit-codes.md)). Every other command describes,
+evidences, and gets out of the way. The asymmetry is the design: **analysis is
+everywhere; authority is in one place.**
 
 ## A governance lifecycle, not a lint run
 
@@ -210,15 +285,26 @@ Every tool answers a different question, and they compose:
 | Linter                      | Does the code follow style and language rules?          |
 | Security scanner            | Any known vulnerabilities?                              |
 | Dependency analyzer         | How is everything connected?                            |
+| Build system                | What changed, and what does it affect?                  |
+| AI code reviewer            | Does a model think this change looks reasonable?        |
 | **Architecture governance** | **Does the code conform to the architecture we chose?** |
 
-Archkeep lives in the last row and replaces none of the others. If you run
-`@nx/enforce-module-boundaries` today, keep it — point both enforcers at the
-same constraint file and they answer from one table, with the same violation
-ids ([how](docs/getting-started/first-policy.md)). Dependency analyzers draw your
-graph; Archkeep is the law the graph is judged against.
+Archkeep lives in the last row and replaces none of the others — and the two
+newest neighbours deserve the boundary made explicit. A **build system** computes
+what changed; it does not hold a law about what may depend on what, and `nx
+affected` is silent about Go, Rust and Python edges until a provider supplies
+them. An **AI code reviewer** produces a per-change judgment: useful, and
+heuristic by nature — it may differ between runs, and it cannot be the thing a
+pipeline gates on. Archkeep's verdict is deterministic, reproducible and
+evidence-backed; reviewers and agents may explain and propose, and the verdict
+stays computed.
 
-## Built for humans and machines to share one authority
+If you run `@nx/enforce-module-boundaries` today, keep it — point both
+enforcers at the same constraint file and they answer from one table, with the
+same violation ids ([how](docs/getting-started/first-policy.md)). Dependency
+analyzers draw your graph; Archkeep is the law the graph is judged against.
+
+## Agentic development: the same authority, no shortcuts
 
 Agentic coding increases the rate at which architectural decisions get made;
 humans cannot manually review every one. That is the project's founding thesis
@@ -242,26 +328,40 @@ agent judgment. It is giving every consumer the same deterministic authority:
      CI         IDE      coding agents
 ```
 
-- **CI gates on it.** Four exit codes with a published contract — `0` clean,
-  `1` findings, `2` usage, `3` could-not-look, and `3` fails the build too,
-  because a checker that could not look must never be mistaken for one that
-  found nothing. SARIF uploads straight into GitHub code scanning;
-  [the recipe](docs/usage/ci.md).
-- **Editors show it.** A language server publishes diagnostics in any LSP
-  client, with the same invariant: an empty Problems panel means _no
-  violation_, nothing else. The VS Code extension routes `.go`, `.rs`, `.py`
-  and `.vue` to it and deliberately leaves TS/JS to your ESLint setup —
-  [details](docs/integrations/vscode.md).
-- **Agents consume it.** An MCP server exposes eight read-only tools — context
-  before editing (`archkeep_context` hands an agent the governing constraints
-  first), the authoritative check, impact, drift, explain, graph, history, and
-  a proposal mode that carries `requiresApproval: true` because proposals are
-  never decisions. There is no override anywhere: no tool accepts a weaker
-  boundary config, so an agent cannot verify itself against a law of its own
-  choosing. Five `arch-*` skills teach agents the protocol — read the
-  constraints, change inside them, check, report evidence — and never modify
-  policy to reach green. [MCP](docs/integrations/mcp.md) ·
-  [skills](docs/skills/overview.md)
+An agent's change travels the same chain a human's does:
+
+1. **Declare** — the team states intent in files a pull request reviews.
+2. **Context** — before editing, the agent reads the constraints that govern
+   the target project: `archkeep_context` over MCP, `archkeep context --plan`
+   over the CLI, or the `arch-context` skill.
+3. **Change** — the agent edits code inside those constraints.
+4. **Observe** — the engine reads every import site the change touched,
+   statically.
+5. **Evidence** — the agent inspects the judgment: `explain` for why one site
+   was judged as it was, `impact` for who depends on what it touched, `delta`
+   for what its change moved.
+6. **Decide** — `check` issues the authoritative verdict. The agent iterates on
+   findings; it does not argue with them.
+7. **Enforce** — CI runs the same `check` on the same tree. The merge is gated
+   by the same authority the agent answered to, not by the agent's
+   self-report.
+
+The red line is structural, not aspirational: **an agent may not redefine the
+architecture when its code disagrees with it.** There is no override anywhere —
+no MCP tool accepts a weaker boundary config; `archkeep_propose` carries
+`requiresApproval: true` and drafts candidates, never decisions; changing
+intent happens in files a human reviews.
+
+The agent-facing surfaces: an [MCP server](docs/integrations/mcp.md) exposing
+nine read-only tools (`archkeep_context`, `archkeep_check`,
+`archkeep_impact`, `archkeep_drift`, `archkeep_explain`, `archkeep_graph`,
+`archkeep_history`, `archkeep_propose`, `archkeep_scenario`) — every tool calls
+the engine's own command layer in process, so an agent sees the same envelope a
+pipeline sees. Five [`arch-*` skills](docs/skills/overview.md) teach the
+protocol — read the constraints, change inside them, check, report evidence.
+A [language server](docs/integrations/vscode.md) publishes the same verdicts
+into editors, with the same invariant: an empty Problems panel means _no
+violation_, nothing else.
 
 ## Polyglot, because architecture is above language boundaries
 
@@ -280,6 +380,31 @@ and self-contained: your lint-only CI job needs no Go, Cargo or uv installed.
 Every analyzer's known parse limits are documented, and every limit errs toward
 naming text the file really contains rather than staying silent —
 [per language](docs/reference/languages.md).
+
+## A verdict that refuses to shrug
+
+The dangerous failure is not a false alarm — it is the quiet one: reporting
+nothing when a violation exists, byte-for-byte identical to a clean workspace.
+Archkeep is built so that cannot pass silently:
+
+- **Coverage rides with every verdict.** Every result states what it inspected
+  — imports, files, projects — because "no violations" is a claim about
+  coverage too.
+- **`ok` means analyzed, not merely quiet.** `status: "ok"` is refused unless
+  coverage is complete — a file the analyzer never reached a verdict about
+  makes `ok` unreachable, enforced in the envelope builder itself, not just
+  documented.
+- **Could-not-look is its own exit code.** `0` clean, `1` findings, `2` usage
+  error, `3` no verdict — and `3` fails the build too, because a checker that
+  could not look must never be mistaken for one that found nothing
+  ([the contract](docs/reference/exit-codes.md)).
+- **Unknown is a first-class answer.** The four-state verdict vocabulary —
+  `pass`, `fail`, `unknown`, `not_applicable` — makes "I could not determine"
+  sayable, and an `unknown` must state its reason.
+- **Known blind spots are declared, not hidden.** Site-level unknowables
+  (dynamic imports with non-literal arguments, unresolvable package imports)
+  are reported as blind spots; coverage the run knows it did not provide is
+  reported as gaps, each with its kind — never folded into a clean result.
 
 ## Capabilities
 
@@ -312,6 +437,43 @@ Grouped the way the [concepts](docs/concepts/architecture.md) own them:
 - **Any workspace shape** — an Nx plugin, a Moonrepo provider, or native
   discovery from an `archkeep.json` marker with neither installed
   ([configuration](docs/reference/configuration.md)).
+
+## Evidence, not promises
+
+The claims above are kept narrow on purpose: **deterministic, reproducible,
+evidence-backed** — not "formally verified", and not "proven correct". What
+backs them is a test architecture that attacks the failure modes a governance
+tool actually has:
+
+- **The differential against the real thing.** The reimplementation of
+  `@nx/enforce-module-boundaries` runs side by side with the real ESLint rule
+  over **48 fixture workspaces, 125 probes, 100 projects**; every one of
+  upstream's fifteen violation ids is triggered by at least one probe, and a
+  probe where this tool is weaker than upstream is a defect by definition. Five
+  pinned public workspaces nobody here built run through the same differential
+  on a schedule ([how it works](docs/development/testing.md)).
+- **The installed artifact is what gets tested.** The end-to-end suite runs the
+  CLI from `pnpm pack` tarballs installed into throwaway workspaces — the
+  plugin drawing an edge Nx cannot infer, the exit contract holding in both
+  directions, the language server answering through an installed plugin's
+  symlinked path.
+- **The provider cannot change the verdict.** The same tree modelled twice —
+  real `nx graph` versus native `archkeep.json` — is asserted to yield
+  identical nodes, edges and verdicts, so `check` does not depend on which
+  provider ran.
+- **Determinism is swept, not hoped for.** Every array in every command's JSON
+  envelope is sorted; integration and end-to-end suites assert two runs over an
+  unchanged tree are byte-identical.
+- **Every command's exit contract is driven from both sides.** An exit-code
+  matrix runs all 24 commands on their findings side and their clean side, with
+  a roster guard that fails the suite when a command ships without a decided
+  contract.
+- **Irrelevant edits cannot move the facts.** Metamorphic tests assert that
+  comments, blank lines, renames and import reordering produce zero record
+  changes and zero graph delta.
+- **The empty-result invariant is attacked directly.** Dedicated suites drive
+  the paths that could return nothing — unreadable files, unloaded analyzers,
+  unresolved imports — and require each to report loudly instead.
 
 ## Quick start
 
@@ -353,6 +515,31 @@ Bringing an existing repository under governance starts with
 > **Coming from Lattice?** This is the same tool under a new name:
 > [what breaks and what does not](docs/getting-started/upgrading-from-lattice.md).
 
+## Status and roadmap
+
+Archkeep ships today on the **0.x line**
+([`@ecoma-io/archkeep`](https://www.npmjs.com/package/@ecoma-io/archkeep));
+until 1.0, a minor release may carry a behavior change, named in the
+changelog.
+
+The [roadmap](docs/doctrine/roadmap.md) is a **maturity model, not a feature
+list**: five phases — **Authority** (deterministic enforcement), **Evidence**
+(canonical architecture state), **Governance** (decisions, waivers, ADRs — on
+the authority, never beside it), **Change Intelligence** (impact, scenarios,
+advisory reasoning over evidence) and **Agentic Architecture** (agents as
+consumers of the same authority) — each with explicit exit criteria and the
+evidence that must back it.
+
+**1.0 is a trustworthiness milestone, not a feature count**: the point where
+the authority core is hardened enough — deterministic, reproducible,
+coverage-explicit, provider-independent, conformance-proven — to be trusted
+with a stability promise. The intelligence capabilities of the later phases
+(architectural impact analysis, scenario evaluation, the evidence-grounded
+advisor) are documented direction, not shipped capability; the deterministic
+`scenario` command ships today as a read-only what-if, marked `virtual` and
+`notAuthoritative`. There is no second line and no next generation: every
+phase lands on `main`, on the same authority contract.
+
 ## Documentation
 
 Read it in this order, or jump to what you need:
@@ -360,6 +547,7 @@ Read it in this order, or jump to what you need:
 |                                                                                                                                              |                                                      |
 | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | [Why it exists](docs/doctrine/why.md)                                                                                                        | The gap, with the measurement that proves it is real |
+| [The authority model](docs/doctrine/architecture-authority.md)                                                                               | Intent, reality, evidence — and the boundary         |
 | [Getting started](docs/getting-started/installation.md)                                                                                      | Install, register, first policy, first violation     |
 | [Boundaries](docs/concepts/boundaries.md) · [Policies](docs/concepts/policies.md)                                                            | The constraint model and its four dialects           |
 | [Governance lifecycle](docs/concepts/governance-lifecycle.md)                                                                                | Why the commands form a system                       |

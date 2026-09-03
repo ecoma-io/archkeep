@@ -122,7 +122,8 @@ The four signals above are basic drift detection, and they ship today:
 deterministic, computed from graph, policy, snapshot, diff and intent, with no
 predictive component. [roadmap.md](../doctrine/roadmap.md) owns the staged
 path and lists this alongside the other capabilities that ship today. The
-architecture-intelligence capabilities of the roadmap's gate 5 — impact
+architecture-intelligence capabilities of the roadmap's Change Intelligence
+phase — impact
 analysis, scenario evaluation, an evidence-grounded advisor — may one day
 reason over these deterministic drift signals and explain them, but that is
 later maturity on the same roadmap, gated and never a promise; the
