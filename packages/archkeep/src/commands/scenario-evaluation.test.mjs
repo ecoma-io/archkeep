@@ -520,13 +520,17 @@ describe("evaluateScenario — edge cases", () => {
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.governanceImpact).toBeDefined();
-    expect(result.governanceImpact.findingsReEvaluated).toBe(false);
-    expect(result.governanceImpact.debtReEvaluated).toBe(false);
+    expect(result.governanceImpact.findingsFiltered).toBe(false);
+    expect(result.governanceImpact.debtFiltered).toBe(false);
+    // No findings/debt supplied: governance was not evaluated, and the
+    // statuses must say so rather than defaulting toward a claim.
+    expect(result.governanceImpact.findingsStatus).toBe("not_evaluated");
+    expect(result.governanceImpact.debtStatus).toBe("not_evaluated");
     expect(result.governanceImpact.governanceComplete).toBe(false);
     expect(result.governanceImpact.scenarioFindingsCount).toBe(0);
     expect(result.governanceImpact.scenarioDebtCount).toBe(0);
   });
-  it("re-evaluates findings and debt when provided", () => {
+  it("filters provided findings and debt into the scenario state without calling it re-evaluation", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
       changes: [change("dependency_added", "b", "a")],
@@ -537,8 +541,13 @@ describe("evaluateScenario — edge cases", () => {
       findings,
       debt,
     });
-    expect(result.governanceImpact.findingsReEvaluated).toBe(true);
-    expect(result.governanceImpact.debtReEvaluated).toBe(true);
+    expect(result.governanceImpact.findingsFiltered).toBe(true);
+    expect(result.governanceImpact.debtFiltered).toBe(true);
+    // Filtering is not re-evaluation — the status stays NOT_EVALUATED even
+    // when findings/debt were available. This is the assertion that goes red
+    // if the "evaluated" mislabel comes back.
+    expect(result.governanceImpact.findingsStatus).toBe("not_evaluated");
+    expect(result.governanceImpact.debtStatus).toBe("not_evaluated");
     expect(result.governanceImpact.governanceComplete).toBe(false);
     expect(result.governanceImpact.scenarioFindingsCount).toBe(1);
     expect(result.governanceImpact.scenarioDebtCount).toBe(1);

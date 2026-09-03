@@ -110,8 +110,8 @@ export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "depende
  * @property {string} evidenceChain.scenarioState The state after applying changes ("scenario").
  * @property {object} evidenceChain.delta The computed differences.
  * @property {object} [governanceImpact] Governance re-evaluation results.
- * @property {boolean} governanceImpact.findingsReEvaluated Whether findings were re-evaluated.
- * @property {boolean} governanceImpact.debtReEvaluated Whether debt was re-evaluated.
+ * @property {boolean} governanceImpact.findingsFiltered Whether precomputed findings were filtered into the scenario state.
+ * @property {boolean} governanceImpact.debtFiltered Whether precomputed debt was filtered into the scenario state.
  * @property {boolean} governanceImpact.governanceComplete Whether all governance data was provided.
  * @property {number} governanceImpact.scenarioFindingsCount Number of findings in the scenario state.
  * @property {number} governanceImpact.scenarioDebtCount Number of debt entries in the scenario state.
@@ -592,18 +592,19 @@ export function evaluateScenario(
   // hypothetical graph) is NOT governance re-evaluation. True re-evaluation
   // would run the full check pipeline against the hypothetical graph.
   // When we only filter, governance is NOT_EVALUATED.
-  const findingsReEvaluated = availableFindings !== null;
-  const debtReEvaluated = availableDebt !== null;
+  const findingsFiltered = availableFindings !== null;
+  const debtFiltered = availableDebt !== null;
 
-  // Mark governance as EVALUATED only when findings/debt were truly re-evaluated.
-  // When not re-evaluated, note explains why to avoid hidden-gap detection.
+  // Filtering is NOT re-evaluation (the header above), so the status is
+  // NOT_EVALUATED on both paths — no re-evaluation pipeline exists to pass.
+  // Telling a consumer "evaluated" for a filter is the mislabel this refuses.
   const findingsStatus = evaluationStatus({
-    evaluated: findingsReEvaluated,
-    notEvaluated: !findingsReEvaluated,
+    evaluated: false,
+    notEvaluated: true,
   });
   const debtStatus = evaluationStatus({
-    evaluated: debtReEvaluated,
-    notEvaluated: !debtReEvaluated,
+    evaluated: false,
+    notEvaluated: true,
   });
 
   // Build governance completeness
@@ -705,8 +706,8 @@ export function evaluateScenario(
       ...(scenarioDebt !== null ? { debt: scenarioDebt } : {}),
     },
     governanceImpact: {
-      findingsReEvaluated,
-      debtReEvaluated,
+      findingsFiltered,
+      debtFiltered,
       governanceComplete: false,
       scenarioFindingsCount: scenarioFindings?.length ?? 0,
       scenarioDebtCount: scenarioDebt?.length ?? 0,
