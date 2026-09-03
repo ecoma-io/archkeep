@@ -7,8 +7,11 @@
  * differ observably from a complete one.
  */
 
-import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
 
 import {
   buildCompleteness,
@@ -102,6 +105,290 @@ describe("round-trip invariant — evaluateArchitectureState", () => {
     expect(domains.constraint.status).toBe(NOT_EVALUATED);
     expect(domains.boundary.status).toBe(NOT_EVALUATED);
     expect(domains.decision.status).toBe(NOT_EVALUATED);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3. Evidence-Complete gates derived from decision facts (S4/E2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Frontmatter + body for one ADR record file.
+ *
+ * @param {string} frontmatter The strict `key: value` block, no `---` fences.
+ * @returns {string}
+ */
+function adrFile(frontmatter) {
+  return `---\n${frontmatter}\n---\n\n# Decision\n\nBody prose.\n`;
+}
+
+const adrRoots = [];
+
+/**
+ * A throwaway workspace root holding the given ADR records.
+ *
+ * @param {Record<string, string>} files ADR id → frontmatter text.
+ * @returns {string} The workspace root (also registered for cleanup).
+ */
+function adrRoot(files) {
+  const dir = mkdtempSync(join(tmpdir(), "archkeep-ec-"));
+  mkdirSync(join(dir, "docs", "adr"), { recursive: true });
+  for (const [id, frontmatter] of Object.entries(files)) {
+    writeFileSync(join(dir, "docs", "adr", `${id}.md`), adrFile(frontmatter));
+  }
+  adrRoots.push(dir);
+  return dir;
+}
+
+/**
+ * The same tree, with the records committed to real git — so the decision's
+ * provenance attestation (`git log` attribution) can answer.
+ *
+ * @param {Record<string, string>} files ADR id → frontmatter text.
+ * @returns {string} The workspace root.
+ */
+function gitAdrRoot(files) {
+  const dir = adrRoot(files);
+  execFileSync("git", ["init", "-q"], { cwd: dir });
+  execFileSync("git", ["add", "docs/adr"], { cwd: dir });
+  execFileSync(
+    "git",
+    [
+      "-c",
+      "user.name=Archkeep Certification",
+      "-c",
+      "user.email=cert@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "-q",
+      "-m",
+      "record decisions",
+    ],
+    { cwd: dir },
+  );
+  return dir;
+}
+
+afterAll(() => {
+  for (const dir of adrRoots.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+describe("Evidence-Complete gates derived from decision facts", () => {
+  // beta (layer:app) depends on alpha (layer:domain); the constraint row that
+  // governs the edge carries the decisionRef, so the binding is causally real —
+  // the row is AFFECTED by the evaluation, not merely present in the config.
+  function dependentGraph() {
+    return {
+      nodes: {
+        alpha: { name: "alpha", type: "lib", data: { root: "libs/alpha", tags: ["layer:domain"] } },
+        beta: { name: "beta", type: "lib", data: { root: "libs/beta", tags: ["layer:app"] } },
+      },
+      dependencies: { beta: [{ target: "alpha", type: "static" }] },
+    };
+  }
+
+  const boundLaw = {
+    depConstraints: [
+      {
+        sourceTag: "layer:app",
+        onlyDependOnLibsWithTags: ["layer:domain", "layer:app"],
+        decisionRef: "0001-layers",
+      },
+    ],
+  };
+
+  // Non-empty governance inputs, so the findings and debt domains evaluate.
+  const governanceInputs = {
+    findings: [{ project: "alpha", rule: "certification-probe" }],
+    debt: [{ project: "alpha", id: "debt-probe" }],
+  };
+
+  it("e8 — an attested, authoritative decision binding reaches overallComplete", () => {
+    const root = gitAdrRoot({ "0001-layers": "id: 0001-layers\nstatus: accepted" });
+    const result = evaluateArchitectureState({
+      graph: dependentGraph(),
+      config: boundLaw,
+      projectName: "alpha",
+      root,
+      ...governanceInputs,
+    });
+    // Every required gate passes — provenanceCoverage included.
+    expect(result.evidenceComplete.overallComplete).toBe(true);
+    expect(result.completeness.evidenceComplete.gates.provenanceCoverage.value).toBe(1);
+    expect(result.completeness.evidenceComplete.gates.provenanceCoverage.pass).toBe(true);
+    expect(result.completeness.overallComplete).toBe(true);
+    // The row carries the attested provenance the gate answered from.
+    expect(result.decisionImpact.decisions).toHaveLength(1);
+    expect(result.decisionImpact.decisions[0].hasAuthority).toBe(true);
+    expect(result.decisionImpact.decisions[0].provenance.attested).toBe(true);
+  });
+
+  it("a decision record without authority fails the canonical gate loudly", () => {
+    const root = adrRoot({ "0001-layers": "id: 0001-layers\nstatus: proposed" });
+    const result = evaluateArchitectureState({
+      graph: dependentGraph(),
+      config: boundLaw,
+      projectName: "alpha",
+      root,
+    });
+    const gate = result.completeness.evidenceComplete.gates.provenanceCoverage;
+    expect(gate.value).toBe(0);
+    expect(gate.pass).toBe(false);
+    // The row stays visible with its missing authority, so a reader can see why.
+    expect(result.decisionImpact.decisions[0].hasAuthority).toBe(false);
+  });
+
+  it("a decisionRef that resolves to nothing is reported, never covered", () => {
+    const root = adrRoot({ "0001-layers": "id: 0001-layers\nstatus: accepted" });
+    const result = evaluateArchitectureState({
+      graph: dependentGraph(),
+      config: {
+        depConstraints: [
+          {
+            sourceTag: "layer:app",
+            onlyDependOnLibsWithTags: ["layer:domain", "layer:app"],
+            decisionRef: "0042-ghost",
+          },
+        ],
+      },
+      projectName: "alpha",
+      root,
+    });
+    expect(result.decisionImpact.decisions).toEqual([]);
+    expect(result.decisionImpact.unresolvedDecisionRefs).toContain("0042-ghost");
+    const gate = result.completeness.evidenceComplete.gates.provenanceCoverage;
+    expect(gate.value).toBe(0);
+    expect(gate.pass).toBe(false);
+  });
+
+  it("a fitness ref the registry binds counts as covered provenance", () => {
+    const root = adrRoot({
+      "0001-layers": "id: 0001-layers\nstatus: accepted\nbindings:\n  - cycle-free",
+    });
+    const result = evaluateArchitectureState({
+      graph: dependentGraph(),
+      config: {
+        depConstraints: [
+          {
+            sourceTag: "layer:app",
+            onlyDependOnLibsWithTags: ["layer:domain", "layer:app"],
+            decisionRef: "fitness:cycle-free",
+          },
+        ],
+      },
+      projectName: "alpha",
+      root,
+    });
+    expect(result.decisionImpact.decisions[0].kind).toBe("fitness");
+    expect(result.decisionImpact.decisions[0].resolution).toBe("known");
+    const gate = result.completeness.evidenceComplete.gates.provenanceCoverage;
+    expect(gate.value).toBe(1);
+    expect(gate.pass).toBe(true);
+  });
+
+  it("scenario face — a record without authority fails provenance coverage, not a presence boolean", () => {
+    const root = adrRoot({ "0001-layers": "id: 0001-layers\nstatus: proposed" });
+    const result = evaluateScenario(
+      "alpha",
+      { root, graph: dependentGraph() },
+      { base: "test-revision", changes: [] },
+      boundLaw,
+    );
+    expect(result.completeness.evidenceComplete.gates.provenanceCoverage.value).toBe(0);
+    expect(result.completeness.evidenceComplete.gates.provenanceCoverage.pass).toBe(false);
+  });
+
+  it("scenario face — an authoritative binding keeps coverage at 1 (authority, not git, decides)", () => {
+    // Non-git root on purpose: attestation is unavailable here, and the gate
+    // must still count the authoritative record. If this ever required git,
+    // every non-git workspace's evaluation would silently lose the gate.
+    const root = adrRoot({ "0001-layers": "id: 0001-layers\nstatus: accepted" });
+    const result = evaluateScenario(
+      "alpha",
+      { root, graph: dependentGraph() },
+      { base: "test-revision", changes: [] },
+      boundLaw,
+    );
+    expect(result.completeness.evidenceComplete.gates.provenanceCoverage.value).toBe(1);
+    expect(result.current.decisionImpact.decisions[0].hasAuthority).toBe(true);
+    expect(result.current.decisionImpact.decisions[0].provenance.attested).toBe(false);
+  });
+
+  it("a scenario without a config discloses why constraint, boundary and decision are NOT_EVALUATED", () => {
+    const root = mkdtempSync(join(tmpdir(), "archkeep-ec-noconfig-"));
+    adrRoots.push(root);
+    const result = evaluateScenario(
+      "alpha",
+      { root, graph: dependentGraph() },
+      { base: "test-revision", changes: [] },
+      null,
+    );
+    for (const name of ["constraint", "boundary", "decision"]) {
+      expect(result.completeness.domains[name].status).toBe(NOT_EVALUATED);
+      expect(result.completeness.domains[name].note.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("false-complete direction — domains claiming complete with failing gates are counted", () => {
+    const failing = buildEvidenceComplete({
+      domainCoverage: 1,
+      claimEvidenceCoverage: 1,
+      causalCoverage: 1,
+      provenanceCoverage: 0,
+      mutationCoverage: 1,
+      surfaceParity: 1,
+      hiddenGapCount: 0,
+      falseCompleteCount: 0,
+      baseIdentityValid: true,
+      deterministic: true,
+      contractType: "canonical",
+    });
+    const result = buildCompleteness({
+      structural: domain(EVALUATED),
+      constraint: domain(EVALUATED),
+      boundary: domain(EVALUATED),
+      decision: domain(EVALUATED),
+      findings: domain(EVALUATED),
+      debt: domain(EVALUATED),
+      governance: domain(EVALUATED),
+      evidence: domain(EVALUATED),
+      evidenceComplete: failing,
+    });
+    expect(result.overallComplete).toBe(false);
+    expect(result.falseCompleteCount).toBe(1);
+    expect(result.evidenceComplete.falseCompleteCount).toBe(1);
+  });
+
+  it("the canonical evaluation is deterministic — two runs, byte-identical output", () => {
+    const root = adrRoot({ "0001-layers": "id: 0001-layers\nstatus: accepted" });
+    const run = () =>
+      JSON.stringify(
+        evaluateArchitectureState({
+          graph: dependentGraph(),
+          config: boundLaw,
+          projectName: "alpha",
+          root,
+          ...governanceInputs,
+        }),
+      );
+    expect(run()).toBe(run());
+  });
+
+  it("the scenario evaluation is deterministic — two runs, byte-identical output", () => {
+    const root = adrRoot({ "0001-layers": "id: 0001-layers\nstatus: accepted" });
+    const run = () =>
+      JSON.stringify(
+        evaluateScenario(
+          "alpha",
+          { root, graph: dependentGraph() },
+          { base: "test-revision", changes: [] },
+          boundLaw,
+        ),
+      );
+    expect(run()).toBe(run());
   });
 });
 

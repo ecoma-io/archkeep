@@ -33,7 +33,11 @@
  */
 import { computeImpact } from "./impact.mjs";
 import { computeImpactConstraints } from "./edge-constraints.mjs";
-import { buildDecisionImpact, buildEvolutionAlignment } from "./evaluation-primitives.mjs";
+import {
+  buildDecisionImpact,
+  buildEvolutionAlignment,
+  decisionProvenanceCoverage,
+} from "./evaluation-primitives.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import {
   buildGovernanceCompleteness,
@@ -621,39 +625,31 @@ export function evaluateScenario(
   const refusedCount = refused.length;
   const mutationCoverageComplete = totalChanges === appliedCount && refusedCount === 0;
 
-  // Derive evidence gates for scenario evaluation and build Evidence-Complete contract.
-  // Scenario mutation is deterministic: same inputs → same outputs (pure graph clone + apply).
-  // surfaceParity: the scenario applied all requested changes (refused===0), so the
-  // hypothetical surface is internally consistent — no surface drift from the plan.
-  const surfaceParity = refusedCount === 0 ? 1 : 0;
-
-  const evidenceComplete = buildEvidenceComplete({
-    domainCoverage: currentDecisionImpact !== null ? 1 : 0,
-    claimEvidenceCoverage: config !== null ? 1 : 0,
-    causalCoverage: currentConstraintImpact !== null ? 1 : 0,
-    provenanceCoverage: (currentDecisionImpact?.decisions ?? []).length > 0 ? 1 : 0,
-    mutationCoverage: mutationCoverageComplete ? 1 : 0,
-    surfaceParity,
-    hiddenGapCount: 0,
-    falseCompleteCount: 0,
-    baseIdentityValid: base.identityVerified,
-    deterministic: true,
-    contractType: EVALUATION_CONTRACT_TYPES.SCENARIO,
-  });
-
-  // Derive base domain statuses from what the scenario actually evaluated.
-  // structural is always evaluated (scenario builds a complete graph).
-  // constraint, boundary, decision require config.
-  // findings, debt require their respective inputs.
-  // evidence is always evaluated (we build the EC contract).
+  // Build the scenario's domain statuses FIRST — the Evidence-Complete
+  // contract below derives its hidden-gap gate from them, so a domain that
+  // is NOT_EVALUATED without a note flips that gate, and a domain that
+  // skips with a stated reason does not.
+  //   structural — always evaluated (scenario builds a complete graph).
+  //   constraint, boundary, decision — require a boundary config; decision
+  //     follows the config exactly as the canonical face reads it, because
+  //     the scenario runs decision impact (buildDecisionImpact above) when
+  //     one is present. The condition this replaces, `config.decisionRefs`,
+  //     named a field no workspace can declare — it held the decision domain
+  //     at NOT_EVALUATED forever, a permanent hidden gap on every configured
+  //     workspace.
+  //   findings, debt — never re-evaluated in a scenario; the notes say so,
+  //     which is what keeps them disclosed and out of the hidden-gap count.
+  //   evidence — always evaluated (we build the EC contract).
   const hasConfig = config !== null;
+  const configGapNote =
+    "No boundary config — constraint, boundary and decision rules not evaluated";
+  const configGated = () =>
+    hasConfig ? createDomain(EVALUATED) : createDomain(NOT_EVALUATED, configGapNote);
   const scenarioDomains = {
     structural: createDomain(EVALUATED),
-    constraint: createDomain(hasConfig ? EVALUATED : NOT_EVALUATED),
-    boundary: createDomain(hasConfig ? EVALUATED : NOT_EVALUATED),
-    decision: createDomain(
-      hasConfig && (config?.decisionRefs?.length ?? 0) > 0 ? EVALUATED : NOT_EVALUATED,
-    ),
+    constraint: configGated(),
+    boundary: configGated(),
+    decision: configGated(),
     findings:
       governanceCompleteness.findings.status === NOT_EVALUATED
         ? createDomain(NOT_EVALUATED, "Findings not re-evaluated in scenario")
@@ -664,6 +660,36 @@ export function evaluateScenario(
         : governanceCompleteness.debt,
     evidence: createDomain(EVALUATED),
   };
+
+  // Hidden gaps: NOT_EVALUATED domains without a stated reason — the same
+  // derivation `deriveEvidenceGates` runs for the canonical face, so neither
+  // face can pass the gate on a literal while the other fails on facts.
+  let scenarioHiddenGapCount = 0;
+  for (const domainStatus of Object.values(scenarioDomains)) {
+    if (domainStatus.status === NOT_EVALUATED && !domainStatus.note) {
+      scenarioHiddenGapCount++;
+    }
+  }
+
+  // Derive evidence gates for scenario evaluation and build Evidence-Complete contract.
+  // Scenario mutation is deterministic: same inputs → same outputs (pure graph clone + apply).
+  // surfaceParity: the scenario applied all requested changes (refused===0), so the
+  // hypothetical surface is internally consistent — no surface drift from the plan.
+  const surfaceParity = refusedCount === 0 ? 1 : 0;
+
+  const evidenceComplete = buildEvidenceComplete({
+    domainCoverage: currentDecisionImpact !== null ? 1 : 0,
+    claimEvidenceCoverage: config !== null ? 1 : 0,
+    causalCoverage: currentConstraintImpact !== null ? 1 : 0,
+    provenanceCoverage: decisionProvenanceCoverage(currentDecisionImpact?.decisions),
+    mutationCoverage: mutationCoverageComplete ? 1 : 0,
+    surfaceParity,
+    hiddenGapCount: scenarioHiddenGapCount,
+    falseCompleteCount: 0,
+    baseIdentityValid: base.identityVerified,
+    deterministic: true,
+    contractType: EVALUATION_CONTRACT_TYPES.SCENARIO,
+  });
   const scenarioCompleteness = buildScenarioCompleteness({
     changesComplete: mutationCoverageComplete,
     baseIdentityVerified: base.identityVerified,

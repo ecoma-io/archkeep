@@ -290,6 +290,33 @@ export function evaluateBoundaryImpact(graph, constraintImpact, targetProject) {
 // ---------------------------------------------------------------------------
 
 /**
+ * The provenance coverage of a decision set: the fraction of rows that
+ * resolved to a known record with authority.
+ *
+ * An ADR row counts when its record carries decision authority
+ * (`hasAuthority` — `accepted`/`active`); a fitness row counts when it
+ * resolved to an id the loaded policy binds (`resolution === "known"`).
+ * Refs that resolve to nothing are reported by `unresolvedDecisionRefs`
+ * and never become rows; a record without authority emits a row the gate
+ * fails on loudly rather than counting. One derivation, one home —
+ * `deriveEvidenceGates` and the scenario face both read it, so the two
+ * callers cannot disagree about what a covered decision is.
+ *
+ * @param {object[]|null|undefined} decisions Decision rows from
+ *   `buildDecisionImpact`.
+ * @returns {number} A ratio in [0, 1]; 0 when no decision binds an
+ *   affected row.
+ */
+export function decisionProvenanceCoverage(decisions) {
+  const rows = decisions ?? [];
+  if (rows.length === 0) return 0;
+  const covered = rows.filter((row) =>
+    row.kind === "adr" ? row.hasAuthority === true : row.resolution === "known",
+  ).length;
+  return covered / rows.length;
+}
+
+/**
  * Derives evidence gates from evaluation outputs for the canonical evaluator.
  *
  * Each gate is computed from actual evaluation data rather than being
@@ -335,12 +362,10 @@ export function deriveEvidenceGates(evaluation) {
   // When absent, causal coverage is 0 (no constraints to trace).
   const causalCoverage = constraintImpact !== null ? 1 : 0;
 
-  // provenanceCoverage: decision provenance records
-  // When decision impact has resolvable decisions, provenance exists.
-  // Otherwise no provenance records.
-  const decisions = decisionImpact?.decisions ?? [];
-  const resolvableCount = decisions.filter((d) => d.resolved).length;
-  const provenanceCoverage = decisions.length > 0 ? resolvableCount / decisions.length : 0;
+  // provenanceCoverage: the fraction of decision rows that resolved to a
+  // known record with authority — derived from facts the rows carry, never
+  // from a property the row builder never wrote.
+  const provenanceCoverage = decisionProvenanceCoverage(decisionImpact?.decisions);
 
   // mutationCoverage: not applicable for canonical evaluation
   // surfaceParity: not applicable for canonical evaluation

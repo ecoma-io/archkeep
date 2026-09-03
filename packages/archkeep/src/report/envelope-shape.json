@@ -1805,7 +1805,6 @@
     "result.completeness.evidenceComplete.overallStatus: string",
     "result.completeness.evidenceComplete.provenanceCoverage: number",
     "result.completeness.evidenceComplete.surfaceParity: number",
-    "result.completeness.hiddenGapCount: number",
     "result.completeness.overallComplete: boolean",
     "result.completeness.overallStatus: string",
     "result.completeness.scenarioDomains: object",
