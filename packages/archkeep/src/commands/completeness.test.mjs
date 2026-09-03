@@ -142,6 +142,7 @@ describe("REQUIRED_DOMAINS", () => {
 
 describe("computeDomainCoverage", () => {
   it("returns 1.0 when all required domains are EVALUATED", () => {
+    /** @type {Record<string, string>} */
     const statuses = {};
     for (const d of REQUIRED_DOMAINS) {
       statuses[d] = EVALUATION_STATUS.EVALUATED;
@@ -151,8 +152,8 @@ describe("computeDomainCoverage", () => {
     expect(result.evaluatedCount).toBe(8);
     expect(result.failedDomains).toEqual([]);
   });
-
   it("returns 0.5 when half are EVALUATED", () => {
+    /** @type {Record<string, string>} */
     const statuses = {};
     REQUIRED_DOMAINS.forEach((d, i) => {
       statuses[d] = i < 4 ? EVALUATION_STATUS.EVALUATED : EVALUATION_STATUS.NOT_EVALUATED;
@@ -161,8 +162,8 @@ describe("computeDomainCoverage", () => {
     expect(result.coverage).toBe(0.5);
     expect(result.evaluatedCount).toBe(4);
   });
-
   it("counts only EVALUATED — not PARTIAL — as evaluated", () => {
+    /** @type {Record<string, string>} */
     const statuses = {};
     REQUIRED_DOMAINS.forEach((d, i) => {
       statuses[d] = i === 0 ? EVALUATION_STATUS.PARTIAL : EVALUATION_STATUS.EVALUATED;

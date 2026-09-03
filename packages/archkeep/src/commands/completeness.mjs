@@ -208,7 +208,7 @@ export function isDomainEvaluated(status) {
  * domainCoverage = evaluatedRequiredDomains / requiredDomains
  *
  * @param {Object<string, string>} domainStatuses Map of domain name to EVALUATION_STATUS value.
- * @param {string[]} [requiredDomains] The required domain names (defaults to REQUIRED_DOMAINS).
+ * @param {readonly string[]} [requiredDomains] The required domain names (defaults to REQUIRED_DOMAINS).
  * @returns {{coverage: number, evaluatedCount: number, requiredCount: number, failedDomains: string[]}}
  */
 export function computeDomainCoverage(domainStatuses, requiredDomains = REQUIRED_DOMAINS) {
@@ -261,7 +261,8 @@ export function computeDomainCoverage(domainStatuses, requiredDomains = REQUIRED
  * @property {string} overallStatus One of EVALUATION_STATUS values.
  * @property {EvidenceCompleteContract} [evidenceComplete] The Evidence-Complete contract,
  *   present when computed.
- */
+ * @property {number} [hiddenGapCount] Number of domains NOT_EVALUATED without a note.
+ * @property {number} [falseCompleteCount] Number of false-complete detections.
 
 /**
  * Builds canonical completeness from domain statuses.
@@ -277,7 +278,7 @@ export function computeDomainCoverage(domainStatuses, requiredDomains = REQUIRED
  * @param {DomainStatus} [input.debt] The debt domain status.
  * @param {DomainStatus} [input.governance] The governance domain status.
  * @param {DomainStatus} [input.evidence] The evidence domain status.
- * @param {EvidenceCompleteContract} [evidenceComplete] Optional Evidence-Complete contract.
+ * @param {EvidenceCompleteContract} [input.evidenceComplete] Optional Evidence-Complete contract.
  * @returns {CompletenessResult}
  */
 export function buildCompleteness({
