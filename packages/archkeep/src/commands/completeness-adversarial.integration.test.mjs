@@ -125,6 +125,7 @@ describe("completeness conservation — buildScenarioCompleteness", () => {
       deterministic: true,
       overallStatus: "complete",
       overallComplete: true,
+      /** @type {import('./completeness.mjs').EvidenceCompleteContract['gates']} */
       gates: {},
     };
     const result = buildScenarioCompleteness({

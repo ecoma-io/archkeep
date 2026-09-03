@@ -466,6 +466,7 @@ export function buildEvidenceComplete({
     .every((key) => rawGates[key].pass);
 
   // Annotate each gate with whether it is required for this contract type
+  /** @type {EvidenceCompleteContract['gates']} */
   const gates = {};
   for (const [key, gate] of Object.entries(rawGates)) {
     gates[key] = {

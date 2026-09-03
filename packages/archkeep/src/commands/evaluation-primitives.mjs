@@ -311,6 +311,7 @@ export function deriveEvidenceGates(evaluation) {
   const { completeness, constraintImpact, decisionImpact } = evaluation;
 
   // domainCoverage: ratio of evaluated required domains
+  /** @type {{ [domain: string]: string }} */
   const domainStatuses = {};
   for (const domain of REQUIRED_DOMAINS) {
     const dom = completeness.domains[domain];
