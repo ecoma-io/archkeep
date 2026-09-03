@@ -464,16 +464,14 @@ export function buildEvidenceComplete({
   const allRequiredPass = Object.keys(rawGates)
     .filter((key) => isGateRequired(key, contractType))
     .every((key) => rawGates[key].pass);
-
   // Annotate each gate with whether it is required for this contract type
-  /** @type {EvidenceCompleteContract['gates']} */
-  const gates = {};
-  for (const [key, gate] of Object.entries(rawGates)) {
-    gates[key] = {
-      ...gate,
-      required: isGateRequired(key, contractType),
-    };
-  }
+  /** @type {any} */
+  const gates = Object.fromEntries(
+    Object.entries(rawGates).map(([key, gate]) => [
+      key,
+      { ...gate, required: isGateRequired(key, contractType) },
+    ]),
+  );
 
   return {
     contractType,

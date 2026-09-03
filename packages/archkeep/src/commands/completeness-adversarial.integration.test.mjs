@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCompleteness,
+  buildEvidenceComplete,
   buildScenarioCompleteness,
   buildGovernanceCompleteness,
   createDomain,
@@ -111,8 +112,7 @@ describe("completeness conservation — buildScenarioCompleteness", () => {
       findingsStatus: EVALUATED,
       debtStatus: EVALUATED,
     });
-    const ec = {
-      contractType: "canonical",
+    const ec = buildEvidenceComplete({
       domainCoverage: 1,
       claimEvidenceCoverage: 1,
       causalCoverage: 1,
@@ -123,11 +123,8 @@ describe("completeness conservation — buildScenarioCompleteness", () => {
       falseCompleteCount: 0,
       baseIdentityValid: true,
       deterministic: true,
-      overallStatus: "complete",
-      overallComplete: true,
-      /** @type {import('./completeness.mjs').EvidenceCompleteContract['gates']} */
-      gates: {},
-    };
+      contractType: "canonical",
+    });
     const result = buildScenarioCompleteness({
       changesComplete: true,
       baseIdentityVerified: true,
