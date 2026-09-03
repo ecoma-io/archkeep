@@ -108,14 +108,67 @@ export function declarationDigest(intent) {
 }
 
 /**
+ * The identity string of one graph edge, in the canonical spelling
+ * `source>target:type` — the `(source, target, type)` identity design §1
+ * names. The ONE spelling the evolution events' `observed.edges` and
+ * `affected.boundaries` use: this module owns it, and `classifyEvolution`
+ * maps every edge it is handed through this function, so there is exactly
+ * one definition of "same edge" and no second spelling to drift.
+ *
+ * @param {{source: string, target: string, type: string}} edge
+ * @returns {string}
+ */
+export function edgeEvolutionIdentity({ source, target, type }) {
+  return `${source}>${target}:${type}`;
+}
+
+/**
+ * The one accepted input shape for an `observed.edges` entry: the raw
+ * `{source, target, type}` triple. A caller handing over a ready-made string
+ * would be choosing a second spelling of "same edge", so a string is refused
+ * loudly rather than accepted as one shape more — the identity string is this
+ * module's output, never its input.
+ *
+ * @param {unknown} entry
+ * @returns {string}
+ */
+function evolutionBoundary(entry) {
+  if (
+    typeof entry !== "object" ||
+    entry === null ||
+    !("source" in entry) ||
+    typeof entry.source !== "string" ||
+    entry.source === "" ||
+    !("target" in entry) ||
+    typeof entry.target !== "string" ||
+    entry.target === "" ||
+    !("type" in entry) ||
+    typeof entry.type !== "string"
+  ) {
+    throw new TypeError(
+      "classifyEvolution: observed.edges entries must be {source, target, type} triples — " +
+        "the identity string is classifyEvolution's own output spelling, never an input",
+    );
+  }
+  // The guard above has verified every property; the annotation only states
+  // what it proved.
+  return edgeEvolutionIdentity(
+    /** @type {{source: string, target: string, type: string}} */ (entry),
+  );
+}
+
+/**
  * @typedef {object} EvolutionEvidence
  * @property {{projects?: {added: string[], removed: string[], changed: string[]},
- *   edges?: {added: string[], removed: string[]},
+ *   edges?: {added: {source: string, target: string, type: string}[],
+ *   removed: {source: string, target: string, type: string}[]},
  *   policyChanged?: boolean|null, policyOneSided?: boolean,
  *   provenanceChanged?: boolean|null}} [observed]
- *   The structural diff between base and head: project names and edge identity
- *   strings (source,target,type) that were added, removed, or changed. Empty
- *   by default. `policyChanged` — whether the policy fingerprint changed
+ *   The structural diff between base and head: project names and raw edge
+ *   triples that were added, removed, or changed. The triples are mapped
+ *   through `edgeEvolutionIdentity` here — the identity spelling is this
+ *   module's own, so `affected.boundaries` comes out as identity strings
+ *   whichever shape the caller held. Empty by default. `policyChanged` — whether the policy fingerprint changed
  *   between base and head; `null` is "could not be compared": exactly one side
  *   records the policy (`policyOneSided: true`) or neither does
  *   (both-absent). `true` is a disclosure, never a refusal. `policyOneSided`
@@ -197,9 +250,9 @@ export function declarationDigest(intent) {
  *   absent (`null`) ⇒ NOT asserted, note added |
  *
  * The `affected` identities are derived from the same signals, never from a
- * second opinion: changed project names, changed edge identity strings, the
- * constraint/intent rows whose verdict was not `pass`/`matched`, and the ADR
- * ids whose lineage moved.
+ * second opinion: changed project names, the changed edges under the one
+ * identity spelling (`edgeEvolutionIdentity`), the constraint/intent rows
+ * whose verdict was not `pass`/`matched`, and the ADR ids whose lineage moved.
  *
  * @param {EvolutionEvidence} [input]
  * @returns {EvolutionClassification}
@@ -211,8 +264,8 @@ export function classifyEvolution(input = {}) {
   const addedProjects = projects.added ?? [];
   const removedProjects = projects.removed ?? [];
   const changedProjects = projects.changed ?? [];
-  const addedEdges = edges.added ?? [];
-  const removedEdges = edges.removed ?? [];
+  const addedEdges = (edges.added ?? []).map(evolutionBoundary);
+  const removedEdges = (edges.removed ?? []).map(evolutionBoundary);
   const structureChanged =
     addedProjects.length +
       removedProjects.length +

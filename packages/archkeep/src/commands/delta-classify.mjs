@@ -593,20 +593,11 @@ export function deltaFindings(delta) {
   };
 }
 
-/**
- * The identity string of one graph edge, in the design's canonical spelling
- * `source>target:type` (the `(source, target, type)` identity the design
- * §1 names, printed the way `docs/concepts/evolution.md`'s example shows).
- * The ONE spelling the delta's event `observed.edges`/`affected.boundaries`
- * use — a second spelling somewhere would be a second definition of "same
- * edge", and two definitions drift.
- *
- * @param {{source: string, target: string, type: string}} edge
- * @returns {string}
- */
-export function edgeEvolutionIdentity({ source, target, type }) {
-  return `${source}>${target}:${type}`;
-}
+// The identity spelling's ONE home is `../governance/evolution-event.mjs` —
+// `classifyEvolution` owns it and maps every `observed.edges` entry through
+// it. This re-export keeps delta's importers on the same name; it defines
+// nothing.
+export { edgeEvolutionIdentity } from "../governance/evolution-event.mjs";
 
 /**
  * The delta event's per-constraint verdict deltas (design §1 `fitness`),
@@ -675,12 +666,16 @@ export function deltaVerdictDeltas(delta) {
  *
  * @param {object} delta The `deltaCommand` result payload.
  * @param {{projects?: {added: string[], removed: string[], changed: string[]},
- *   edges?: {added: string[], removed: string[]}, codeDrift?: boolean}} [signals]
+ *   edges?: {added: {source: string, target: string, type: string}[],
+ *   removed: {source: string, target: string, type: string}[]},
+ *   codeDrift?: boolean}} [signals]
  *   The structural-change and drift signals a delta run derives from the two
  *   graphs it holds (the graph diff is `diff`'s vocabulary, shared here, never
- *   re-derived) — `projects`/`edges` carry identity strings (`edgeEvolutionIdentity`
- *   for edges), and `codeDrift` is the delta's computed "provenance advanced,
- *   no arch/policy change" fact. Absent signals are empty, so a delta that
+ *   re-derived) — `edges` carries the raw `{source, target, type}` triples,
+ *   which `classifyEvolution` maps through `edgeEvolutionIdentity` itself (the
+ *   identity string is its output spelling, never an input), and `codeDrift`
+ *   is the delta's computed "provenance advanced, no arch/policy change" fact.
+ *   Absent signals are empty, so a delta that
  *   computed none reads as a violation-only mapping.
  * @returns {{classifications: string[], disposition: "accepted"|"rejected"|"no-verdict",
  *   notes: string[], affected: {projects: string[], boundaries: string[],

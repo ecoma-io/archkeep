@@ -79,7 +79,7 @@ import { containmentViolation } from "../containment.mjs";
 import { classifyEvolution } from "../governance/evolution-event.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatHistoryReport } from "../report/history-text.mjs";
-import { computeDiff, edgeIdentityKey, parseBaseline } from "./diff.mjs";
+import { computeDiff, parseBaseline } from "./diff.mjs";
 import { buildDependencies, buildProjects } from "./graph.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
@@ -397,8 +397,12 @@ export function classifyTransition(from, to) {
         changed: diff.changedProjects.map((project) => project.name),
       },
       edges: {
-        added: diff.addedEdges.map(edgeIdentityKey),
-        removed: diff.removedEdges.map(edgeIdentityKey),
+        // The raw triples — `classifyEvolution` maps them through its own
+        // identity spelling (`edgeEvolutionIdentity`), so `affected.boundaries`
+        // carries the canonical strings every other event surface uses, not
+        // this module's diff-internal key spelling.
+        added: diff.addedEdges,
+        removed: diff.removedEdges,
       },
       policyChanged: meta.policyChanged,
       policyOneSided: meta.policyOneSided,

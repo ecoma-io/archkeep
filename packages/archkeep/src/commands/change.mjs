@@ -80,7 +80,7 @@
  * This module computes and returns; `../../cli.mjs`'s `runChange` owns argv,
  * output destination and the process exit code (`./README.md`).
  */
-import { classifyDelta } from "./delta-classify.mjs";
+import { classifyDelta, edgeEvolutionIdentity } from "./delta-classify.mjs";
 import { computeDiff } from "./diff.mjs";
 import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
 import {
@@ -155,23 +155,14 @@ function violationFindingId(entry) {
 }
 
 /**
- * The identity string an observed edge carries into the event's `observed`
- * and `affected` — `(source, target, type)`, the triple `./diff.mjs`'s
- * `edgeIdentityKey` owns, spelled for a human reader (`>` separator, optional
- * type suffix). Two spellings of one triple never diverge because the triple
- * itself is the input.
- *
- * @param {{source: string, target: string, type?: string}} edge
- * @returns {string}
- */
-function edgeIdentityString(edge) {
-  return `${edge.source}>${edge.target}${edge.type === undefined || edge.type === "" ? "" : `:${edge.type}`}`;
-}
-
-/**
  * The structural-diff facts in the event's `observed` shape (design §1),
  * mapped from `computeDiff`'s output and the metadata comparison — the same
  * lists the reconciliation already consumed, never recomputed.
+ *
+ * The edges' identity strings come from `edgeEvolutionIdentity`
+ * (`./delta-classify.mjs`) — the ONE spelling the evolution events'
+ * `observed.edges`/`affected.boundaries` use. A local spelling here would be
+ * a second definition of "same edge", and two definitions drift.
  *
  * @param {{addedProjects: object[], removedProjects: object[],
  *   changedProjects: object[], addedEdges: object[], removedEdges: object[]}} structural
@@ -189,8 +180,8 @@ function observedFrom(structural, meta) {
     changed: structural.changedProjects.map((project) => project.name),
   };
   const edges = {
-    added: structural.addedEdges.map(edgeIdentityString),
-    removed: structural.removedEdges.map(edgeIdentityString),
+    added: structural.addedEdges.map(edgeEvolutionIdentity),
+    removed: structural.removedEdges.map(edgeEvolutionIdentity),
   };
   return {
     architectureChanged:
@@ -745,7 +736,14 @@ export async function changeCommand(
     reason: entry.reason,
   }));
   const evolution = classifyEvolution({
-    observed,
+    // The raw triples, not the mapped strings `observed` carries (that object
+    // is the event's stored record): `classifyEvolution` owns the identity
+    // spelling and takes the triples, so `affected.boundaries` is mapped
+    // inside it under the one spelling rather than trusted from the caller.
+    observed: {
+      ...observed,
+      edges: { added: structural.addedEdges, removed: structural.removedEdges },
+    },
     ...(classification === null
       ? {}
       : {

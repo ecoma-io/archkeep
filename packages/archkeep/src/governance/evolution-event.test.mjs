@@ -142,13 +142,80 @@ describe("classifyEvolution — CHANGE", () => {
     const result = classifyEvolution({
       observed: {
         projects: { added: ["libs/beta"], removed: [], changed: [] },
-        edges: { added: ["libs/beta>libs/alpha:dep"], removed: [] },
+        edges: { added: [{ source: "libs/beta", target: "libs/alpha", type: "dep" }], removed: [] },
       },
     });
     expect(result.classifications).toEqual(["CHANGE"]);
     expect(result.disposition).toBe("accepted");
     expect(result.affected.projects).toEqual(["libs/beta"]);
     expect(result.affected.boundaries).toEqual(["libs/beta>libs/alpha:dep"]);
+  });
+});
+
+describe("classifyEvolution — the edge identity spelling", () => {
+  it("maps triples through the one canonical spelling, always carrying the type", () => {
+    const result = classifyEvolution({
+      observed: {
+        projects: { added: [], removed: [], changed: [] },
+        edges: {
+          added: [{ source: "libs/beta", target: "libs/alpha", type: "static" }],
+          removed: [{ source: "libs/gamma", target: "libs/alpha", type: "" }],
+        },
+      },
+    });
+    expect(result.affected.boundaries).toEqual([
+      "libs/beta>libs/alpha:static",
+      "libs/gamma>libs/alpha:",
+    ]);
+  });
+
+  // The deliberate wrong-shape inputs below are cast, never typed: the
+  // function's contract refuses them at runtime, so the type checker must not
+  // be asked to admit them.
+  /** @param {*} input */
+  const attempt = (input) => classifyEvolution(input);
+
+  it("refuses a ready-made identity string — the spelling is output, never input", () => {
+    // The silent direction: a caller that pre-mapped its edges under its own
+    // spelling (diff's NUL key, say) would otherwise surface that private
+    // spelling in `affected.boundaries` — byte-for-byte plausible-looking
+    // data no reader can decode. Loud refusal instead.
+    expect(() =>
+      attempt({
+        observed: {
+          projects: { added: [], removed: [], changed: [] },
+          edges: { added: ["libs/beta>libs/alpha:dep"], removed: [] },
+        },
+      }),
+    ).toThrow(TypeError);
+    // The diff-internal NUL spelling is equally refused — never silently
+    // echoed into the event's affected identities.
+    expect(() =>
+      attempt({
+        observed: {
+          projects: { added: [], removed: [], changed: [] },
+          edges: { added: ["libs/beta\0libs/alpha\0dep"], removed: [] },
+        },
+      }),
+    ).toThrow(/identity string is classifyEvolution's own output spelling/);
+  });
+
+  it("refuses a triple whose source or target is not a non-empty string", () => {
+    for (const edge of [
+      { source: "", target: "libs/alpha", type: "dep" },
+      { source: "libs/beta", target: "", type: "dep" },
+      { source: "libs/beta", target: "libs/alpha" },
+      "libs/beta>libs/alpha:dep",
+    ]) {
+      expect(() =>
+        attempt({
+          observed: {
+            projects: { added: [], removed: [], changed: [] },
+            edges: { added: [edge], removed: [] },
+          },
+        }),
+      ).toThrow(TypeError);
+    }
   });
 });
 
@@ -412,7 +479,14 @@ describe("classifyEvolution — output shape", () => {
     const result = classifyEvolution({
       observed: {
         projects: { added: ["z-lib", "a-lib", "z-lib"], removed: [], changed: [] },
-        edges: { added: ["edge-2", "edge-1", "edge-2"], removed: [] },
+        edges: {
+          added: [
+            { source: "z-edge", target: "libs/beta", type: "dep" },
+            { source: "a-edge", target: "libs/beta", type: "dep" },
+            { source: "z-edge", target: "libs/beta", type: "dep" },
+          ],
+          removed: [],
+        },
       },
       declaredConstraints: [
         { id: "c1", verdict: "fail" },
@@ -421,7 +495,7 @@ describe("classifyEvolution — output shape", () => {
       declaredIntentRows: [{ id: "i1", verdict: "unfulfilled" }],
     });
     expect(result.affected.projects).toEqual(["a-lib", "z-lib"]);
-    expect(result.affected.boundaries).toEqual(["edge-1", "edge-2"]);
+    expect(result.affected.boundaries).toEqual(["a-edge>libs/beta:dep", "z-edge>libs/beta:dep"]);
     expect(result.affected.constraints).toEqual(["c1", "i1"]);
   });
 
