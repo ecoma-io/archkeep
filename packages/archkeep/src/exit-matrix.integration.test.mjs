@@ -357,6 +357,7 @@ let changeBaseline;
 let changeIntent;
 let changeIntentWrongBase;
 let scenarioFile;
+let tamperedCatalog;
 beforeAll(async () => {
   // `diff` compares against a snapshot the tool itself wrote, and
   // `health`/`report`/`debt` read a history the tool itself captured — both
@@ -402,6 +403,29 @@ beforeAll(async () => {
   changeIntentWrongBase = join(artifactsDir, "change-intent-wrong-base.json");
   writeFileSync(changeIntentWrongBase, manifestFor("0".repeat(40)));
 
+  // `rules verify` needs a catalog whose verdict lane can be driven: this one
+  // is well-formed but names an artifact the disk lacks, so verify reports a
+  // finding — the exit-1 side the matrix's two-side shape had nowhere to put.
+  tamperedCatalog = join(artifactsDir, "tampered-catalog.json");
+  writeFileSync(
+    tamperedCatalog,
+    `${JSON.stringify(
+      {
+        version: 1,
+        rules: [
+          {
+            name: "no-nested-imports",
+            artifact: "rules/no-such-rule.wasm",
+            sha256: `${"a".repeat(64)}`,
+            contract: "1",
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
   // `scenario` needs a scenario JSON file.
   scenarioFile = join(artifactsDir, "scenario.json");
   writeFileSync(
@@ -420,12 +444,18 @@ beforeAll(async () => {
  * the contract — descriptive verbs always 0, the two finding-lane verbs over
  * a clean tree 0 — and `refused` pins the other side, whichever honest
  * non-zero that verb's contract produces: a finding (1), a usage error (2),
- * or a could-not-look (3). An `argv` may be a function when it embeds a path
+ * or a could-not-look (3). A verb whose contract holds more than two honest
+ * outcomes carries extra named sides (`rules` has `verdict`, the findings
+ * exit 1); every side is judged, `ok` on its exit alone, every other side on
+ * its exit AND a non-empty explanation. An `argv` may be a function when it embeds a path
  * that only exists once `beforeAll` has run — a table built at module load
  * would otherwise capture the variable's undefined before-value.
  *
- * @type {Record<string, {ok: {world: string, argv: string[]|Function, exit: number},
+ * @type {Record<string, {ok: {world: string, argv: string[]|Function, exit: number,
+ *   stderrContains?: string},
  *   refused: {world: string, argv: string[]|Function, exit: number,
+ *   stderrContains?: string},
+ *   [side: string]: {world: string, argv: string[]|Function, exit: number,
  *   stderrContains?: string}}>}
  */
 const MATRIX = {
@@ -584,6 +614,14 @@ const MATRIX = {
   },
   rules: {
     ok: { world: "world", argv: ["rules", "list", "--format", "json"], exit: EXIT.error },
+    // The verdict lane, as its own side: a catalog entry naming an artifact
+    // the disk lacks is REPORTED — verify reaches a verdict and exits 1, the
+    // findings side the two-side shape had nowhere to carry.
+    verdict: {
+      world: "world",
+      argv: () => ["rules", "verify", "--catalog", tamperedCatalog],
+      exit: EXIT.violations,
+    },
     refused: { world: "world", argv: ["rules"], exit: EXIT.usage },
   },
 };
@@ -600,7 +638,7 @@ describe("the verb→exit matrix", { timeout: SPAWN_TEST_BUDGET_MS }, () => {
     expect(Object.keys(MATRIX).sort()).toEqual([...COMMAND_NAMES].sort());
   });
 
-  it("gives every row two sides with numeric exits", () => {
+  it("gives every side of every row a numeric exit", () => {
     for (const [verb, sides] of Object.entries(MATRIX)) {
       for (const [side, spec] of Object.entries(sides)) {
         const argv = typeof spec.argv === "function" ? spec.argv() : spec.argv;
@@ -613,37 +651,35 @@ describe("the verb→exit matrix", { timeout: SPAWN_TEST_BUDGET_MS }, () => {
     }
   });
 
-  it.each(Object.keys(MATRIX))("%s answers both sides of its exit contract", async (verb) => {
-    const { ok, refused } = MATRIX[verb];
+  it.each(Object.keys(MATRIX))("%s answers every side of its exit contract", async (verb) => {
     const argvOf = (spec) => (typeof spec.argv === "function" ? spec.argv() : spec.argv);
 
-    const okRun = { ...streams(), ...seamFor[ok.world]() };
-    const okExit = await runCli(argvOf(ok), okRun);
-    expect({ verb, side: "ok", exit: okExit, stderr: okRun.lines.err.join("\n") }).toEqual({
-      verb,
-      side: "ok",
-      exit: ok.exit,
-      stderr: expect.any(String),
-    });
-
-    const refusedRun = { ...streams(), ...seamFor[refused.world]() };
-    const refusedExit = await runCli(argvOf(refused), refusedRun);
-    const said = [...refusedRun.lines.err, ...refusedRun.lines.out].join("\n");
-    if (refused.stderrContains !== undefined) {
-      expect(said).toContain(refused.stderrContains);
+    for (const [side, spec] of Object.entries(MATRIX[verb])) {
+      const run = { ...streams(), ...seamFor[spec.world]() };
+      const exit = await runCli(argvOf(spec), run);
+      // The `ok` side pins the exit alone — its stream is the report itself.
+      // Every other side is an honest non-zero, which must SAY why: a silent
+      // failure code is its own silent direction, so the stream may not be
+      // empty.
+      if (side === "ok") {
+        expect({ verb, side, exit, stderr: run.lines.err.join("\n") }).toEqual({
+          verb,
+          side,
+          exit: spec.exit,
+          stderr: expect.any(String),
+        });
+        continue;
+      }
+      const said = [...run.lines.err, ...run.lines.out].join("\n");
+      if (spec.stderrContains !== undefined) {
+        expect(said).toContain(spec.stderrContains);
+      }
+      expect({ verb, side, exit, said }).toEqual({
+        verb,
+        side,
+        exit: spec.exit,
+        said: expect.stringMatching(/\S/u),
+      });
     }
-    expect({
-      verb,
-      side: "refused",
-      exit: refusedExit,
-      said,
-    }).toEqual({
-      verb,
-      side: "refused",
-      exit: refused.exit,
-      // A non-zero exit must SAY why — a silent failure code is its own
-      // silent direction, so the refusal stream may not be empty.
-      said: expect.stringMatching(/\S/u),
-    });
   });
 });
