@@ -6,6 +6,11 @@ import {
   buildCompleteness,
   buildGovernanceCompleteness,
   buildScenarioCompleteness,
+  buildEvidenceComplete,
+  EVIDENCE_COMPLETE_GATES,
+  REQUIRED_DOMAINS,
+  createDomain,
+  computeDomainCoverage,
 } from "./completeness.mjs";
 
 /**
@@ -87,34 +92,113 @@ describe("evaluationStatus", () => {
 });
 
 // ---------------------------------------------------------------------------
-// buildCompleteness
+// EVIDENCE_COMPLETE_GATES
+// ---------------------------------------------------------------------------
+
+describe("EVIDENCE_COMPLETE_GATES", () => {
+  it("has exactly 10 gates", () => {
+    expect(EVIDENCE_COMPLETE_GATES).toHaveLength(10);
+  });
+
+  it("includes all required gate keys", () => {
+    const keys = EVIDENCE_COMPLETE_GATES.map((g) => g.key).sort();
+    expect(keys).toEqual([
+      "baseIdentityValid",
+      "causalCoverage",
+      "claimEvidenceCoverage",
+      "deterministic",
+      "domainCoverage",
+      "falseCompleteCount",
+      "hiddenGapCount",
+      "mutationCoverage",
+      "provenanceCoverage",
+      "surfaceParity",
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REQUIRED_DOMAINS
+// ---------------------------------------------------------------------------
+
+describe("REQUIRED_DOMAINS", () => {
+  it("has exactly 8 domains", () => {
+    expect(REQUIRED_DOMAINS).toHaveLength(8);
+  });
+
+  it("includes evidence domain", () => {
+    expect(REQUIRED_DOMAINS).toContain("evidence");
+  });
+
+  it("includes findings and debt domains", () => {
+    expect(REQUIRED_DOMAINS).toContain("findings");
+    expect(REQUIRED_DOMAINS).toContain("debt");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeDomainCoverage
+// ---------------------------------------------------------------------------
+
+describe("computeDomainCoverage", () => {
+  it("returns 1.0 when all required domains are EVALUATED", () => {
+    /** @type {Record<string, string>} */
+    const statuses = {};
+    for (const d of REQUIRED_DOMAINS) {
+      statuses[d] = EVALUATION_STATUS.EVALUATED;
+    }
+    const result = computeDomainCoverage(statuses);
+    expect(result.coverage).toBe(1);
+    expect(result.evaluatedCount).toBe(8);
+    expect(result.failedDomains).toEqual([]);
+  });
+  it("returns 0.5 when half are EVALUATED", () => {
+    /** @type {Record<string, string>} */
+    const statuses = {};
+    REQUIRED_DOMAINS.forEach((d, i) => {
+      statuses[d] = i < 4 ? EVALUATION_STATUS.EVALUATED : EVALUATION_STATUS.NOT_EVALUATED;
+    });
+    const result = computeDomainCoverage(statuses);
+    expect(result.coverage).toBe(0.5);
+    expect(result.evaluatedCount).toBe(4);
+  });
+  it("counts only EVALUATED — not PARTIAL — as evaluated", () => {
+    /** @type {Record<string, string>} */
+    const statuses = {};
+    REQUIRED_DOMAINS.forEach((d, i) => {
+      statuses[d] = i === 0 ? EVALUATION_STATUS.PARTIAL : EVALUATION_STATUS.EVALUATED;
+    });
+    const result = computeDomainCoverage(statuses);
+    expect(result.coverage).toBe(7 / 8);
+    expect(result.failedDomains).toContain(REQUIRED_DOMAINS[0]);
+  });
+
+  it("returns 1.0 for empty required domains list", () => {
+    const result = computeDomainCoverage({}, []);
+    expect(result.coverage).toBe(1);
+    expect(result.evaluatedCount).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildCompleteness (8-domain model)
 // ---------------------------------------------------------------------------
 
 describe("buildCompleteness", () => {
-  const evaluated = () => EVALUATION_STATUS.EVALUATED;
-  const notEvaluated = () => EVALUATION_STATUS.NOT_EVALUATED;
-  const partial = () => EVALUATION_STATUS.PARTIAL;
-  const refused = () => EVALUATION_STATUS.REFUSED;
-
   function domain(status, note = "") {
-    return {
-      status,
-      evaluated: status === EVALUATION_STATUS.EVALUATED || status === EVALUATION_STATUS.PARTIAL,
-      partial: status === EVALUATION_STATUS.PARTIAL,
-      notEvaluated: status === EVALUATION_STATUS.NOT_EVALUATED,
-      unsupported: status === EVALUATION_STATUS.UNSUPPORTED,
-      refused: status === EVALUATION_STATUS.REFUSED,
-      note,
-    };
+    return createDomain(status, note);
   }
 
-  it("reports overallComplete true when all domains are EVALUATED", () => {
+  it("reports overallComplete true when all 8 domains are EVALUATED", () => {
     const result = buildCompleteness({
-      structural: domain(evaluated()),
-      constraint: domain(evaluated()),
-      boundary: domain(evaluated()),
-      decision: domain(evaluated()),
-      governance: domain(evaluated()),
+      structural: domain(EVALUATION_STATUS.EVALUATED),
+      constraint: domain(EVALUATION_STATUS.EVALUATED),
+      boundary: domain(EVALUATION_STATUS.EVALUATED),
+      decision: domain(EVALUATION_STATUS.EVALUATED),
+      findings: domain(EVALUATION_STATUS.EVALUATED),
+      debt: domain(EVALUATION_STATUS.EVALUATED),
+      governance: domain(EVALUATION_STATUS.EVALUATED),
+      evidence: domain(EVALUATION_STATUS.EVALUATED),
     });
     expect(result.overallComplete).toBe(true);
     expect(result.overallStatus).toBe(EVALUATION_STATUS.EVALUATED);
@@ -122,11 +206,14 @@ describe("buildCompleteness", () => {
 
   it("reports overallComplete false when one domain is NOT_EVALUATED", () => {
     const result = buildCompleteness({
-      structural: domain(evaluated()),
-      constraint: domain(evaluated()),
-      boundary: domain(evaluated()),
-      decision: domain(evaluated()),
-      governance: domain(notEvaluated()),
+      structural: domain(EVALUATION_STATUS.EVALUATED),
+      constraint: domain(EVALUATION_STATUS.EVALUATED),
+      boundary: domain(EVALUATION_STATUS.EVALUATED),
+      decision: domain(EVALUATION_STATUS.EVALUATED),
+      findings: domain(EVALUATION_STATUS.EVALUATED),
+      debt: domain(EVALUATION_STATUS.EVALUATED),
+      governance: domain(EVALUATION_STATUS.NOT_EVALUATED),
+      evidence: domain(EVALUATION_STATUS.EVALUATED),
     });
     expect(result.overallComplete).toBe(false);
     expect(result.overallStatus).toBe(EVALUATION_STATUS.NOT_EVALUATED);
@@ -134,11 +221,14 @@ describe("buildCompleteness", () => {
 
   it("reports overallComplete false when one domain is PARTIAL", () => {
     const result = buildCompleteness({
-      structural: domain(evaluated()),
-      constraint: domain(evaluated()),
-      boundary: domain(evaluated()),
-      decision: domain(evaluated()),
-      governance: domain(partial()),
+      structural: domain(EVALUATION_STATUS.EVALUATED),
+      constraint: domain(EVALUATION_STATUS.EVALUATED),
+      boundary: domain(EVALUATION_STATUS.EVALUATED),
+      decision: domain(EVALUATION_STATUS.EVALUATED),
+      findings: domain(EVALUATION_STATUS.EVALUATED),
+      debt: domain(EVALUATION_STATUS.EVALUATED),
+      governance: domain(EVALUATION_STATUS.PARTIAL),
+      evidence: domain(EVALUATION_STATUS.EVALUATED),
     });
     expect(result.overallComplete).toBe(false);
     expect(result.overallStatus).toBe(EVALUATION_STATUS.PARTIAL);
@@ -146,20 +236,24 @@ describe("buildCompleteness", () => {
 
   it("reports overallComplete false when one domain is REFUSED", () => {
     const result = buildCompleteness({
-      structural: domain(evaluated()),
-      constraint: domain(evaluated()),
-      boundary: domain(evaluated()),
-      decision: domain(evaluated()),
-      governance: domain(refused()),
+      structural: domain(EVALUATION_STATUS.EVALUATED),
+      constraint: domain(EVALUATION_STATUS.EVALUATED),
+      boundary: domain(EVALUATION_STATUS.EVALUATED),
+      decision: domain(EVALUATION_STATUS.EVALUATED),
+      findings: domain(EVALUATION_STATUS.EVALUATED),
+      debt: domain(EVALUATION_STATUS.EVALUATED),
+      governance: domain(EVALUATION_STATUS.REFUSED),
+      evidence: domain(EVALUATION_STATUS.EVALUATED),
     });
     expect(result.overallComplete).toBe(false);
     expect(result.overallStatus).toBe(EVALUATION_STATUS.REFUSED);
   });
 
-  it("defaults all domains to NOT_EVALUATED when no input given", () => {
+  it("defaults all 8 domains to NOT_EVALUATED when no input given", () => {
     const result = buildCompleteness();
     expect(result.overallComplete).toBe(false);
     expect(result.overallStatus).toBe(EVALUATION_STATUS.NOT_EVALUATED);
+    expect(Object.keys(result.domains)).toHaveLength(8);
     for (const [name, d] of Object.entries(result.domains)) {
       expect(d.status, `${name} should default to NOT_EVALUATED`).toBe(
         EVALUATION_STATUS.NOT_EVALUATED,
@@ -168,16 +262,182 @@ describe("buildCompleteness", () => {
   });
 
   it("defaults a missing domain to NOT_EVALUATED", () => {
-    // Only supply 4 of the 5 domains; governance should default to NOT_EVALUATED
     const result = buildCompleteness({
-      structural: domain(evaluated()),
-      constraint: domain(evaluated()),
-      boundary: domain(evaluated()),
-      decision: domain(evaluated()),
+      structural: domain(EVALUATION_STATUS.EVALUATED),
+      constraint: domain(EVALUATION_STATUS.EVALUATED),
+      boundary: domain(EVALUATION_STATUS.EVALUATED),
+      decision: domain(EVALUATION_STATUS.EVALUATED),
+      governance: domain(EVALUATION_STATUS.EVALUATED),
     });
-    expect(result.domains.governance.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
+    // findings, debt, evidence should default to NOT_EVALUATED
+    expect(result.domains.findings.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
+    expect(result.domains.debt.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
+    expect(result.domains.evidence.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
     expect(result.overallComplete).toBe(false);
-    expect(result.overallStatus).toBe(EVALUATION_STATUS.NOT_EVALUATED);
+  });
+
+  it("detects hidden gaps: NOT_EVALUATED domain without a note", () => {
+    const result = buildCompleteness({
+      structural: domain(EVALUATION_STATUS.EVALUATED),
+      constraint: domain(EVALUATION_STATUS.EVALUATED),
+      boundary: domain(EVALUATION_STATUS.EVALUATED),
+      decision: domain(EVALUATION_STATUS.EVALUATED),
+      findings: domain(EVALUATION_STATUS.NOT_EVALUATED, "Findings not available"),
+      debt: domain(EVALUATION_STATUS.NOT_EVALUATED), // no note — hidden gap
+      governance: domain(EVALUATION_STATUS.NOT_EVALUATED, "Governance not evaluated"),
+      evidence: domain(EVALUATION_STATUS.EVALUATED),
+    });
+    expect(result.hiddenGapCount).toBe(1);
+  });
+
+  it("detects false complete when domains pass but evidence gates fail", () => {
+    const result = buildCompleteness({
+      structural: domain(EVALUATION_STATUS.EVALUATED),
+      constraint: domain(EVALUATION_STATUS.EVALUATED),
+      boundary: domain(EVALUATION_STATUS.EVALUATED),
+      decision: domain(EVALUATION_STATUS.EVALUATED),
+      findings: domain(EVALUATION_STATUS.EVALUATED),
+      debt: domain(EVALUATION_STATUS.EVALUATED),
+      governance: domain(EVALUATION_STATUS.EVALUATED),
+      evidence: domain(EVALUATION_STATUS.EVALUATED),
+      evidenceComplete: buildEvidenceComplete({
+        domainCoverage: 1,
+        claimEvidenceCoverage: 0.5, // fails — not 1.0
+        causalCoverage: 1,
+        provenanceCoverage: 1,
+        mutationCoverage: 1,
+        surfaceParity: 1,
+        hiddenGapCount: 0,
+        falseCompleteCount: 0,
+        baseIdentityValid: true,
+        deterministic: true,
+      }),
+    });
+    // Domain-level completeness is true but EC gates fail
+    expect(result.overallComplete).toBe(false);
+    expect(result.falseCompleteCount).toBe(1);
+  });
+
+  it("includes evidenceComplete in result when provided", () => {
+    const ec = buildEvidenceComplete({
+      domainCoverage: 1,
+      claimEvidenceCoverage: 1,
+      causalCoverage: 1,
+      provenanceCoverage: 1,
+      mutationCoverage: 1,
+      surfaceParity: 1,
+      hiddenGapCount: 0,
+      falseCompleteCount: 0,
+      baseIdentityValid: true,
+      deterministic: true,
+    });
+    const result = buildCompleteness({
+      structural: domain(EVALUATION_STATUS.EVALUATED),
+      constraint: domain(EVALUATION_STATUS.EVALUATED),
+      boundary: domain(EVALUATION_STATUS.EVALUATED),
+      decision: domain(EVALUATION_STATUS.EVALUATED),
+      findings: domain(EVALUATION_STATUS.EVALUATED),
+      debt: domain(EVALUATION_STATUS.EVALUATED),
+      governance: domain(EVALUATION_STATUS.EVALUATED),
+      evidence: domain(EVALUATION_STATUS.EVALUATED),
+      evidenceComplete: ec,
+    });
+    expect(result.evidenceComplete).toBeDefined();
+    expect(result.evidenceComplete.overallComplete).toBe(true);
+    expect(result.overallComplete).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildEvidenceComplete
+// ---------------------------------------------------------------------------
+
+describe("buildEvidenceComplete", () => {
+  it("returns complete when all gates pass", () => {
+    const ec = buildEvidenceComplete({
+      domainCoverage: 1,
+      claimEvidenceCoverage: 1,
+      causalCoverage: 1,
+      provenanceCoverage: 1,
+      mutationCoverage: 1,
+      surfaceParity: 1,
+      hiddenGapCount: 0,
+      falseCompleteCount: 0,
+      baseIdentityValid: true,
+      deterministic: true,
+    });
+    expect(ec.overallComplete).toBe(true);
+    expect(ec.overallStatus).toBe("complete");
+  });
+
+  it("returns incomplete when domainCoverage is not 1", () => {
+    const ec = buildEvidenceComplete({
+      domainCoverage: 0.875,
+      claimEvidenceCoverage: 1,
+      causalCoverage: 1,
+      provenanceCoverage: 1,
+      mutationCoverage: 1,
+      surfaceParity: 1,
+      hiddenGapCount: 0,
+      falseCompleteCount: 0,
+      baseIdentityValid: true,
+      deterministic: true,
+    });
+    expect(ec.overallComplete).toBe(false);
+    expect(ec.gates.domainCoverage.pass).toBe(false);
+  });
+
+  it("returns incomplete when hiddenGapCount is not 0", () => {
+    const ec = buildEvidenceComplete({
+      domainCoverage: 1,
+      claimEvidenceCoverage: 1,
+      causalCoverage: 1,
+      provenanceCoverage: 1,
+      mutationCoverage: 1,
+      surfaceParity: 1,
+      hiddenGapCount: 2,
+      falseCompleteCount: 0,
+      baseIdentityValid: true,
+      deterministic: true,
+    });
+    expect(ec.overallComplete).toBe(false);
+    expect(ec.gates.hiddenGapCount.pass).toBe(false);
+  });
+
+  it("returns incomplete when deterministic is false", () => {
+    const ec = buildEvidenceComplete({
+      domainCoverage: 1,
+      claimEvidenceCoverage: 1,
+      causalCoverage: 1,
+      provenanceCoverage: 1,
+      mutationCoverage: 1,
+      surfaceParity: 1,
+      hiddenGapCount: 0,
+      falseCompleteCount: 0,
+      baseIdentityValid: true,
+      deterministic: false,
+    });
+    expect(ec.overallComplete).toBe(false);
+    expect(ec.gates.deterministic.pass).toBe(false);
+  });
+
+  it("exposes per-gate status", () => {
+    const ec = buildEvidenceComplete({
+      domainCoverage: 1,
+      claimEvidenceCoverage: 1,
+      causalCoverage: 1,
+      provenanceCoverage: 1,
+      mutationCoverage: 1,
+      surfaceParity: 1,
+      hiddenGapCount: 0,
+      falseCompleteCount: 0,
+      baseIdentityValid: true,
+      deterministic: true,
+    });
+    expect(Object.keys(ec.gates)).toHaveLength(10);
+    for (const [key, gate] of Object.entries(ec.gates)) {
+      expect(gate.pass, `${key} should pass`).toBe(true);
+    }
   });
 });
 
@@ -192,6 +452,8 @@ describe("buildGovernanceCompleteness", () => {
       debtStatus: EVALUATION_STATUS.EVALUATED,
     });
     expect(result.domain.status).toBe(EVALUATION_STATUS.EVALUATED);
+    expect(result.findings.status).toBe(EVALUATION_STATUS.EVALUATED);
+    expect(result.debt.status).toBe(EVALUATION_STATUS.EVALUATED);
   });
 
   it("returns not_evaluated when findings is NOT_EVALUATED and note mentions findings", () => {
@@ -202,6 +464,8 @@ describe("buildGovernanceCompleteness", () => {
     expect(result.domain.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
     expect(result.domain.note).toContain("findings");
     expect(result.domain.note).not.toContain("debt");
+    expect(result.findings.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
+    expect(result.debt.status).toBe(EVALUATION_STATUS.EVALUATED);
   });
 
   it("returns not_evaluated when debt is NOT_EVALUATED and note mentions debt", () => {
@@ -228,6 +492,8 @@ describe("buildGovernanceCompleteness", () => {
     const result = buildGovernanceCompleteness();
     expect(result.findingsStatus).toBe(EVALUATION_STATUS.NOT_EVALUATED);
     expect(result.debtStatus).toBe(EVALUATION_STATUS.NOT_EVALUATED);
+    expect(result.findings.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
+    expect(result.debt.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
     expect(result.domain.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
   });
 });
@@ -237,31 +503,63 @@ describe("buildGovernanceCompleteness", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildScenarioCompleteness", () => {
-  it("reports overallComplete true when changes and base are complete", () => {
+  it("reports overallComplete true when changes, base, mutation and governance complete", () => {
     const governance = buildGovernanceCompleteness({
       findingsStatus: EVALUATION_STATUS.EVALUATED,
       debtStatus: EVALUATION_STATUS.EVALUATED,
     });
     const result = buildScenarioCompleteness({
       changesComplete: true,
-      baseAttributed: true,
+      baseIdentityVerified: true,
+      mutationCoverageComplete: true,
       governance,
+      domains: {
+        structural: createDomain(EVALUATION_STATUS.EVALUATED),
+        constraint: createDomain(EVALUATION_STATUS.EVALUATED),
+        boundary: createDomain(EVALUATION_STATUS.EVALUATED),
+        decision: createDomain(EVALUATION_STATUS.EVALUATED),
+        findings: createDomain(EVALUATION_STATUS.EVALUATED),
+        debt: createDomain(EVALUATION_STATUS.EVALUATED),
+        governance: createDomain(EVALUATION_STATUS.EVALUATED),
+        evidence: createDomain(EVALUATION_STATUS.EVALUATED),
+      },
     });
     expect(result.overallComplete).toBe(true);
     expect(result.scenarioDomains.changes.status).toBe(EVALUATION_STATUS.EVALUATED);
     expect(result.scenarioDomains.base.status).toBe(EVALUATION_STATUS.EVALUATED);
+    expect(result.scenarioDomains.mutationCoverage.status).toBe(EVALUATION_STATUS.EVALUATED);
   });
 
   it("reports changes PARTIAL when changesComplete is false", () => {
-    const result = buildScenarioCompleteness({ changesComplete: false, baseAttributed: true });
+    const result = buildScenarioCompleteness({
+      changesComplete: false,
+      baseIdentityVerified: true,
+    });
     expect(result.scenarioDomains.changes.status).toBe(EVALUATION_STATUS.PARTIAL);
     expect(result.scenarioDomains.changes.note).toContain("changes could not be applied");
   });
 
-  it("reports base NOT_EVALUATED when baseAttributed is false", () => {
-    const result = buildScenarioCompleteness({ changesComplete: true, baseAttributed: false });
+  it("reports base NOT_EVALUATED when baseIdentityVerified is false", () => {
+    const result = buildScenarioCompleteness({
+      changesComplete: true,
+      baseIdentityVerified: false,
+    });
     expect(result.scenarioDomains.base.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
-    expect(result.scenarioDomains.base.note).toContain("Base revision could not be attributed");
+    expect(result.scenarioDomains.base.note).toContain(
+      "Base revision identity could not be verified",
+    );
+  });
+
+  it("reports mutationCoverage PARTIAL when mutationCoverageComplete is false", () => {
+    const result = buildScenarioCompleteness({
+      changesComplete: true,
+      baseIdentityVerified: true,
+      mutationCoverageComplete: false,
+    });
+    expect(result.scenarioDomains.mutationCoverage.status).toBe(EVALUATION_STATUS.PARTIAL);
+    expect(result.scenarioDomains.mutationCoverage.note).toContain(
+      "mutations have explicit outcomes",
+    );
   });
 
   it("includes governance domain when governance is provided from buildGovernanceCompleteness", () => {
@@ -271,17 +569,44 @@ describe("buildScenarioCompleteness", () => {
     });
     const result = buildScenarioCompleteness({
       changesComplete: true,
-      baseAttributed: true,
+      baseIdentityVerified: true,
       governance,
     });
     expect(result.domains.governance).toBe(governance.domain);
     expect(result.domains.governance.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
   });
 
-  it("scenarioDomains contains changes and base keys", () => {
-    const result = buildScenarioCompleteness({ changesComplete: true, baseAttributed: true });
+  it("scenarioDomains contains changes, base, and mutationCoverage keys", () => {
+    const result = buildScenarioCompleteness({
+      changesComplete: true,
+      baseIdentityVerified: true,
+    });
     expect(result.scenarioDomains).toHaveProperty("changes");
     expect(result.scenarioDomains).toHaveProperty("base");
+    expect(result.scenarioDomains).toHaveProperty("mutationCoverage");
+  });
+
+  it("passes through evidenceComplete when provided", () => {
+    const ec = buildEvidenceComplete({
+      domainCoverage: 1,
+      claimEvidenceCoverage: 1,
+      causalCoverage: 1,
+      provenanceCoverage: 1,
+      mutationCoverage: 1,
+      surfaceParity: 1,
+      hiddenGapCount: 0,
+      falseCompleteCount: 0,
+      baseIdentityValid: true,
+      deterministic: true,
+    });
+    const result = buildScenarioCompleteness({
+      changesComplete: true,
+      baseIdentityVerified: true,
+      mutationCoverageComplete: true,
+      evidenceComplete: ec,
+    });
+    expect(result.evidenceComplete).toBeDefined();
+    expect(result.evidenceComplete.overallComplete).toBe(true);
   });
 });
 
@@ -291,37 +616,34 @@ describe("buildScenarioCompleteness", () => {
 
 describe("silent direction — missing evaluation never reports as evaluated", () => {
   it("buildCompleteness with all EVALUATED but one domain missing defaults to NOT_EVALUATED", () => {
-    // Supply 4 domains as EVALUATED; the 5th (governance) is absent.
-    const evaluatedDomain = {
-      status: EVALUATION_STATUS.EVALUATED,
-      evaluated: true,
-      partial: false,
-      notEvaluated: false,
-      unsupported: false,
-      refused: false,
-      note: "",
-    };
+    const ev = (s) => createDomain(s);
+    // Supply 7 domains as EVALUATED; the 8th (evidence) is absent.
     const result = buildCompleteness({
-      structural: evaluatedDomain,
-      constraint: evaluatedDomain,
-      boundary: evaluatedDomain,
-      decision: evaluatedDomain,
-      // governance is missing — should default to NOT_EVALUATED
+      structural: ev(EVALUATION_STATUS.EVALUATED),
+      constraint: ev(EVALUATION_STATUS.EVALUATED),
+      boundary: ev(EVALUATION_STATUS.EVALUATED),
+      decision: ev(EVALUATION_STATUS.EVALUATED),
+      findings: ev(EVALUATION_STATUS.EVALUATED),
+      debt: ev(EVALUATION_STATUS.EVALUATED),
+      governance: ev(EVALUATION_STATUS.EVALUATED),
     });
+    // evidence should default to NOT_EVALUATED
+    expect(result.domains.evidence.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
     expect(result.overallComplete).toBe(false);
-    expect(result.overallStatus).toBe(EVALUATION_STATUS.NOT_EVALUATED);
-    expect(result.domains.governance.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
   });
 
-  it("buildGovernanceCompleteness without arguments reports NOT_EVALUATED, not EVALUATED", () => {
+  it("buildGovernanceCompleteness with no args reports NOT_EVALUATED", () => {
     const result = buildGovernanceCompleteness();
     expect(result.domain.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
     expect(result.domain.evaluated).toBe(false);
+    expect(result.domain.notEvaluated).toBe(true);
   });
 
-  it("buildScenarioCompleteness with changesComplete false reports PARTIAL, not EVALUATED", () => {
-    const result = buildScenarioCompleteness({ changesComplete: false });
-    expect(result.scenarioDomains.changes.status).toBe(EVALUATION_STATUS.PARTIAL);
-    expect(result.overallComplete).toBe(false);
+  it("buildScenarioCompleteness with no args does not assume standard domains evaluated", () => {
+    const result = buildScenarioCompleteness();
+    // Without domains pass-through, structural/constraint/boundary/decision
+    // should NOT be EVALUATED
+    expect(result.domains.structural.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
+    expect(result.domains.constraint.status).toBe(EVALUATION_STATUS.NOT_EVALUATED);
   });
 });

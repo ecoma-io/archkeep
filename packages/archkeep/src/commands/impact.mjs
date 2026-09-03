@@ -161,8 +161,11 @@ export function impactCommand(projectName, commandContext, config = null) {
         `under-represent the real architecture. Fix the unanalyzed files and re-run.`,
     );
   }
+  const blindSpots = commandContext.analysis.failures
+    .filter((f) => !isWholeFileFailure(f))
+    .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason }));
 
-  const complete = true;
+  const complete = true; // whole-file failures already threw above
   const status = "ok";
   const exitCode = 0;
 
@@ -172,9 +175,7 @@ export function impactCommand(projectName, commandContext, config = null) {
     analyzedFiles: commandContext.analysis.analyzed,
     imports: commandContext.analysis.imports.length,
     notAnalyzed: [],
-    blindSpots: commandContext.analysis.failures
-      .filter((f) => !isWholeFileFailure(f))
-      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    blindSpots,
     notes: [
       "per-edge violations cover only depConstraints (3 of 15 violation types). " +
         "A dependent with no violations here may still violate npm-ban, circular-dependency, " +

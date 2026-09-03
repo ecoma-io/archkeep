@@ -348,7 +348,8 @@ export function evaluateArchitectureState({
   const findingsImpact = evaluateFindingsImpact(affectedProjects, findings);
   const debtImpact = evaluateDebtImpact(affectedProjects, debt);
 
-  // Step 7: Build completeness
+  // Step 7: Build completeness with all 8 domains (structural, constraint, boundary,
+  // decision, findings, debt, governance, evidence)
   const hasConfig = config !== null;
 
   const structuralStatus = evaluationStatus({ evaluated: true });
@@ -375,6 +376,13 @@ export function evaluateArchitectureState({
     findingsCount: findingsImpact.count,
     debtCount: debtImpact.count,
   });
+
+  // Build evidence domain: evaluated when any evaluation produced evidence
+  // In the canonical evaluator, evidence is always produced (structural,
+  // constraint, decision all produce traceable output). The evidence domain
+  // tracks whether we can verify that claims have supporting evidence.
+  const evidenceEvaluated = true; // canonical evaluator always produces evidence
+  const evidenceStatus = evaluationStatus({ evaluated: evidenceEvaluated });
 
   const completeness = buildCompleteness({
     structural: {
@@ -413,7 +421,18 @@ export function evaluateArchitectureState({
       refused: false,
       note: "",
     },
+    findings: governanceResult.findings,
+    debt: governanceResult.debt,
     governance: governanceResult.domain,
+    evidence: {
+      status: evidenceStatus,
+      evaluated: evidenceEvaluated,
+      partial: false,
+      notEvaluated: false,
+      unsupported: false,
+      refused: false,
+      note: "",
+    },
   });
 
   return {

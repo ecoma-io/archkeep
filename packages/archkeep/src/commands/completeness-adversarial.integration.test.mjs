@@ -49,13 +49,16 @@ function fixturePath(...segments) {
 // ---------------------------------------------------------------------------
 
 describe("no-op invariant — buildCompleteness", () => {
-  it("all five domains EVALUATED → overallComplete: true", () => {
+  it("all eight domains EVALUATED → overallComplete: true", () => {
     const result = buildCompleteness({
       structural: domain(EVALUATED),
       constraint: domain(EVALUATED),
       boundary: domain(EVALUATED),
       decision: domain(EVALUATED),
+      findings: domain(EVALUATED),
+      debt: domain(EVALUATED),
       governance: domain(EVALUATED),
+      evidence: domain(EVALUATED),
     });
     expect(result.overallComplete).toBe(true);
     expect(result.overallStatus).toBe(EVALUATED);
@@ -100,18 +103,27 @@ describe("round-trip invariant — evaluateArchitectureState", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Completeness conservation (Gap A + C)
-// ---------------------------------------------------------------------------
-
 describe("completeness conservation — buildScenarioCompleteness", () => {
   it("all complete → overallComplete: true", () => {
+    const governance = buildGovernanceCompleteness({
+      findingsStatus: EVALUATED,
+      debtStatus: EVALUATED,
+    });
     const result = buildScenarioCompleteness({
       changesComplete: true,
-      baseAttributed: true,
-      governance: buildGovernanceCompleteness({
-        findingsStatus: EVALUATED,
-        debtStatus: EVALUATED,
-      }),
+      baseIdentityVerified: true,
+      mutationCoverageComplete: true,
+      governance,
+      domains: {
+        structural: domain(EVALUATED),
+        constraint: domain(EVALUATED),
+        boundary: domain(EVALUATED),
+        decision: domain(EVALUATED),
+        findings: domain(EVALUATED),
+        debt: domain(EVALUATED),
+        governance: domain(EVALUATED),
+        evidence: domain(EVALUATED),
+      },
     });
     expect(result.overallComplete).toBe(true);
   });

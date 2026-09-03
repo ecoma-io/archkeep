@@ -40,8 +40,8 @@ function makeCommandContext(graph) {
  * @param {string} target
  * @returns {import("./scenario-evaluation.mjs").DependencyChange}
  */
-function change(type, source, target) {
-  return { type, source, target };
+function change(type, source, target, edgeType = "static") {
+  return { type, source, target, ...(edgeType ? { edgeType } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -59,6 +59,7 @@ describe("parseScenarioInput", () => {
       type: "dependency_added",
       source: "x",
       target: "y",
+      edgeType: "static",
     });
   });
 
@@ -455,7 +456,7 @@ describe("evaluateScenario — edge cases", () => {
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
     expect(result.base.revision).toBe("abc123def");
-    expect(result.base.attributed).toBe(true);
+    expect(result.base.identityVerified).toBe(false); // dirty test env, can't verify
   });
 
   it("outputs unattributed workspace when no git revision available", () => {
@@ -464,10 +465,9 @@ describe("evaluateScenario — edge cases", () => {
       changes: [change("dependency_added", "b", "a")],
     };
     const result = evaluateScenario("a", makeCommandContext(graph), input);
-    // When no base is provided and git rev-parse HEAD fails (test env),
-    // the fallback is "(unattributed workspace)" with attributed: false.
     expect(result.base.revision).toBe("(unattributed workspace)");
-    expect(result.base.attributed).toBe(false);
+    expect(result.base.identityVerified).toBe(false);
+    expect(result.base.identity).toBe("unattributed");
     expect(result.base.provenance).toMatch(/unverifiable/);
   });
   it("marks complete:false when changes are refused", () => {
@@ -529,7 +529,7 @@ describe("evaluateScenario — edge cases", () => {
     });
     expect(result.governanceImpact.findingsReEvaluated).toBe(true);
     expect(result.governanceImpact.debtReEvaluated).toBe(true);
-    expect(result.governanceImpact.governanceComplete).toBe(true);
+    expect(result.governanceImpact.governanceComplete).toBe(false);
     expect(result.governanceImpact.scenarioFindingsCount).toBe(1);
     expect(result.governanceImpact.scenarioDebtCount).toBe(1);
     expect(result.scenario.findings).toBeDefined();

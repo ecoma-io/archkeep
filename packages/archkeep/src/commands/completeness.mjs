@@ -6,6 +6,24 @@
  * statement about what a change touches. This module provides the shared
  * completeness vocabulary so two callers cannot drift.
  *
+ * ## Evidence-Complete contract
+ *
+ * An evaluation is Evidence-Complete only when ALL required gates pass:
+ *
+ * - domainCoverage === 1
+ * - claimEvidenceCoverage === 1
+ * - causalCoverage === 1
+ * - provenanceCoverage === 1
+ * - mutationCoverage === 1
+ * - surfaceParity === 1
+ * - hiddenGapCount === 0
+ * - falseCompleteCount === 0
+ * - baseIdentityValid === true
+ * - deterministic === true
+ *
+ * `overallComplete` implies ALL gates pass. Any failed gate MUST prevent
+ * `overallComplete = true`.
+ *
  * @module
  */
 
@@ -26,6 +44,55 @@ export const PARTIAL = EVALUATION_STATUS.PARTIAL;
 export const NOT_EVALUATED = EVALUATION_STATUS.NOT_EVALUATED;
 export const UNSUPPORTED = EVALUATION_STATUS.UNSUPPORTED;
 export const REFUSED = EVALUATION_STATUS.REFUSED;
+
+// ---------------------------------------------------------------------------
+// Evidence-Complete gate names — the canonical roster
+// ---------------------------------------------------------------------------
+
+/**
+ * The canonical roster of required gates for Evidence-Complete.
+ * Each gate has a key, a human-readable label, and a type.
+ * @type {Readonly<{key: string, label: string, type: string}[]>}
+ */
+export const EVIDENCE_COMPLETE_GATES = Object.freeze([
+  { key: "domainCoverage", label: "Domain coverage", type: "ratio" },
+  { key: "claimEvidenceCoverage", label: "Claim evidence coverage", type: "ratio" },
+  { key: "causalCoverage", label: "Causal coverage", type: "ratio" },
+  { key: "provenanceCoverage", label: "Provenance coverage", type: "ratio" },
+  { key: "mutationCoverage", label: "Mutation coverage", type: "ratio" },
+  { key: "surfaceParity", label: "Surface parity", type: "ratio" },
+  { key: "hiddenGapCount", label: "Hidden gap count", type: "count" },
+  { key: "falseCompleteCount", label: "False-complete count", type: "count" },
+  { key: "baseIdentityValid", label: "Base identity valid", type: "boolean" },
+  { key: "deterministic", label: "Deterministic", type: "boolean" },
+]);
+
+/**
+ * @typedef {object} EvidenceCompleteContract
+ * @property {number} domainCoverage Ratio of evaluated required domains to required domains (0-1).
+ * @property {number} claimEvidenceCoverage Ratio of claims with valid evidence to material claims (0-1).
+ * @property {number} causalCoverage Ratio of consequences with complete causal chain to material consequences (0-1).
+ * @property {number} provenanceCoverage Ratio of authoritative inputs with verified provenance to total authoritative inputs (0-1).
+ * @property {number} mutationCoverage Ratio of mutations with explicit outcome and evidence to requested mutations (0-1).
+ * @property {number} surfaceParity Ratio of surfaces with equivalent semantic output to total surfaces (0-1).
+ * @property {number} hiddenGapCount Number of required domains/inputs/claims/consequences/mutations not actually evaluated or evidenced but not explicitly reported.
+ * @property {number} falseCompleteCount Number of times overallComplete was true while required gates failed.
+ * @property {boolean} baseIdentityValid Whether the base identity was verified (not merely attributed).
+ * @property {boolean} deterministic Whether repeated evaluations produce semantically equivalent results.
+ * @property {string} overallStatus Overall Evidence-Complete status: "complete" | "incomplete" | "not_evaluated".
+ * @property {boolean} overallComplete True only when ALL required gates pass.
+ * @property {object} gates Individual gate statuses, keyed by gate name.
+ * @property {object} gates.domainCoverage Gate status.
+ * @property {object} gates.claimEvidenceCoverage Gate status.
+ * @property {object} gates.causalCoverage Gate status.
+ * @property {object} gates.provenanceCoverage Gate status.
+ * @property {object} gates.mutationCoverage Gate status.
+ * @property {object} gates.surfaceParity Gate status.
+ * @property {object} gates.hiddenGapCount Gate status.
+ * @property {object} gates.falseCompleteCount Gate status.
+ * @property {object} gates.baseIdentityValid Gate status.
+ * @property {object} gates.deterministic Gate status.
+ */
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -104,6 +171,66 @@ export function evaluationStatus({ evaluated, partial, notEvaluated, unsupported
 }
 
 // ---------------------------------------------------------------------------
+// Required domains — the declared evaluation contract
+// ---------------------------------------------------------------------------
+
+/**
+ * The authoritative set of required evaluation domains.
+ * Derived from repository doctrine: structural, constraints, boundaries,
+ * decisions, findings, debt, governance, evidence.
+ * @type {Readonly<string[]>}
+ */
+export const REQUIRED_DOMAINS = Object.freeze([
+  "structural",
+  "constraint",
+  "boundary",
+  "decision",
+  "findings",
+  "debt",
+  "governance",
+  "evidence",
+]);
+
+/**
+ * Returns true when the domain status counts as evaluated for coverage purposes.
+ * PARTIAL does NOT count as evaluated — only EVALUATED does.
+ *
+ * @param {string} status EVALUATION_STATUS value
+ * @returns {boolean}
+ */
+export function isDomainEvaluated(status) {
+  return status === EVALUATION_STATUS.EVALUATED;
+}
+
+/**
+ * Computes domain coverage from the required domains and their statuses.
+ *
+ * domainCoverage = evaluatedRequiredDomains / requiredDomains
+ *
+ * @param {Object<string, string>} domainStatuses Map of domain name to EVALUATION_STATUS value.
+ * @param {readonly string[]} [requiredDomains] The required domain names (defaults to REQUIRED_DOMAINS).
+ * @returns {{coverage: number, evaluatedCount: number, requiredCount: number, failedDomains: string[]}}
+ */
+export function computeDomainCoverage(domainStatuses, requiredDomains = REQUIRED_DOMAINS) {
+  const failedDomains = [];
+  let evaluatedCount = 0;
+
+  for (const domain of requiredDomains) {
+    const status = domainStatuses[domain];
+    if (status && isDomainEvaluated(status)) {
+      evaluatedCount++;
+    } else {
+      failedDomains.push(domain);
+    }
+  }
+
+  const requiredCount = requiredDomains.length;
+  const coverage = requiredCount > 0 ? evaluatedCount / requiredCount : 1;
+
+  return { coverage, evaluatedCount, requiredCount, failedDomains };
+}
+
+// ---------------------------------------------------------------------------
 // Canonical completeness
 // ---------------------------------------------------------------------------
 
@@ -125,36 +252,181 @@ export function evaluationStatus({ evaluated, partial, notEvaluated, unsupported
  * @property {DomainStatus} domains.constraint
  * @property {DomainStatus} domains.boundary
  * @property {DomainStatus} domains.decision
+ * @property {DomainStatus} domains.findings
+ * @property {DomainStatus} domains.debt
  * @property {DomainStatus} domains.governance
- * @property {boolean} overallComplete True only when ALL applicable domains are EVALUATED.
+ * @property {DomainStatus} domains.evidence
+ * @property {boolean} overallComplete True only when ALL applicable domains are EVALUATED
+ *   AND the Evidence-Complete contract is satisfied.
  * @property {string} overallStatus One of EVALUATION_STATUS values.
- */
+ * @property {EvidenceCompleteContract} [evidenceComplete] The Evidence-Complete contract,
+ *   present when computed.
+ * @property {number} [hiddenGapCount] Number of domains NOT_EVALUATED without a note.
+ * @property {number} [falseCompleteCount] Number of false-complete detections.
 
 /**
- * Builds canonical completeness from the five domain statuses.
+ * Builds canonical completeness from domain statuses.
+ * Now includes 8 domains (structural, constraint, boundary, decision,
+ * findings, debt, governance, evidence).
  *
  * @param {object} [input]
  * @param {DomainStatus} [input.structural] The structural domain status.
  * @param {DomainStatus} [input.constraint] The constraint domain status.
  * @param {DomainStatus} [input.boundary] The boundary domain status.
  * @param {DomainStatus} [input.decision] The decision domain status.
+ * @param {DomainStatus} [input.findings] The findings domain status.
+ * @param {DomainStatus} [input.debt] The debt domain status.
  * @param {DomainStatus} [input.governance] The governance domain status.
+ * @param {DomainStatus} [input.evidence] The evidence domain status.
+ * @param {EvidenceCompleteContract} [input.evidenceComplete] Optional Evidence-Complete contract.
  * @returns {CompletenessResult}
  */
-export function buildCompleteness({ structural, constraint, boundary, decision, governance } = {}) {
+export function buildCompleteness({
+  structural,
+  constraint,
+  boundary,
+  decision,
+  findings,
+  debt,
+  governance,
+  evidence,
+  evidenceComplete,
+} = {}) {
   const domains = {
     structural: structural ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED),
     constraint: constraint ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED),
     boundary: boundary ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED),
     decision: decision ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED),
+    findings: findings ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED),
+    debt: debt ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED),
     governance: governance ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED),
+    evidence: evidence ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED),
   };
 
   const statuses = Object.values(domains).map((d) => d.status);
-  const overallComplete = statuses.every((s) => s === EVALUATION_STATUS.EVALUATED);
-  const overallStatus = worstStatus(...statuses);
+  const domainOverallComplete = statuses.every((s) => s === EVALUATION_STATUS.EVALUATED);
 
-  return { domains, overallComplete, overallStatus };
+  // If an Evidence-Complete contract is provided, enforce it as a gate
+  let ecComplete = true;
+  let falseCompleteCount = 0;
+  if (evidenceComplete) {
+    ecComplete = evidenceComplete.overallComplete;
+    falseCompleteCount = evidenceComplete.falseCompleteCount;
+    // Detect false complete: domain claims complete but Evidence-Complete fails
+    if (domainOverallComplete && !ecComplete) {
+      falseCompleteCount++;
+    }
+  }
+
+  // Detect hidden gaps: a domain is NOT_EVALUATED but no note explains why
+  let hiddenGapCount = 0;
+  for (const [, domain] of Object.entries(domains)) {
+    if (domain.status === EVALUATION_STATUS.NOT_EVALUATED && !domain.note) {
+      hiddenGapCount++;
+    }
+  }
+
+  const overallComplete = domainOverallComplete && ecComplete;
+  const overallStatus = worstStatus(...statuses, ecComplete ? EVALUATED : NOT_EVALUATED);
+
+  return {
+    domains,
+    overallComplete,
+    overallStatus,
+    ...(evidenceComplete ? { evidenceComplete: { ...evidenceComplete, falseCompleteCount } } : {}),
+    ...(hiddenGapCount > 0 ? { hiddenGapCount } : {}),
+    ...(falseCompleteCount > 0 ? { falseCompleteCount } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Evidence-Complete gate
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds an Evidence-Complete contract from the individual gate values.
+ *
+ * @param {object} gates
+ * @param {number} [gates.domainCoverage] Ratio (0-1).
+ * @param {number} [gates.claimEvidenceCoverage] Ratio (0-1).
+ * @param {number} [gates.causalCoverage] Ratio (0-1).
+ * @param {number} [gates.provenanceCoverage] Ratio (0-1).
+ * @param {number} [gates.mutationCoverage] Ratio (0-1).
+ * @param {number} [gates.surfaceParity] Ratio (0-1).
+ * @param {number} [gates.hiddenGapCount] Count (0 = pass).
+ * @param {number} [gates.falseCompleteCount] Count (0 = pass).
+ * @param {boolean} [gates.baseIdentityValid] Boolean (true = pass).
+ * @param {boolean} [gates.deterministic] Boolean (true = pass).
+ * @returns {EvidenceCompleteContract}
+ */
+export function buildEvidenceComplete({
+  domainCoverage = 0,
+  claimEvidenceCoverage = 0,
+  causalCoverage = 0,
+  provenanceCoverage = 0,
+  mutationCoverage = 0,
+  surfaceParity = 0,
+  hiddenGapCount = -1,
+  falseCompleteCount = -1,
+  baseIdentityValid = false,
+  deterministic = false,
+} = {}) {
+  const gates = {
+    domainCoverage: { value: domainCoverage, pass: domainCoverage === 1 },
+    claimEvidenceCoverage: { value: claimEvidenceCoverage, pass: claimEvidenceCoverage === 1 },
+    causalCoverage: { value: causalCoverage, pass: causalCoverage === 1 },
+    provenanceCoverage: { value: provenanceCoverage, pass: provenanceCoverage === 1 },
+    mutationCoverage: { value: mutationCoverage, pass: mutationCoverage === 1 },
+    surfaceParity: { value: surfaceParity, pass: surfaceParity === 1 },
+    hiddenGapCount: { value: hiddenGapCount, pass: hiddenGapCount === 0 },
+    falseCompleteCount: { value: falseCompleteCount, pass: falseCompleteCount === 0 },
+    baseIdentityValid: { value: baseIdentityValid, pass: baseIdentityValid === true },
+    deterministic: { value: deterministic, pass: deterministic === true },
+  };
+
+  const allPass = Object.values(gates).every((g) => g.pass);
+
+  return {
+    domainCoverage,
+    claimEvidenceCoverage,
+    causalCoverage,
+    provenanceCoverage,
+    mutationCoverage,
+    surfaceParity,
+    hiddenGapCount,
+    falseCompleteCount,
+    baseIdentityValid,
+    deterministic,
+    overallStatus: allPass ? "complete" : "incomplete",
+    overallComplete: allPass,
+    gates,
+  };
+}
+
+/**
+ * Asserts that the Evidence-Complete contract is satisfied.
+ * Throws with a detailed message listing every failing gate.
+ *
+ * @param {EvidenceCompleteContract} ec The Evidence-Complete contract to verify.
+ * @returns {void}
+ * @throws {Error} When any gate fails.
+ */
+export function assertEvidenceComplete(ec) {
+  if (ec.overallComplete) return;
+
+  const failures = [];
+  for (const gate of EVIDENCE_COMPLETE_GATES) {
+    const g = ec.gates[gate.key];
+    if (!g.pass) {
+      failures.push(`${gate.label}: ${JSON.stringify(g.value)} (expected pass)`);
+    }
+  }
+
+  throw new Error(
+    `Evidence-Complete contract not satisfied.\n` +
+      `  Overall: ${ec.overallStatus}\n` +
+      `  Failed gates:\n    ${failures.join("\n    ")}`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +436,8 @@ export function buildCompleteness({ structural, constraint, boundary, decision, 
 /**
  * @typedef {object} GovernanceCompletenessResult
  * @property {DomainStatus} domain The governance domain status.
+ * @property {DomainStatus} findings The findings domain status.
+ * @property {DomainStatus} debt The debt domain status.
  * @property {string} findingsStatus EVALUATION_STATUS for findings.
  * @property {string} debtStatus EVALUATION_STATUS for debt.
  * @property {number} findingsCount Number of findings.
@@ -186,6 +460,9 @@ export function buildGovernanceCompleteness({
   findingsCount = 0,
   debtCount = 0,
 } = {}) {
+  const findingsDomain = createDomain(findingsStatus);
+  const debtDomain = createDomain(debtStatus);
+
   const status = worstStatus(findingsStatus, debtStatus);
 
   let note = "";
@@ -202,6 +479,8 @@ export function buildGovernanceCompleteness({
 
   return {
     domain: createDomain(status, note),
+    findings: findingsDomain,
+    debt: debtDomain,
     findingsStatus,
     debtStatus,
     findingsCount,
@@ -221,53 +500,75 @@ export function buildGovernanceCompleteness({
  * @property {string} overallStatus One of EVALUATION_STATUS values.
  * @property {object} scenarioDomains Scenario-specific domain statuses.
  * @property {DomainStatus} scenarioDomains.changes Whether all changes were applied.
- * @property {DomainStatus} scenarioDomains.base Whether the base revision was attributed.
+ * @property {DomainStatus} scenarioDomains.base Whether the base revision identity was verified.
+ * @property {DomainStatus} scenarioDomains.mutationCoverage Mutation coverage status.
+ * @property {EvidenceCompleteContract} [evidenceComplete] The Evidence-Complete contract.
  */
 
 /**
  * Builds scenario completeness, extending canonical completeness with
- * scenario-specific domains (changes and base attribution).
+ * scenario-specific domains (changes, base identity, mutation coverage).
  *
- * In a scenario context, the standard domains (structural, constraint, boundary,
- * decision) are always EVALUATED because the full evaluation runs. The
- * scenario-specific domains capture whether changes were fully applied and
- * whether the base revision was attributed.
+ * In a scenario context, standard domains (structural, constraint, boundary,
+ * decision) pass through from the evaluation — they are NOT automatically
+ * EVALUATED. The scenario-specific domains capture whether changes were
+ * fully applied, whether the base revision identity was verified, and
+ * whether mutation coverage was complete.
  *
  * @param {object} [input]
  * @param {boolean} [input.changesComplete] Whether all scenario changes were applied.
- * @param {boolean} [input.baseAttributed] Whether the base revision was attributed.
+ * @param {boolean} [input.baseIdentityVerified] Whether the base revision identity was verified.
+ * @param {boolean} [input.mutationCoverageComplete] Whether all mutations have explicit outcomes.
  * @param {GovernanceCompletenessResult} [input.governance] Governance completeness
  *   from buildGovernanceCompleteness.
+ * @param {EvidenceCompleteContract} [input.evidenceComplete] Optional Evidence-Complete contract.
+ * @param {object} [input.domains] Existing domain statuses to pass through.
  * @returns {ScenarioCompletenessResult}
  */
 export function buildScenarioCompleteness({
   changesComplete = true,
-  baseAttributed = true,
+  baseIdentityVerified = true,
+  mutationCoverageComplete = true,
   governance,
+  evidenceComplete,
+  domains: existingDomains,
 } = {}) {
   const changesDomain = changesComplete
     ? createDomain(EVALUATION_STATUS.EVALUATED)
     : createDomain(EVALUATION_STATUS.PARTIAL, "Some changes could not be applied");
 
-  const baseDomain = baseAttributed
+  const baseDomain = baseIdentityVerified
     ? createDomain(EVALUATION_STATUS.EVALUATED)
-    : createDomain(EVALUATION_STATUS.NOT_EVALUATED, "Base revision could not be attributed");
+    : createDomain(EVALUATION_STATUS.NOT_EVALUATED, "Base revision identity could not be verified");
+
+  const mutationDomain = mutationCoverageComplete
+    ? createDomain(EVALUATION_STATUS.EVALUATED)
+    : createDomain(EVALUATION_STATUS.PARTIAL, "Not all mutations have explicit outcomes");
 
   const governanceDomain =
     governance?.domain ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED, "Governance not evaluated");
 
-  // Standard domains are always EVALUATED in scenario context
-  const structuralDomain = createDomain(EVALUATION_STATUS.EVALUATED);
-  const constraintDomain = createDomain(EVALUATION_STATUS.EVALUATED);
-  const boundaryDomain = createDomain(EVALUATION_STATUS.EVALUATED);
-  const decisionDomain = createDomain(EVALUATION_STATUS.EVALUATED);
+  // Use existing domains if provided, otherwise create defaults
+  const structuralDomain =
+    existingDomains?.structural ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED);
+  const constraintDomain =
+    existingDomains?.constraint ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED);
+  const boundaryDomain = existingDomains?.boundary ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED);
+  const decisionDomain = existingDomains?.decision ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED);
+  const findingsDomain = existingDomains?.findings ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED);
+  const debtDomain = existingDomains?.debt ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED);
+  const evidenceDomain = existingDomains?.evidence ?? createDomain(EVALUATION_STATUS.NOT_EVALUATED);
 
   const baseResult = buildCompleteness({
     structural: structuralDomain,
     constraint: constraintDomain,
     boundary: boundaryDomain,
     decision: decisionDomain,
+    findings: findingsDomain,
+    debt: debtDomain,
     governance: governanceDomain,
+    evidence: evidenceDomain,
+    evidenceComplete,
   });
 
   // Recompute overall with scenario domains included
@@ -275,6 +576,7 @@ export function buildScenarioCompleteness({
     ...Object.values(baseResult.domains).map((d) => d.status),
     changesDomain.status,
     baseDomain.status,
+    mutationDomain.status,
   ];
   const overallComplete = allStatuses.every((s) => s === EVALUATION_STATUS.EVALUATED);
   const overallStatus = worstStatus(...allStatuses);
@@ -286,6 +588,14 @@ export function buildScenarioCompleteness({
     scenarioDomains: {
       changes: changesDomain,
       base: baseDomain,
+      mutationCoverage: mutationDomain,
     },
+    ...(baseResult.evidenceComplete ? { evidenceComplete: baseResult.evidenceComplete } : {}),
+    ...(baseResult.hiddenGapCount !== undefined
+      ? { hiddenGapCount: baseResult.hiddenGapCount }
+      : {}),
+    ...(baseResult.falseCompleteCount !== undefined
+      ? { falseCompleteCount: baseResult.falseCompleteCount }
+      : {}),
   };
 }

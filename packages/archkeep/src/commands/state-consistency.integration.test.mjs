@@ -82,14 +82,13 @@ const TRACKED_FILES = [
 
 /** A scenario that adds a dependency from domain → adapter (cross-layer). */
 const VALID_SCENARIO_JSON = JSON.stringify({
-  changes: [{ type: "dependency_added", source: "domain", target: "adapter" }],
+  changes: [{ type: "dependency_added", source: "domain", target: "adapter", edgeType: "static" }],
 });
 
 /** A no-op scenario: adding an edge that already exists. */
 const IDENTITY_SCENARIO_JSON = JSON.stringify({
-  changes: [{ type: "dependency_added", source: "adapter", target: "domain" }],
+  changes: [{ type: "dependency_added", source: "adapter", target: "domain", edgeType: "static" }],
 });
-
 let root;
 let scenarioFile;
 let identityScenarioFile;
@@ -249,11 +248,9 @@ describe("cross-command state consistency — impact ↔ scenario", () => {
       "json",
     ]);
     expect(scenario.exitCode).toBe(EXIT.ok);
-
     // Every scenario evaluation carries these markers — even a no-op one
     expect(scenario.envelope.result.virtual).toBe(true);
     expect(scenario.envelope.result.notAuthoritative).toBe(true);
-
     // The identity change was recorded as applied (edge already existed)
     expect(Array.isArray(scenario.envelope.result.changes)).toBe(true);
     expect(scenario.envelope.result.changes.length).toBe(1);

@@ -168,10 +168,10 @@ function formatScenarioReport(scenario) {
   if (delta.dependentsAdded.length === 0 && delta.dependentsRemoved.length === 0) {
     lines.push("  No change to dependent set");
   }
-  if (delta.constraintsChanged) {
+  if (delta.constraintsChanged && delta.constraintsChanged.status === "changed") {
     lines.push("  Constraint impact: CHANGED");
   }
-  if (delta.decisionsChanged) {
+  if (delta.decisionsChanged && delta.decisionsChanged.status === "changed") {
     lines.push("  Decision impact: CHANGED");
   }
   lines.push("");
