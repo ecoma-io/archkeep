@@ -221,6 +221,54 @@ describe("discover --propose — candidates marked, never decisions", () => {
   });
 });
 
+describe("discover --write-intent — a proposal that refuses to become the law", () => {
+  it("writes the proposal to a file that does not exist yet, and says it is not the law", async () => {
+    const target = join(root, "proposed-intent.json");
+    const streams = env();
+    expect(await runCli(["discover", "--propose", "--write-intent", target], streams)).toBe(
+      EXIT.ok,
+    );
+    const written = JSON.parse(readFileSync(target, "utf8"));
+    expect(written.version).toBe("1");
+    expect(Array.isArray(written.boundaries)).toBe(true);
+    const err = streams.lines.err.join("\n");
+    expect(err).toContain("proposed architecture written to");
+    // The write is the one step that can turn a proposal into the file a
+    // later `check` gates on, so the run must say out loud what landed.
+    expect(err).toContain("not the law");
+  });
+
+  it("refuses to overwrite a file that is already there, and leaves its bytes alone", async () => {
+    // The tracked intent is the standing law of this fixture — exactly the
+    // file a careless overwrite would replace with a proposal.
+    const streams = env();
+    expect(
+      await runCli(
+        ["discover", "--propose", "--write-intent", join(root, "architecture-intent.json")],
+        streams,
+      ),
+    ).toBe(EXIT.error);
+    const err = streams.lines.err.join("\n");
+    expect(err).toContain("already exists");
+    expect(err).toContain("never");
+    expect(readFileSync(join(root, "architecture-intent.json"), "utf8")).toBe(INTENT);
+  });
+
+  it("still refuses when the file appears after the run started — the wx flag holds the line", async () => {
+    // The exists-check and the write are two moments, not one; a file landing
+    // between them must hit the same refusal, so the write itself carries
+    // `flag: "wx"` and this test pins that the second line of defense exists.
+    const target = join(root, "raced-intent.json");
+    writeFileSync(target, INTENT);
+    const streams = env();
+    expect(await runCli(["discover", "--propose", "--write-intent", target], streams)).toBe(
+      EXIT.error,
+    );
+    expect(streams.lines.err.join("\n")).toContain("already exists");
+    expect(readFileSync(target, "utf8")).toBe(INTENT);
+  });
+});
+
 describe("discover over a tree it cannot fully read — the silent direction", () => {
   // A second, near-identical workspace whose only difference is an analyzable
   // file no declared project owns — a whole-file failure, which is exactly the

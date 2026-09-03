@@ -445,7 +445,10 @@ describe("the per-transition 8-question comparison evidence", () => {
     expect(summary.classifications).toEqual(["CHANGE", "DRIFT", "VIOLATION"]);
     expect(summary.observed.architectureChanged).toBe(1);
     expect(summary.observed.projects.added).toEqual([]);
-    expect(summary.observed.edges.added).toEqual(["alpha→beta:static"]);
+    // The one canonical edge-identity spelling (`edgeEvolutionIdentity`): the
+    // summary unions what events recorded, so any event carrying a second
+    // spelling would split one edge into two here.
+    expect(summary.observed.edges.added).toEqual(["alpha>beta:static"]);
     expect(summary.observed.policyChanged).toBe(0);
     expect(summary.findings.introduced).toHaveLength(1);
     expect(summary.debt.introduced).toEqual(summary.findings.introduced);

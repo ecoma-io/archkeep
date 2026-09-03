@@ -48,7 +48,7 @@ waits on, and the later maturity beyond them.
 - [Nx](integrations/nx.md) — registration, graph edges, affected, workspaceLayout
 - [Moon](integrations/moon.md) — tags, providers, conventions
 - [VS Code](integrations/vscode.md) — language server, settings
-- [MCP](integrations/mcp.md) — eight tools for coding agents
+- [MCP](integrations/mcp.md) — nine tools for coding agents
 - [Agent skills](skills/overview.md) — when agents ask before changing code
 
 **I want to extend Archkeep**
@@ -146,7 +146,7 @@ waits on, and the later maturity beyond them.
 | [nx.md](integrations/nx.md)         | Nx integration registration, options, graph edges, affected, workspaceLayout |
 | [moon.md](integrations/moon.md)     | Moon integration: workspace detection, graph reading, tag format             |
 | [vscode.md](integrations/vscode.md) | VS Code extension: settings, routing, installation                           |
-| [mcp.md](integrations/mcp.md)       | MCP server: the eight agent tools, the three-state verdict, authority bounds |
+| [mcp.md](integrations/mcp.md)       | MCP server: the nine agent tools, the three-state verdict, authority bounds  |
 
 ## Agent skills
 
@@ -260,7 +260,7 @@ allowed to say it". That table:
 | `AGENTS.md`                                                                           | The rules a diff is rejected for violating, for humans and agents alike                                                                                                                                                                                     |
 | `packages/archkeep/README.md`                                                         | The package's own reference — it is the npm landing page and must stand alone                                                                                                                                                                               |
 | `packages/archkeep-vscode/README.md`                                                  | The VS Code client: what it requires, the two settings it has, and the two it refuses                                                                                                                                                                       |
-| `packages/archkeep-mcp/README.md`                                                     | The MCP server: the eight tools, how they map to CLI commands, and the authority boundary                                                                                                                                                                   |
+| `packages/archkeep-mcp/README.md`                                                     | The MCP server: the nine tools, how they map to CLI commands, and the authority boundary                                                                                                                                                                    |
 | `packages/archkeep-rules/README.md`                                                   | The official rules catalog: what the catalog is, official vs workspace rules, artifact identity, checksum pinning, and why this is not a new authority layer                                                                                                |
 | `packages/archkeep-rule-sdk-*/README.md`                                              | One per SDK: that language's build story for a custom rule, and its own MEASURED limits. The limits are why an SDK is chosen by reading these rather than from the table in [`docs/usage/custom-rules.md`](usage/custom-rules.md)                           |
 | `docs/adr/`                                                                           | The numbered decision records: what was decided, against which alternatives, and what it cost. Immutable once accepted — a decision that changed is a NEW record, never an edit to the old one                                                              |

@@ -80,6 +80,7 @@ import { debtChangeDiff, debtFactId, driftFactOf } from "../governance/debt-ledg
 import { computeAffectedDecisions } from "../governance/decision-lineage.mjs";
 import {
   classifyEvolution,
+  edgeEvolutionIdentity,
   eventDedupeKey,
   eventId,
   EVOLUTION_EVENT_SCHEMA_VERSION,
@@ -939,23 +940,24 @@ function buildEvolutionSummary(comparisons) {
         comparisons.flatMap((c) => c.observed.projects.changed.map((p) => p.name ?? p)),
       ),
     },
+    // The identity string is the ONE spelling `edgeEvolutionIdentity` owns —
+    // the same spelling `affected.boundaries` and every stored event carry.
+    // An edge without a complete triple has no identity to name, so it is
+    // dropped from the union and counted into `unnamedEdges` rather than
+    // leaking an object serialization into a field of identity strings.
     edges: {
       added: unique(
         comparisons.flatMap((c) =>
-          c.observed.edges.added.map((e) =>
-            e.source && e.target && e.type
-              ? `${e.source}→${e.target}:${e.type}`
-              : JSON.stringify(e),
-          ),
+          c.observed.edges.added
+            .filter((e) => e.source && e.target && e.type)
+            .map((e) => edgeEvolutionIdentity(e)),
         ),
       ),
       removed: unique(
         comparisons.flatMap((c) =>
-          c.observed.edges.removed.map((e) =>
-            e.source && e.target && e.type
-              ? `${e.source}→${e.target}:${e.type}`
-              : JSON.stringify(e),
-          ),
+          c.observed.edges.removed
+            .filter((e) => e.source && e.target && e.type)
+            .map((e) => edgeEvolutionIdentity(e)),
         ),
       ),
     },
@@ -983,6 +985,21 @@ function buildEvolutionSummary(comparisons) {
   };
 
   const notes = unique(comparisons.flatMap((c) => c.notes ?? []));
+  const unnamedEdges = comparisons.reduce(
+    (count, c) =>
+      count +
+      [...c.observed.edges.added, ...c.observed.edges.removed].filter(
+        (e) => !(e.source && e.target && e.type),
+      ).length,
+    0,
+  );
+  if (unnamedEdges > 0) {
+    // The house shape for "we could not name it": a note naming the gap,
+    // never a silent drop dressed as a clean union.
+    notes.push(
+      `${unnamedEdges} changed edge(s) carry no complete identity and are not named in observed.edges`,
+    );
+  }
   return {
     transitions: comparisons.length,
     disposition,

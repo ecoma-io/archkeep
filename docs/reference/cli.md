@@ -184,12 +184,12 @@ presence.
 
 ### `discover`
 
-| flag             | argument       | default | meaning                                                                                                                        |
-| ---------------- | -------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `--format`       | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope.                                                                                |
-| `--output`       | `<file>`       | stdout  | Write the report to a file instead of stdout.                                                                                  |
-| `--propose`      | (none)         | off     | Compute and print the candidate architecture — components, boundary assertions, tag vocabulary, rules — over the observations. |
-| `--write-intent` | `<file>`       | off     | With `--propose`, write the proposed components and rules to a valid `architecture-intent.json` file (review before use).      |
+| flag             | argument       | default | meaning                                                                                                                                                                    |
+| ---------------- | -------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--format`       | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope.                                                                                                                            |
+| `--output`       | `<file>`       | stdout  | Write the report to a file instead of stdout.                                                                                                                              |
+| `--propose`      | (none)         | off     | Compute and print the candidate architecture — components, boundary assertions, tag vocabulary, rules — over the observations.                                             |
+| `--write-intent` | `<file>`       | off     | With `--propose`, write the proposed components and rules to a valid `architecture-intent.json` file (review before use). Refuses to overwrite a file that already exists. |
 
 No positional arguments. `discover` is descriptive: it never exits 1, only 0 on
 a completed observation and 3 when coverage is incomplete, the model cannot be
@@ -480,8 +480,10 @@ candidate architecture those observations imply — components, boundary
 assertions, tag vocabulary and rules — each marked `proposed: true` and
 `notAuthoritative: true`. With `--write-intent`, the proposed components
 and rules are written to a valid `architecture-intent.json` file (review
-before use with `drift` or `reconcile`). Descriptive -- an observation,
-or a candidate, is never a finding.
+before use with `drift` or `reconcile`) — and refuse to overwrite a file
+that already exists, because a proposal must never silently replace what
+is there. Descriptive -- an observation, or a candidate, is never a
+finding.
 
 ### `diff <baseline>`
 

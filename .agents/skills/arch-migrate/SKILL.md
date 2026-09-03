@@ -73,7 +73,10 @@ act easy to perform and easy to refuse — never to perform it silently.
    the command declines to produce candidates at all rather than derive them
    from a tree it did not finish reading. If step 2 was done, this exits 0.
 
-   Nothing is written to the workspace by this command, under any flag.
+   By default nothing is written to the workspace. The one exception is
+   `--write-intent <path>`, which writes the proposal to a file you name —
+   a candidate to review, never an enacted law (it refuses to overwrite a
+   file that is already there).
 
 4. **Review the candidates against what the repository is FOR.** This is the
    step that carries the whole skill, and no command performs it.
@@ -189,10 +192,9 @@ cross while being helpful:
 
 - **A proposal is never a decision.** `discover --propose` and
   `reconcile --propose` derive candidates and mark every one of them
-  `proposed` / `notAuthoritative`. Neither command writes
-  `architecture-intent.json`, and there is no flag that applies a candidate.
-  The absence of that flag is deliberate, not a missing feature to work around
-  with a file write.
+  `proposed` / `notAuthoritative`. `--write-intent <path>` writes the
+  candidate to a file you name and refuses to overwrite one that exists;
+  what lands is still a proposal, never an enacted law.
 - **The agent may draft the law; it may not enact it.** Writing the Intent file
   is allowed and useful. Writing it without presenting it as a diff the human
   can refuse is not — that converts a derivation into an adoption, which is a

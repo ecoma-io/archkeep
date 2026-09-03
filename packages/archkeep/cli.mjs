@@ -2330,10 +2330,27 @@ async function runDiscover(options, { cwd, env }) {
   }
 
   if (options.writeIntent) {
+    // The one write that can turn a proposal into the law `check` gates on,
+    // so it refuses to replace: a file already at the target is a law (or a
+    // candidate someone holds), and silently overwriting it with a proposal
+    // is the adoption this command must never perform by itself. Move or
+    // delete the file first — a step a human reviews.
+    if (existsSync(options.writeIntent)) {
+      env.err(
+        `archkeep: ${options.writeIntent} already exists, and a proposal must never ` +
+          `silently replace what is there. Move or delete the file first, then run this again.`,
+      );
+      return EXIT.error;
+    }
     try {
       const intentJson = JSON.stringify(proposalToIntent(result.proposal), null, 2) + "\n";
-      writeFileSync(options.writeIntent, intentJson, "utf-8");
+      // `wx` refuses the file materializing between the check above and this
+      // write, so the refusal above cannot be raced past.
+      writeFileSync(options.writeIntent, intentJson, { encoding: "utf-8", flag: "wx" });
       env.err(`archkeep: proposed architecture written to ${options.writeIntent}`);
+      env.err(
+        "archkeep: this file is a proposal, not the law — review it as a diff before it governs anything.",
+      );
     } catch (error) {
       env.err(`archkeep: failed to write intent file: ${error.message}`);
       return EXIT.error;
@@ -2799,8 +2816,9 @@ const DISCOVER_FLAG_HELP = Object.freeze([
     describe: Object.freeze([
       "Write the proposed components and rules to a valid",
       "architecture-intent.json file. Only valid with --propose;",
-      "the file is a candidate for drift/reconcile and must be",
-      "reviewed before use",
+      "refuses to overwrite a file that already exists — the file",
+      "is a candidate for drift/reconcile and must be reviewed",
+      "before use",
     ]),
   }),
   Object.freeze({

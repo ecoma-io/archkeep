@@ -131,8 +131,8 @@ no declared project is a permanent blind spot.
 ## Descriptive commands
 
 `graph`, `diff`, `drift`, `discover`, `reconcile`, `waivers`,
-`history`, `trajectory`, `evolution`, `health`, `report`, `debt`, `impact`, `explain`, `context`,
-`provenance`, and `adr` are descriptive -- they never exit 1.
+`history`, `trajectory`, `evolution`, `health`, `report`, `debt`, `impact`, `scenario`, `explain`, `context`, `decisions`,
+`provenance`, `adr`, and `rules list` are descriptive -- they never exit 1.
 They exit 0 when the run completes and 3 when coverage is incomplete. The
 envelope's `status` follows the same mapping: `"ok"` for 0, `"no-verdict"` for 3. `"findings"` never appears for a descriptive command.
 

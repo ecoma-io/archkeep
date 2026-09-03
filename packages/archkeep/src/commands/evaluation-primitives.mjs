@@ -9,6 +9,7 @@
  * @module
  */
 import { readAdrContext } from "./adr.mjs";
+import { edgeEvolutionIdentity } from "../governance/evolution-event.mjs";
 import { hasAuthority, resolveDecisionRef, stripAdrPrefix } from "../governance/adr-registry.mjs";
 import { isComboDepConstraint } from "../rules/tags.mjs";
 import { computeDecisionProvenance } from "../governance/provenance-graph.mjs";
@@ -633,7 +634,13 @@ export function buildEvolutionAlignment(projectName, impact, constraintImpact, r
     for (const entry of constraintImpact) {
       // Collect edge identities for each affected boundary
       for (const edge of entry.edges) {
-        const edgeId = `${entry.project}>${edge.target}:${edge.type}`;
+        // The canonical spelling — imported, not restated, so this surface
+        // cannot drift from `EvolutionEvent.affected`'s vocabulary.
+        const edgeId = edgeEvolutionIdentity({
+          source: entry.project,
+          target: edge.target,
+          type: edge.type,
+        });
         if (!affectedBoundaries.includes(edgeId)) {
           affectedBoundaries.push(edgeId);
         }

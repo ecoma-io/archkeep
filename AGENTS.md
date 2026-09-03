@@ -19,7 +19,7 @@ checker and a language server, one analysis behind three faces.
 `packages/archkeep-vscode/` is a client of it and holds no analysis at all; it
 ships to a marketplace rather than to npm, and it deliberately does not bundle
 the server. `packages/archkeep-mcp/` is the agent capability client: it exposes
-the engine's own command layer (`./commands` subpath, in-process) as eight MCP
+the engine's own command layer (`./commands` subpath, in-process) as nine MCP
 tools, read-only beside a `propose` that never decides — a client of the
 engine the way the VS Code one is, never a second implementation of it.
 `packages/archkeep-rules/` is the official rules catalog — documentation-as-data
