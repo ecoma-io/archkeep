@@ -167,9 +167,16 @@ describe("evolution lifecycle — congruence", () => {
     const c2 = fx.commit(root, "alpha reaches beta (permitted)");
     const run = await fx.runEvolution(root, fx.evolutionArgs(c1, { head: c2 }));
     const envelope = expectExactly(run, ["CHANGE"], { disposition: "accepted" });
-    const observed = envelope.result.transitions[0].comparison.observed;
-    expect(observed.architectureChanged).toBe(true);
-    expect(observed.edges.added).toEqual([{ source: "alpha", target: "beta", type: "static" }]);
+    const comparison = envelope.result.transitions[0].comparison;
+    expect(comparison.observed.architectureChanged).toBe(true);
+    expect(comparison.observed.edges.added).toEqual([
+      { source: "alpha", target: "beta", type: "static" },
+    ]);
+    // The silent direction: `affected.boundaries` must carry the canonical
+    // identity spelling (`edgeEvolutionIdentity`), mapped inside
+    // `classifyEvolution` — before this fix the evolution surface echoed its
+    // own raw edge objects here, a second shape of "same edge" in the output.
+    expect(comparison.affected.boundaries).toEqual(["alpha>beta:static"]);
   });
 
   it("case 3 — an undeclared change (edge outside the exhaustive allowlist) is VIOLATION and rejected", async () => {

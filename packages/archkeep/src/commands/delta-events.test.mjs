@@ -210,7 +210,10 @@ describe("classifyDeltaEvolution", () => {
   it("classifies structural change as CHANGE and names the affected projects", () => {
     const result = classifyDeltaEvolution(deltaOf(), {
       projects: { added: ["libs/beta"], removed: [], changed: [] },
-      edges: { added: ["libs/beta>libs/alpha:static"], removed: [] },
+      edges: {
+        added: [{ source: "libs/beta", target: "libs/alpha", type: "static" }],
+        removed: [],
+      },
     });
     expect(result.classifications).toEqual(["CHANGE"]);
     expect(result.affected.projects).toEqual(["libs/beta"]);

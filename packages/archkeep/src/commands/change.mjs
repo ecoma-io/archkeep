@@ -736,7 +736,14 @@ export async function changeCommand(
     reason: entry.reason,
   }));
   const evolution = classifyEvolution({
-    observed,
+    // The raw triples, not the mapped strings `observed` carries (that object
+    // is the event's stored record): `classifyEvolution` owns the identity
+    // spelling and takes the triples, so `affected.boundaries` is mapped
+    // inside it under the one spelling rather than trusted from the caller.
+    observed: {
+      ...observed,
+      edges: { added: structural.addedEdges, removed: structural.removedEdges },
+    },
     ...(classification === null
       ? {}
       : {

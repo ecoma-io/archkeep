@@ -630,7 +630,13 @@ export async function deltaCommand(
   };
   const evolution = classifyDeltaEvolution(deltaPayload, {
     projects: structural.projects,
-    edges: structural.edges,
+    // The raw triples, not `structural.edges` (the mapped identity strings):
+    // `classifyEvolution` owns the spelling and takes the triples. The
+    // envelope's `structural` and the event's `observed` keep the mapped
+    // strings this run derived above — one mapping per command, and the
+    // classification's `affected.boundaries` comes out under the same
+    // spelling because it is mapped inside `classifyEvolution` itself.
+    edges: { added: structuralDiff.addedEdges, removed: structuralDiff.removedEdges },
     codeDrift,
   });
 
