@@ -109,11 +109,19 @@ describe("scenarioCommand — envelope construction", () => {
       },
     });
     // An unresolvable site was seen but never judged (#595): the edges out of
-    // it may be missing, so the refusal names the site count instead of
-    // reporting an evaluation the graph could not support.
-    expect(() => scenarioCommand("alpha", scenarioJson, context)).toThrow(
-      /1 import site could not be resolved/,
-    );
+    // it may be missing, so the refusal withholds the evaluation — since
+    // #608 as the structured no-verdict envelope, not a throw: the site is
+    // named in `coverage.blindSpots`, where a parser can read it.
+    const result = scenarioCommand("alpha", scenarioJson, context);
+    expect(result.status).toBe("no-verdict");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.blindSpots).toHaveLength(1);
+    expect(envelope.coverage.blindSpots[0]).toMatchObject({ file: "libs/alpha/partial.ts" });
+    expect(envelope.coverage.notAnalyzed).toEqual([]);
+    expect(envelope.result).toBeUndefined();
+    expect(result.report.text).toContain("coverage incomplete");
   });
 
   it("renders the text report for the scenario it evaluated", () => {
@@ -137,7 +145,7 @@ describe("scenarioCommand — envelope construction", () => {
 });
 
 describe("scenarioCommand — incomplete coverage is refused, not evaluated", () => {
-  it("throws when a whole file could not be analyzed", () => {
+  it("returns the no-verdict envelope when a whole file could not be analyzed", () => {
     const context = commandContext({
       analysis: {
         analyzed: 4,
@@ -145,9 +153,18 @@ describe("scenarioCommand — incomplete coverage is refused, not evaluated", ()
         failures: [{ sourceFile: "libs/beta/broken.go", line: null, reason: "unreadable" }],
       },
     });
-    expect(() => scenarioCommand("alpha", scenarioJson, context)).toThrow(
-      /incomplete coverage — 1 file could not be analyzed/,
-    );
+    // #608: the refusal is the structured envelope the graph family speaks —
+    // status "no-verdict", exit 3, the unreadable file named in
+    // `coverage.notAnalyzed` — instead of a throw with an empty stdout.
+    const result = scenarioCommand("alpha", scenarioJson, context);
+    expect(result.status).toBe("no-verdict");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toEqual([
+      { file: "libs/beta/broken.go", reason: "unreadable" },
+    ]);
+    expect(envelope.result).toBeUndefined();
   });
 
   it("refuses for an Nx workspace with unregistered polyglot manifests", () => {
