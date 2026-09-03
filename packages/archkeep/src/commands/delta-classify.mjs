@@ -597,9 +597,10 @@ export function deltaFindings(delta) {
  * The identity string of one graph edge, in the design's canonical spelling
  * `source>target:type` (the `(source, target, type)` identity the design
  * §1 names, printed the way `docs/concepts/evolution.md`'s example shows).
- * The ONE spelling the delta's event `observed.edges`/`affected.boundaries`
- * use — a second spelling somewhere would be a second definition of "same
- * edge", and two definitions drift.
+ * The ONE spelling the evolution events' `observed.edges`/`affected.boundaries`
+ * use — delta's event and change's event both map their structural diff
+ * through this function, so there is exactly one definition of "same edge"
+ * and no second spelling to drift.
  *
  * @param {{source: string, target: string, type: string}} edge
  * @returns {string}
