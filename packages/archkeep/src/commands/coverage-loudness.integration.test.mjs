@@ -167,6 +167,48 @@ describe("#601 — an unclaimed extension is disclosed, not failed", () => {
   });
 });
 
+describe("#595, narrowed — a dynamic import site is disclosed but withholds nothing", () => {
+  const dyn = makeRoot("dynamic-only");
+  dyn.write("nx.json", "{}\n");
+  dyn.write("module-boundaries.config.mjs", CONFIG);
+  dyn.write("libs/widget/Cargo.toml", '[package]\nname = "widget"\nversion = "0.1.0"\n');
+  dyn.write("libs/widget/src/lib.rs", "use other::thing;\n");
+  // A TS config-loader shape: the module path is computed, so no static
+  // answer exists for this one site. This tree exited 3 under the
+  // unqualified blind-spot flip this test replaced — which made this
+  // repository's own boundary gate permanently red, because every config
+  // loader contains such a site. The narrowing: the site is still named in
+  // `coverage.blindSpots` (with the `dynamic` marker), the report still
+  // prints it, and the verdict stays over the statically judgeable surface.
+  dyn.write("libs/widget/src/loader.js", "export const load = (name) => import(name);\n");
+
+  it("a dynamic-only blind-spot tree is ok and complete, with the site still named", async () => {
+    const { report } = await check(
+      { format: "json", config: null, paths: [] },
+      contextFor(
+        dyn.root,
+        [
+          "nx.json",
+          "module-boundaries.config.mjs",
+          "libs/widget/src/lib.rs",
+          "libs/widget/src/loader.js",
+        ],
+        widgetNode(),
+      ),
+    );
+    const envelope = JSON.parse(report);
+    expect(envelope.status).toBe("ok");
+    expect(envelope.exitCode).toBe(0);
+    expect(envelope.decision.verdict).toBe("pass");
+    expect(envelope.coverage.complete).toBe(true);
+    expect(envelope.coverage.blindSpots).toHaveLength(1);
+    expect(envelope.coverage.blindSpots[0]).toMatchObject({
+      file: "libs/widget/src/loader.js",
+      dynamic: true,
+    });
+  });
+});
+
 describe("#595 — an unresolvable site moves the run to the no-verdict lane", () => {
   const rustRoot = mkdtempSync(join(tmpdir(), "archkeep-coverage-loud-blind-"));
   afterAll(() => rmSync(rustRoot, { recursive: true, force: true }));

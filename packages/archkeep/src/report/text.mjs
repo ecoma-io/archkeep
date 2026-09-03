@@ -21,7 +21,7 @@
  * wearing a formatter's name, and it would disagree with the engine the first
  * time either changed (`README.md` beside this file).
  */
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import { isDynamicSiteFailure, isWholeFileFailure } from "../analysis/source-util.mjs";
 
 /** Two spaces of indent for a violation's detail lines, four for wrapped text. */
 const DETAIL = "  ";
@@ -128,12 +128,16 @@ const formatFailure = (failure) =>
  * consequences and one heading for both hid that for as long as it existed.
  *
  * A SITE failure is a blind spot: the file was analyzed, and one specifier in
- * it is not statically knowable — `import(url)` with a computed argument is
- * the honest example, and so is a literal package import that names no
+ * it is not statically knowable — a literal package import that names no
  * declared project and cannot resolve (an uninstalled third-party dependency:
- * a workspace with packages is a normal state, and failing the run on it would
- * block merges over dependencies nobody crossed). Both are legitimately
- * permanent, and the rest of the file still got a verdict.
+ * a workspace with packages is a normal state), or a non-literal
+ * `import()`/`require()` argument. Both are legitimately permanent, and the
+ * rest of the file still got a verdict — but since #595 the two classes part
+ * ways at the verdict: the literal specifier is a concrete question the run
+ * could not answer, so it WITHHELD the verdict (exit 3 on a findings-free
+ * run), while the non-literal argument is a language-declared limit the run
+ * states and moves past. The section says which class did what, instead of
+ * leaving the exit code to be discovered.
  *
  * A WHOLE-FILE failure is a hole: nothing was read, parsed, or analyzed — or a
  * literal import that names a DECLARED project could not be resolved, so the
@@ -165,12 +169,32 @@ export function formatFailures(failures) {
   }
 
   if (blind.length > 0) {
+    const dyn = blind.filter(isDynamicSiteFailure).length;
+    const literal = blind.length - dyn;
     sections.push(
       [
-        `${blind.length} import${blind.length === 1 ? "" : "s"} could not be resolved. ` +
-          `These are blind spots inside files that were analyzed, not verdicts — the run does not fail on them:`,
-        ...blind.map(formatFailure),
-      ].join("\n"),
+        `${blind.length} import${blind.length === 1 ? "" : "s"} could not be resolved — ` +
+          `blind spots inside files that were analyzed:`,
+        // Both permanent classes are disclosed; the verdict treats them
+        // differently, and the report says which class did what instead of
+        // leaving the exit code to be discovered (the same posture the
+        // whole-file section's heading holds).
+        ...(literal > 0
+          ? [
+              `${literal} unresolvable literal import${literal === 1 ? "" : "s"} withheld the run's verdict (#595):`,
+            ]
+          : []),
+        ...blind.filter((failure) => !isDynamicSiteFailure(failure)).map(formatFailure),
+        ...(dyn > 0
+          ? [
+              `${dyn} non-literal import() argument${dyn === 1 ? "" : "s"} — a declared limit static analysis cannot answer; ` +
+                `the verdict stands over the statically judgeable surface:`,
+            ]
+          : []),
+        ...blind.filter(isDynamicSiteFailure).map(formatFailure),
+      ]
+        .filter(Boolean)
+        .join("\n"),
     );
   }
   return sections.join("\n\n");
@@ -752,6 +776,27 @@ export function formatAcceptedViolations(waived, unresolvedDecisionRefs) {
 }
 
 /**
+ * The could-not-look section: the reasons a run that found no violation is
+ * still not a pass, spelled the same way the JSON envelope words them
+ * (`../verdict.mjs`'s `coverageIncompleteReasons`, joined into
+ * `decision.reason`).
+ *
+ * "✔ no boundary violations" states only the boundary half of the verdict —
+ * on a run whose exit is 3, the reader needs the next lines to say WHY the
+ * run failed despite it, or the checkmark reads as a clean tree (P1-04's
+ * repro: an exit-3 run printed the checkmark and nothing else). Empty exactly
+ * when the run reached a verdict on everything it looked at.
+ *
+ * @param {string[]} coverageIncomplete The verdict's reason clauses, in
+ *   `verdictFor`'s pinned order.
+ * @returns {string} Empty exactly when there is nothing to disclose.
+ */
+export function formatCoverageIncomplete(coverageIncomplete) {
+  if (coverageIncomplete.length === 0) return "";
+  return coverageIncomplete.map((reason) => `⚠ ${reason}`).join("\n");
+}
+
+/**
  * The whole report, violations first.
  *
  * The summary states what was inspected and not only what was found, because
@@ -766,7 +811,7 @@ export function formatAcceptedViolations(waived, unresolvedDecisionRefs) {
  * summary line above only says "no boundary violations" when there is nothing
  * a waiver is covering either.
  *
- * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, declaredEdges?: object|null, intent?: object|null, fitness?: object|null, fitnessOverall?: {verdict: string}|null, customRules?: {decisions: object[], overall: {verdict: string}}|null, coverageGaps?: object[], notes?: string[], policy?: {profile: string|null, source: string, fingerprint: string}|null, unresolvedDecisionRefs?: Set<string>}} run
+ * @param {{violations: object[], failures: object[], analyzed: number, projects: number, imports: number, goWork?: object|null, tsconfigPaths?: object|null, declaredEdges?: object|null, intent?: object|null, fitness?: object|null, fitnessOverall?: {verdict: string}|null, customRules?: {decisions: object[], overall: {verdict: string}}|null, coverageGaps?: object[], notes?: string[], policy?: {profile: string|null, source: string, fingerprint: string}|null, unresolvedDecisionRefs?: Set<string>, coverageIncomplete?: string[]}} run
  * @returns {string}
  */
 export function formatReport({
@@ -786,6 +831,7 @@ export function formatReport({
   notes = [],
   policy = null,
   unresolvedDecisionRefs,
+  coverageIncomplete = [],
 }) {
   const inspected =
     `${imports} import${imports === 1 ? "" : "s"} in ${analyzed} file${analyzed === 1 ? "" : "s"} ` +
@@ -828,6 +874,13 @@ export function formatReport({
       );
     }
   }
+
+  // The could-not-look reasons render BEFORE the per-feature sections, right
+  // after the verdict summary they qualify: a reader who just read "✔ no
+  // boundary violations" needs the next lines to be the reason the exit is
+  // still 3, not go.work bookkeeping.
+  const coverageIncompleteSection = formatCoverageIncomplete(coverageIncomplete);
+  if (coverageIncompleteSection !== "") sections.push(coverageIncompleteSection);
 
   const goWorkSection = formatGoWork(goWork);
   if (goWorkSection !== "") sections.push(goWorkSection);

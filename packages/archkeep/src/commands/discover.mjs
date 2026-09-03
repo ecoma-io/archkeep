@@ -40,7 +40,11 @@
  * byte-identical text and JSON — the same promise `graph`'s snapshots make,
  * which is what lets a consumer `diff` two proposals meaningfully.
  */
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { evaluateDiscovery } from "../governance/discovery-proposal.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatDiscoverReport } from "../report/discover-text.mjs";
@@ -131,6 +135,8 @@ export function discoverCommand(commandContext, { propose = false } = {}) {
     .filter(isWholeFileFailure)
     .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
 
+  const blindSpotCount = unresolvableLiteralCount(analysis.failures);
+
   const observed = buildObserved(commandContext);
 
   const proposal = propose ? evaluateDiscovery(observed) : null;
@@ -139,16 +145,32 @@ export function discoverCommand(commandContext, { propose = false } = {}) {
   // proposal's name: every candidate edge would be ambiguous between "gone"
   // and "never seen". Refuse loudly — the same reasoning `drift`'s refusal
   // gives — rather than print a proposal and a warning that it may be lying.
-  if (propose && notAnalyzed.length > 0) {
+  // An unresolvable site is the same fabrication at site granularity (#595):
+  // the edge out of it may be missing, and a candidate built over a gap is
+  // still a guess.
+  if (propose && (notAnalyzed.length > 0 || blindSpotCount > 0)) {
     throw new Error(
-      `archkeep: discover --propose has incomplete coverage — ${notAnalyzed.length} file` +
-        `${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed, so every candidate ` +
-        `would be ambiguous between "gone" and "never seen". Fix the unanalyzed files and ` +
-        `re-run.`,
+      `archkeep: discover --propose has incomplete coverage — ` +
+        [
+          notAnalyzed.length > 0
+            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
+            : null,
+          blindSpotCount > 0
+            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(", ") +
+        `, so every candidate would be ambiguous between "gone" and "never seen". ` +
+        `Fix the unresolved files and sites and re-run.`,
     );
   }
 
-  const complete = notAnalyzed.length === 0;
+  // An unresolvable site was seen but never judged (#595): the snapshot's
+  // edge list under-represents the tree wherever that site would have drawn
+  // one, so `complete` cannot be claimed over it. It still reports — status
+  // no-verdict, exit 3 — naming the site in `coverage.blindSpots`.
+  const complete = notAnalyzed.length === 0 && blindSpotCount === 0;
   const status = complete ? "ok" : "no-verdict";
   const exitCode = complete ? 0 : 3;
 
@@ -158,9 +180,7 @@ export function discoverCommand(commandContext, { propose = false } = {}) {
     analyzedFiles: analysis.analyzed,
     imports: analysis.imports.length,
     notAnalyzed,
-    blindSpots: analysis.failures
-      .filter((failure) => !isWholeFileFailure(failure))
-      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    blindSpots: blindSpotRows(analysis.failures),
     notes: [],
   };
 

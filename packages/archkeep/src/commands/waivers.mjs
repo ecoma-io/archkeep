@@ -37,7 +37,11 @@
  * `now` and the output is reproducible byte-for-byte. Defaults to the wall
  * clock, the same injection `evaluate` uses for waiver expiry.
  */
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { suppressionCovers } from "../config.mjs";
 import { referenceTime } from "../governance/clock.mjs";
 import { isWaiver, remainingMs, waiverStatus } from "../governance/waiver.mjs";
@@ -193,10 +197,25 @@ export async function waiversCommand(commandContext, boundaryConfig, io = {}) {
     .filter(({ sourceFile }) => !unownedCoverage.acceptedFiles.has(sourceFile))
     .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
 
+  // Site-level failures count in full — the `coverage.unowned` withdrawal
+  // above is a whole-file acceptance, and no site-level counterpart exists
+  // yet. Counting an unresolvable site is the fail-closed direction (#595).
+  const blindSpotCount = unresolvableLiteralCount(analysis.failures);
+
   if (notAnalyzed.length > 0) {
     throw new Error(
-      `archkeep: waivers has incomplete coverage — ${notAnalyzed.length} file` +
-        `${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed, so every waiver naming one ` +
+      `archkeep: waivers has incomplete coverage — ` +
+        [
+          notAnalyzed.length > 0
+            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
+            : null,
+          blindSpotCount > 0
+            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(", ") +
+        `, so every waiver naming one ` +
         `would read as covering nothing it never saw. Fix the unanalyzed files and re-run.`,
     );
   }
@@ -227,9 +246,7 @@ export async function waiversCommand(commandContext, boundaryConfig, io = {}) {
     analyzedFiles: analysis.analyzed,
     imports: analysis.imports.length,
     notAnalyzed,
-    blindSpots: analysis.failures
-      .filter((failure) => !isWholeFileFailure(failure))
-      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    blindSpots: blindSpotRows(analysis.failures),
     // `remainingMs` reflects the wall clock at the moment of THIS run, not the
     // workspace — it is expected to differ between two runs of an unchanged
     // tree, by design (`../governance/clock.mjs`). Disclosed here, in-band,

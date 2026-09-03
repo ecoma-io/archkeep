@@ -352,6 +352,77 @@ export const refuseUnreadTree = (reader, failures) => {
 export const isWholeFileFailure = (failure) => failure.line === null;
 
 /**
+ * Whether a positioned failure is the declared dynamic limit rather than an
+ * unresolvable specifier.
+ *
+ * Both are permanent blind spots — a site the run saw and could not judge —
+ * and both are disclosed identically (`coverage.blindSpots`, the report's
+ * blind-spot section). They part ways at the verdict: an unresolvable LITERAL
+ * specifier is a concrete question the resolver was asked and could not answer
+ * (#595 — a missing workspace edge at site granularity, an uninstalled
+ * dependency), so it withholds the run's verdict; a non-literal
+ * `import()`/`require()` argument is the language itself declaring the target
+ * computed at runtime, which static analysis cannot answer in principle —
+ * every config loader that opens a consumer-named file contains one — so it
+ * is a declared limit the run states and moves past. Measured on this
+ * repository's own tree: ten such sites in config loaders, unfixable without
+ * giving up the feature that makes them config loaders.
+ *
+ * The field is set only by the TypeScript/Vue analyzer, the one analyzer whose
+ * language has the construct; every other analyzer's positioned failures are
+ * literal specifiers by construction and never set it.
+ *
+ * @param {{ line: number|null, dynamic?: true }} failure
+ * @returns {boolean}
+ */
+export const isDynamicSiteFailure = (failure) => failure.dynamic === true;
+
+/**
+ * The count of positioned failures that WITHHOLD the run's verdict —
+ * unresolvable literal specifiers, dynamic declared limits excluded.
+ *
+ * The one number every verdict lane and refusal guard reads (#595, narrowed):
+ * `check`'s `coverage.complete` and no-verdict lane, the refusal every
+ * descriptive and refuse-class command raises over an unjudged site, and the
+ * envelope builder's completeness law all read this class and nothing else.
+ * Centralized here so the class line cannot drift between the fifteen call
+ * sites the way a repeated inline filter would.
+ *
+ * @param {{ line: number|null, dynamic?: true }[]} failures
+ * @returns {number}
+ */
+export const unresolvableLiteralCount = (failures) =>
+  failures.filter((failure) => !isWholeFileFailure(failure) && !isDynamicSiteFailure(failure))
+    .length;
+
+/**
+ * The `coverage.blindSpots` rows every command's coverage block carries: one
+ * row per positioned failure, BOTH permanent classes, the run's disclosure of
+ * every site it saw and did not judge.
+ *
+ * Disclosure is deliberately wider than the verdict's withholding: a dynamic
+ * site never flips an exit, but it is still named here — the field that
+ * separates the classes rides the row, which is what lets the envelope
+ * builder's completeness law (`report/json.mjs`) tell a declared limit from
+ * unjudged work without a second classification.
+ *
+ * @param {{ sourceFile: string, line: number|null, column: number|null,
+ *   reason: string, dynamic?: true }[]} failures
+ * @returns {{ file: string, line: number, column: number, reason: string,
+ *   dynamic?: true }[]}
+ */
+export const blindSpotRows = (failures) =>
+  failures
+    .filter((failure) => !isWholeFileFailure(failure))
+    .map(({ sourceFile, line, column, reason, dynamic }) => ({
+      file: sourceFile,
+      line,
+      column,
+      reason,
+      ...(dynamic ? { dynamic: true } : {}),
+    }));
+
+/**
  * One whole-file failure per source file, first reason kept.
  *
  * The funnel that merges every failure source (`../commands/context.mjs`)

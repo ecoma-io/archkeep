@@ -71,9 +71,14 @@ describe("JVM mixed Java/Kotlin E2E", () => {
       commitFiles(split.root, SPLIT_PACKAGE_MUTATION, "two projects claim one package");
       // The documented contract: a positioned failure is a blind spot, not a
       // refusal — the run reached a verdict about everything else, and the
-      // unresolvable import is named at its own site.
+      // unresolvable import is named at its own site. Since #595 the site is
+      // also a verdict the run does not hold: it is a concrete specifier the
+      // resolver could not answer, so `check` exits 3 (no-verdict) rather
+      // than reading the tree as a pass — the blind-spot listing below is
+      // unchanged.
       const checked = archkeep(split.root, ["check", "--format", "json"]);
-      expect(checked.exitCode).toBe(0);
+      expect(checked.exitCode).toBe(3);
+      expect(checked.json.status).toBe("no-verdict");
       expect(checked.json.coverage.blindSpots).toHaveLength(1);
       expect(checked.json.coverage.blindSpots[0].file).toBe(
         "libs/application/src/main/java/com/example/application/App.java",
@@ -92,8 +97,15 @@ describe("JVM mixed Java/Kotlin E2E", () => {
       // lost, while the application→domain edge the split tree still shows is
       // the pom's declared dependency — a fact of the workspace, not a
       // resolution guess between the two claimants.
+      // The same site withholds `graph`'s completeness too (#595): the
+      // snapshot over a site nobody resolved could under-represent the real
+      // edge list. It still reports — status no-verdict — and the edge list
+      // it does show contains nothing guessed: api->application is the one
+      // import-track edge that resolved, application->domain is the pom's
+      // declared dependency, and the split package produced neither.
       const graph = archkeep(split.root, ["graph", "--format", "json"]);
-      expect(graph.exitCode).toBe(0);
+      expect(graph.exitCode).toBe(3);
+      expect(graph.json.status).toBe("no-verdict");
       expect(graph.json.result.dependencies.map((e) => `${e.source}->${e.target}`)).toEqual([
         "api->application",
         "application->domain",

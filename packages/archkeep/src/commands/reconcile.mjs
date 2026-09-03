@@ -43,7 +43,11 @@
  * comparison (never `localeCompare`), so two runs over an unchanged tree and
  * intent produce byte-identical text and JSON.
  */
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { judgeIntent } from "../architecture-intent/judge.mjs";
@@ -99,10 +103,22 @@ export async function reconcileCommand(commandContext, io = {}, options = {}) {
     .filter(isWholeFileFailure)
     .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
 
-  if (notAnalyzed.length > 0) {
+  const blindSpotCount = unresolvableLiteralCount(analysis.failures);
+
+  if (notAnalyzed.length > 0 || blindSpotCount > 0) {
     throw new Error(
-      `archkeep: reconcile has incomplete coverage — ${notAnalyzed.length} file` +
-        `${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed, so every "absent" score ` +
+      `archkeep: reconcile has incomplete coverage — ` +
+        [
+          notAnalyzed.length > 0
+            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
+            : null,
+          blindSpotCount > 0
+            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(", ") +
+        `, so every "absent" score ` +
         `would be ambiguous between "gone" and "never seen". Fix the unanalyzed files and re-run.`,
     );
   }
@@ -146,9 +162,7 @@ export async function reconcileCommand(commandContext, io = {}, options = {}) {
     // Reconcile reads only the graph — provider failures are the same blind
     // spots every other command reports, and a blind spot never prevents a
     // verdict.
-    blindSpots: analysis.failures
-      .filter((failure) => !isWholeFileFailure(failure))
-      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    blindSpots: blindSpotRows(analysis.failures),
     // Coverage notes (e.g. an `optional: true` allowed row the team has not
     // built yet) ride here so "optional and absent" never reads as "never
     // checked".

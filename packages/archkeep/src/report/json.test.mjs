@@ -81,10 +81,12 @@ describe("jsonEnvelope", () => {
     ).toThrow(/status "no-verdict" and exitCode 1 disagree/);
   });
 
-  it("throws when coverage.complete disagrees with coverage.notAnalyzed", () => {
-    // Both directions of the disagreement, since either alone would let a
-    // reader checking only one of the two fields mistake a partial run for a
-    // complete one.
+  it("refuses complete: true over unjudged work, and allows the zero-analysis disclosure", () => {
+    // One-directional law (#595, #599): the refusal only guards the direction
+    // that lies — a run claiming complete over unjudged work. The reverse
+    // (`complete: false` with both lists empty) is the zero-analysis state a
+    // scoped run is REQUIRED to be able to report (#599), so the second
+    // expectation asserts it is accepted, not thrown over.
     expect(() =>
       jsonEnvelope({
         command: "check",
@@ -94,7 +96,26 @@ describe("jsonEnvelope", () => {
         coverage: { ...cleanCoverage(), complete: true, notAnalyzed: [{ file: "a.go" }] },
         result: {},
       }),
-    ).toThrow(/coverage\.complete \(true\) disagrees with coverage\.notAnalyzed \(1 entry\)/);
+    ).toThrow(
+      /coverage\.complete \(true\) over unjudged work \(notAnalyzed: 1 entry, blindSpots: 0\)/,
+    );
+
+    expect(() =>
+      jsonEnvelope({
+        command: "check",
+        context,
+        status: "findings",
+        exitCode: 1,
+        coverage: {
+          ...cleanCoverage(),
+          complete: true,
+          blindSpots: [{ file: "a.go", specifier: "missing-pkg" }],
+        },
+        result: {},
+      }),
+    ).toThrow(
+      /coverage\.complete \(true\) over unjudged work \(notAnalyzed: 0 entries, blindSpots: 1\)/,
+    );
 
     expect(() =>
       jsonEnvelope({
@@ -102,10 +123,10 @@ describe("jsonEnvelope", () => {
         context,
         status: "no-verdict",
         exitCode: 3,
-        coverage: { ...cleanCoverage(), complete: false, notAnalyzed: [] },
+        coverage: { ...cleanCoverage(), complete: false, notAnalyzed: [], blindSpots: [] },
         result: {},
       }),
-    ).toThrow(/coverage\.complete \(false\) disagrees with coverage\.notAnalyzed \(0 entries\)/);
+    ).not.toThrow();
   });
 
   it("accepts status findings and no-verdict with their required exit codes", () => {

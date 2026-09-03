@@ -2170,7 +2170,9 @@ export const depConstraints = [
     // legitimate package dependencies, NOT missing workspace edges — no
     // declared project is named `left-pad`. Failing the whole run on them would
     // make every package-owning workspace uncheckable. They stay positioned
-    // blind spots (reported loudly, exit 0).
+    // blind spots: reported loudly in the report, and — since #595 — named by
+    // the exit too (3, no-verdict), because the run saw a site it could not
+    // judge and must not present that as a pass.
     const pkgRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-native-unresolvable-pkg-"));
     const writeP = (relativePath, text) => {
       mkdirSync(join(pkgRoot, relativePath, ".."), { recursive: true });
@@ -2225,8 +2227,9 @@ export const boundarySuppressions = [];
       );
       expect(violations).toBe(0);
       expect(unchecked).toBe(0);
-      // The blind spot is still reported — loud, never silent — but the verdict
-      // stays `ok` because the import names no declared project.
+      // The blind spot is still reported — loud, never silent — but the
+      // verdict is no longer `ok`: the import names no declared project, and
+      // the run still saw a site it could not judge (#595).
       expect(report).toContain("left-pad");
       expect(report).toContain("TypeScript cannot resolve 'left-pad'");
       expect(report).not.toContain("could not be analyzed at all");
@@ -2236,7 +2239,9 @@ export const boundarySuppressions = [];
         cwd: pkgRoot,
         listFiles: () => pFiles,
       };
-      expect(await runCli(["check"], cliStreams)).toBe(EXIT.ok);
+      // #595: exit 3 over a blind-spot tree — exit 0 here would be a pass
+      // over a site nobody looked at, byte-for-byte a clean workspace.
+      expect(await runCli(["check"], cliStreams)).toBe(EXIT.error);
     } finally {
       rmSync(pkgRoot, { recursive: true, force: true });
     }
@@ -6153,13 +6158,18 @@ var _ = a.Name
     expect(streams.lines.err.join("\n")).toContain("matches no tracked file");
   });
 
-  it("still selects cleanly when scoped to a real, tracked, merely unowned path", async () => {
-    // `module-boundaries.config.mjs` is tracked but owned by no project (no
-    // declared project's root covers it) — a legitimate, genuinely empty
-    // slice, and must not be refused the way the untracked case above is.
+  it("runs — not usage-refused — and answers no-verdict over a scope with nothing to judge", async () => {
+    // `module-boundaries.config.mjs` is tracked and the model exempts it, so
+    // the scoped run selects it and then judges nothing. The P1-04 contrast
+    // with the untracked case above survives — the usage refusal is for paths
+    // no tracked file matches, and this path runs — but since #599 a run that
+    // analyzed nothing cannot report exit 0: judged nothing is not clean.
     const streams = { ...env(), cwd: untrackedRoot, listFiles: () => trackedFiles };
-    expect(await runCli(["check", "module-boundaries.config.mjs"], streams)).toBe(EXIT.ok);
-    expect(streams.lines.out.join("\n")).toContain("no boundary violations");
+    expect(await runCli(["check", "module-boundaries.config.mjs"], streams)).toBe(EXIT.error);
+    const out = streams.lines.out.join("\n");
+    // The loud direction: the ✔ line alone was exactly the old silence.
+    expect(out).toContain("no boundary violations");
+    expect(out).toContain("no file in scope could be analyzed — coverage incomplete");
   });
 });
 

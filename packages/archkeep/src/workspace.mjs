@@ -598,12 +598,130 @@ export function selectFiles(files, paths, { root, cwd, tracked = files }) {
  * @param {{ analyze?: typeof analyzeFile }} [io] Injectable analyzer.
  * @returns {{ imports: object[], failures: object[], analyzed: number, analyzedFiles: string[] }}
  */
+/**
+ * Extensions that cannot carry an import or a boundary crossing, so their
+ * silence in analysis is never a coverage gap (#601): documentation,
+ * structured data and configuration, binary assets, generated lockfiles.
+ * A file in one of these formats has no imports for ANY analyzer to read —
+ * listing it under "unsupported language" would name every README in every
+ * workspace, and a gap that always fires teaches a reader to skip the line
+ * it is written on (the argument `./commands/context.mjs`'s
+ * `unownedAnalyzableFiles` already states for the same reason). The set must
+ * never intersect `LANGUAGE_BY_EXTENSION` — a format that cannot carry an
+ * import cannot become an analyzed language; `workspace.test.mjs` holds that
+ * line, because an entry that crossed it would turn this exemption into the
+ * silent direction.
+ */
+const DATA_BY_EXTENSION = Object.freeze(
+  new Set([
+    // Documentation.
+    ".md",
+    ".txt",
+    ".rst",
+    ".adoc",
+    // Structured data and configuration.
+    ".json",
+    ".json5",
+    ".jsonc",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".ini",
+    ".cfg",
+    ".conf",
+    ".properties",
+    ".xml",
+    // Binary assets.
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".webp",
+    ".ico",
+    ".bmp",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    ".eot",
+    ".mp4",
+    ".mp3",
+    ".wav",
+    ".pdf",
+    // Archives and generated artifacts.
+    ".zip",
+    ".gz",
+    ".tgz",
+    ".tar",
+    ".br",
+    // Generated lockfiles.
+    ".lock",
+    ".sum",
+  ]),
+);
+
+/**
+ * Extension-less basenames that are workspace furniture, not source: legal
+ * notices and the two command files whose bodies are shell commands rather
+ * than imports. `languageOf` answers `null` for every dotless name already —
+ * this set is what keeps them out of the unsupported-language row without
+ * inventing a general dotfile list.
+ */
+const DOTLESS_FURNITURE = Object.freeze(
+  new Set([
+    "LICENSE",
+    "NOTICE",
+    "AUTHORS",
+    "CHANGELOG",
+    "CODEOWNERS",
+    "CONTRIBUTING",
+    "SECURITY",
+    "Makefile",
+    "Dockerfile",
+  ]),
+);
+
+/**
+ * Whether a file no analyzer claims is nevertheless not a coverage gap —
+ * the predicate `analyzeWorkspace` applies before naming a skipped file
+ * under `unsupported-language` (#601). Three exemptions, each with the same
+ * shape of reason: the file was never part of what this tool could judge.
+ *
+ * @param {string} sourceFile Workspace-relative path.
+ * @returns {boolean}
+ */
+export function exemptFromUnsupportedLanguage(sourceFile) {
+  const base = sourceFile.slice(sourceFile.lastIndexOf("/") + 1);
+  // Dotfiles are editor and tool state (`.gitignore`, `.env`, `.npmrc`).
+  if (base.startsWith(".")) return true;
+  const dot = base.lastIndexOf(".");
+  if (dot > 0 && DATA_BY_EXTENSION.has(base.slice(dot))) return true;
+  if (DOTLESS_FURNITURE.has(base)) return true;
+  // The polyglot manifests the manifest track itself reads — a `go.mod` is
+  // claimed by the engine one layer down, not skipped by it.
+  return basenameMatches(base, POLYGLOT_MANIFEST_NAMES, posix.matchesGlob);
+}
+
 export function analyzeWorkspace(workspace, files, { analyze = analyzeFile } = {}) {
   const imports = [];
   const failures = [];
   const analyzedFiles = [];
+  // Files whose extension no analyzer claims AND whose silence is a coverage
+  // gap (#601): skipped before reading, so naming them here is the only
+  // record the run will ever carry that they existed — "not analyzed" must
+  // not be indistinguishable from "not present". READMEs, manifests and
+  // other formats that cannot carry an import are exempt
+  // (`exemptFromUnsupportedLanguage` above): they are not an unsupported
+  // language, they are workspace furniture the tool has always declined.
+  const unsupportedLanguageFiles = [];
   for (const sourceFile of files) {
-    if (languageOf(sourceFile) === null) continue;
+    if (languageOf(sourceFile) === null) {
+      if (!exemptFromUnsupportedLanguage(sourceFile)) {
+        unsupportedLanguageFiles.push(sourceFile);
+      }
+      continue;
+    }
     const text = workspace.readFile(sourceFile);
     if (text === null) {
       failures.push(fileFailure(sourceFile, "could not be read"));
@@ -614,7 +732,13 @@ export function analyzeWorkspace(workspace, files, { analyze = analyzeFile } = {
     imports.push(...result.imports);
     failures.push(...result.failures);
   }
-  return { imports, failures, analyzed: analyzedFiles.length, analyzedFiles };
+  return {
+    imports,
+    failures,
+    analyzed: analyzedFiles.length,
+    analyzedFiles,
+    unsupportedLanguageFiles,
+  };
 }
 
 /** The polyglot manifests `polyglotManifests` looks for. */

@@ -32,7 +32,11 @@
  * than explaining constraints from a graph whose edges silently under-represent
  * the real architecture.
  */
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { UsageError } from "../errors.mjs";
 import { judgeEdge } from "./edge-constraints.mjs";
 import { findConstraintsFor } from "../rules/tags.mjs";
@@ -150,7 +154,13 @@ export function contextCommand(projectName, commandContext, config) {
     .filter(isWholeFileFailure)
     .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
 
-  const complete = notAnalyzed.length === 0;
+  // The same completeness `check` claims (#595, #599): unjudged sites and
+  // a zero-analyzed run defeat it here exactly as they do there, so a
+  // context report cannot look complete over a tree the run could not
+  // fully read.
+  const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
+  const complete =
+    notAnalyzed.length === 0 && blindSpotCount === 0 && commandContext.analysis.analyzed > 0;
   const status = complete ? "ok" : "no-verdict";
   const exitCode = complete ? 0 : 3;
 
@@ -160,9 +170,7 @@ export function contextCommand(projectName, commandContext, config) {
     analyzedFiles: commandContext.analysis.analyzed,
     imports: commandContext.analysis.imports.length,
     notAnalyzed,
-    blindSpots: commandContext.analysis.failures
-      .filter((f) => !isWholeFileFailure(f))
-      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    blindSpots: blindSpotRows(commandContext.analysis.failures),
     notes: [
       "per-edge violations cover only depConstraints (3 of 15 violation types). " +
         "A dependency with no violations here may still violate npm-ban, circular-dependency, " +

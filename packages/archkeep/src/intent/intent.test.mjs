@@ -502,7 +502,7 @@ describe("Contract B — Empty result is never silently successful", () => {
     ).toThrow(/status.*and exitCode.*disagree/);
   });
 
-  it("jsonEnvelope throws when coverage.complete and notAnalyzed disagree (behavioral)", async () => {
+  it("jsonEnvelope throws when coverage.complete is claimed over unjudged work (behavioral)", async () => {
     const { jsonEnvelope } = await import("../report/json.mjs");
     expect(() =>
       jsonEnvelope({
@@ -521,7 +521,9 @@ describe("Contract B — Empty result is never silently successful", () => {
         },
         result: {},
       }),
-    ).toThrow(/coverage\.complete.*disagrees with coverage\.notAnalyzed/);
+    ).toThrow(
+      /coverage\.complete \(true\) over unjudged work \(notAnalyzed: 1 entry, blindSpots: 0\)/,
+    );
   });
 
   it("CLI distinguishes exit 0 (clean), 1 (findings), 3 (cannot look) [source-evidence]", () => {

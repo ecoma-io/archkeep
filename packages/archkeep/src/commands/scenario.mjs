@@ -11,7 +11,11 @@
  */
 import { resolveProvenance } from "./provenance.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { evaluateScenario, parseScenarioInput } from "./scenario-evaluation.mjs";
 export { parseScenarioInput } from "./scenario-evaluation.mjs";
 
@@ -49,10 +53,23 @@ export function scenarioCommand(projectName, scenarioJson, commandContext, confi
     .filter(isWholeFileFailure)
     .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
 
-  if (notAnalyzed.length > 0) {
+  const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
+
+  if (notAnalyzed.length > 0 || blindSpotCount > 0) {
     throw new Error(
-      `archkeep: the graph has incomplete coverage — ${notAnalyzed.length} file` +
-        `${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed, so the scenario may ` +
+      `archkeep: the graph has incomplete coverage — ` +
+        [
+          notAnalyzed.length > 0
+            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
+            : null,
+          blindSpotCount > 0
+            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(", ") +
+        `, so 
+the scenario may ` +
         `under-represent the real architecture. Fix the unanalyzed files and re-run.`,
     );
   }
@@ -66,9 +83,7 @@ export function scenarioCommand(projectName, scenarioJson, commandContext, confi
     analyzedFiles: commandContext.analysis.analyzed,
     imports: commandContext.analysis.imports.length,
     notAnalyzed: [],
-    blindSpots: commandContext.analysis.failures
-      .filter((f) => !isWholeFileFailure(f))
-      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    blindSpots: blindSpotRows(commandContext.analysis.failures),
     notes: [
       "scenario evaluation is virtual and not authoritative — run `check` for the real verdict",
       "per-edge verdicts cover only depConstraints (3 of 15 violation types)",

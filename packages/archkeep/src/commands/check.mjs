@@ -12,7 +12,12 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
 
-import { fileFailure, isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  fileFailure,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { tsconfigPathsFacts } from "../analysis/typescript.mjs";
 import { stripTrailingSlashes } from "../path-util.mjs";
 import { suppressionCovers } from "../config.mjs";
@@ -188,7 +193,7 @@ function declaredEdgeManifest({ provider, graph }, sourceProject) {
  *   intentUnresolved: number, intentUnresolvedDecisionRefs: number, fitnessFail: number,
  *   fitnessUnknown: number, customRuleFail: number, customRuleUnknown: number,
  *   customRuleEvidence: {rule: string, bytes: Uint8Array}[], customRulesDeclared: boolean,
- *   analyzed: number, unchecked: number, waived?: number}>}
+ *   analyzed: number, unchecked: number, blindSpots: number, waived?: number}>}
  */
 export async function check(options, { cwd, readGraph, listFiles = listTrackedFiles }) {
   const commandContext = resolveCommandContext(
@@ -196,7 +201,7 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     { readGraph, listFiles },
   );
   const { root, graph, workspace, tracked } = commandContext;
-  const { imports, exemptedFiles } = commandContext.analysis;
+  const { imports, exemptedFiles, unsupportedLanguageFiles } = commandContext.analysis;
   const failures = [...commandContext.analysis.failures];
   const analyzed = commandContext.analysis.analyzed;
 
@@ -622,6 +627,16 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     failures.filter(isWholeFileFailure).map((failure) => failure.sourceFile),
   ).size;
 
+  // Sites the run saw but never judged (#595): the file was analyzed, this
+  // site was not, and a pass over it would claim a verdict the run does not
+  // hold. Counted beside `unchecked` from one classifier
+  // (`unresolvableLiteralCount`) so the exit, the report and the envelope all
+  // agree from one number. The declared dynamic limit — a non-literal
+  // `import()` argument, unknowable in principle — is disclosed in
+  // `coverage.blindSpots` but does not count here: it withholds nothing
+  // (`isDynamicSiteFailure` in source-util.mjs owns the class line).
+  const blindSpotCount = unresolvableLiteralCount(failures);
+
   // A row of the boundary law that covers nothing is a boundary that stopped
   // being enforced, and — unlike a missing `reason`, which only a human can
   // judge — it is machine-detectable. Two tables can be dead, and both are
@@ -838,7 +853,37 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
           },
         ]
       : []),
+    // Files a project owns that no analyzer claims (#601): skipped before
+    // reading, so they land in no failure list — without this row the run
+    // would present the judged surface as the whole story. Disclosure, not
+    // failure: the row names them and their extensions, and leaves
+    // `complete` to the surface that WAS judged. Sorted, because the row's
+    // bytes must not vary with `git ls-files`' order (E-F10).
+    ...(unsupportedLanguageFiles.length > 0
+      ? [{ kind: "unsupported-language", files: [...unsupportedLanguageFiles].sort() }]
+      : []),
   ];
+
+  // One verdict computation for both faces: the JSON envelope spreads it and
+  // the text report renders its `reasons` beside the headline — a second call
+  // here would let the two faces disagree about a run neither re-derives from
+  // the other (`../verdict.mjs`'s header owns that argument).
+  const verdict = verdictFor({
+    violations: violations.length,
+    declaredEdgeFindings,
+    goWorkDrift,
+    tsconfigPathsDead,
+    intentFindings,
+    intentUnresolved,
+    intentUnresolvedDecisionRefs: intentUnresolvedDecisionRefRows.length,
+    unchecked,
+    analyzed,
+    blindSpots: blindSpotCount,
+    fitnessFail,
+    fitnessUnknown,
+    customRuleFail,
+    customRuleUnknown,
+  });
 
   const report =
     options.format === "json"
@@ -861,36 +906,20 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
             // `decision` — the four-state verb of the same counts — so the
             // envelope's `decision.verdict` and its `status` are built from
             // exactly one computation and can never disagree.
-            ...verdictFor({
-              violations: violations.length,
-              declaredEdgeFindings,
-              goWorkDrift,
-              tsconfigPathsDead,
-              intentFindings,
-              intentUnresolved,
-              intentUnresolvedDecisionRefs: intentUnresolvedDecisionRefRows.length,
-              unchecked,
-              fitnessFail,
-              fitnessUnknown,
-              customRuleFail,
-              customRuleUnknown,
-            }),
+            ...verdict,
             coverage: {
-              complete: unchecked === 0,
+              // Complete means the run judged everything in scope: no
+              // whole-file failure (unchecked), no unresolvable site (#595),
+              // and at least one file analyzed (#599 — a run that judged
+              // nothing has no verdict to claim).
+              complete: unchecked === 0 && blindSpotCount === 0 && analyzed > 0,
               projects: Object.keys(graph.nodes).length,
               analyzedFiles: analyzed,
               imports: imports.length,
               notAnalyzed: failures
                 .filter(isWholeFileFailure)
                 .map(({ sourceFile, reason }) => ({ file: sourceFile, reason })),
-              blindSpots: failures
-                .filter((failure) => !isWholeFileFailure(failure))
-                .map(({ sourceFile, line, column, reason }) => ({
-                  file: sourceFile,
-                  line,
-                  column,
-                  reason,
-                })),
+              blindSpots: blindSpotRows(failures),
               notes,
               coverageGaps,
             },
@@ -1020,6 +1049,10 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
           // inspected" fact does (`../report/text.mjs`'s `formatReport`).
           notes,
           coverageGaps,
+          // `formatReport` (text) renders these beside the headline; the SARIF
+          // face files the same facts as warning notifications. Both faces of
+          // one run name the same clauses, in the same order.
+          coverageIncomplete: verdict.reasons,
           // `formatReport` (text) reads this to annotate an unresolved
           // decisionRef inline; `formatSarif` files each one as a warning
           // notification. Both faces of one run name the same citations, in
@@ -1052,5 +1085,9 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     customRulesDeclared: customRules !== null,
     analyzed,
     unchecked,
+    // The site-level count `verdictFor` needs: `cli.mjs` passes this whole
+    // return through `verdictFor` for the process's exit code, so a count the
+    // envelope saw but the exit code did not would let the two disagree.
+    blindSpots: blindSpotCount,
   };
 }

@@ -282,8 +282,12 @@ describe("analysis failures", () => {
     const text = formatFailures([
       { sourceFile: "a/b.ts", line: 3, column: 8, reason: "TypeScript cannot resolve 'x'" },
     ]);
-    expect(text).toContain("not verdicts");
-    expect(text).toContain("the run does not fail on them");
+    expect(text).toContain("blind spots inside files that were analyzed");
+    // The class line is load-bearing (#595, narrowed): a blind spot without
+    // the dynamic marker is an unresolvable literal specifier, and the run
+    // DID fail over it — a reader must not read "could not be resolved" as
+    // "and the run moved on".
+    expect(text).toContain("withheld the run's verdict");
     expect(text).toContain("a/b.ts:3:8  TypeScript cannot resolve 'x'");
   });
 

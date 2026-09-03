@@ -1024,12 +1024,22 @@ export function analyzeTypeScript({ sourceFile, text, workspace, lang }) {
       // permanent (`report/text.mjs`'s `formatFailures` is where the report
       // explains the two, and `cli.mjs` counts `unchecked` by
       // `failure.line === null`). A NON-LITERAL argument keeps its line/column
-      // for the same reason: it is genuinely not statically knowable.
+      // for the same reason: it is genuinely not statically knowable. The
+      // non-literal class carries `dynamic: true` (contract.md) — the field
+      // that tells the envelope's completeness law and every verdict lane a
+      // declared limit apart from an unresolvable literal specifier, which is
+      // the class that withholds the verdict (#595, narrowed).
       if (reason) {
         result.failures.push(
           site.literal && namesDeclaredProject(site.specifier, workspace)
             ? fileFailure(sourceFile, reason)
-            : { sourceFile, line: line + 1, column: character + 1, reason },
+            : {
+                sourceFile,
+                line: line + 1,
+                column: character + 1,
+                reason,
+                ...(site.literal ? {} : { dynamic: true }),
+              },
         );
       }
     }

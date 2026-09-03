@@ -162,7 +162,7 @@ describe("discoverCommand", () => {
     ).toThrow(/refusing to judge/);
   });
 
-  it("reports blind spots without failing the descriptive run", () => {
+  it("reports blind spots and flips the descriptive run to no-verdict (#595)", () => {
     const result = discoverCommand(
       commandContext({
         analysis: {
@@ -174,8 +174,11 @@ describe("discoverCommand", () => {
         },
       }),
     );
-    expect(result.status).toBe("ok");
-    expect(result.coverage.complete).toBe(true);
+    // #595: the snapshot's edge list may be missing whatever that site
+    // would have drawn — the observation is reported, the completeness
+    // claim is not.
+    expect(result.status).toBe("no-verdict");
+    expect(result.coverage.complete).toBe(false);
     expect(result.coverage.blindSpots).toEqual([
       { file: "libs/core/a.go", line: 7, column: 2, reason: "unresolvable specifier" },
     ]);

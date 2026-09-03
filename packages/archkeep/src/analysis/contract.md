@@ -160,16 +160,24 @@ which one it was:
 - A **literal package import that names no declared project** — an uninstalled
   third-party package, a dependency of some other workspace — is a normal,
   permanent state: a workspace with packages is not a missing workspace edge.
-  It stays a POSITIONED failure (`line`/`column` set), the "blind spot" that
-  does not fail the run.
+  It stays a POSITIONED failure (`line`/`column` set), the "blind spot" — and
+  it is a concrete specifier the resolver was asked and could not answer, so
+  since the loud-coverage contract (#595) it also withholds the run's
+  verdict: `check` exits 3 over it rather than reading as a pass.
 - A **dynamic import with a non-literal argument** — `import(somePath)`, or an
   `import()` whose argument is a template literal interpolating a variable — is
   the recurring permanent case. The site is real, the target is not knowable
   statically, and the honest answer is one record with `kind: "dynamic"`, the
   source text of the argument as `specifier`, and a POSITIONED failure
-  (`line`/`column` set). The rest of the file's imports were still judged; a
-  reader can see this one site in the report's blind-spot section and the run
-  does not fail on it.
+  (`line`/`column` set) carrying `dynamic: true`. The rest of the file's
+  imports were still judged; a reader can see this one site in the report's
+  blind-spot section. It does not withhold the verdict: a non-literal argument
+  is the language itself declaring the target computed at runtime, a limit
+  static analysis cannot close, so the run's pass claim covers the statically
+  judgeable surface. The `dynamic` field is what keeps the envelope builder
+  from reading this row as unjudged work (`report/json.mjs`'s completeness
+  law) — the two permanent classes are disclosed alike and judged
+  differently, and the field is the only thing that tells them apart.
 
 Silently dropping any of them is how a boundary gets bypassed.
 
@@ -207,6 +215,10 @@ fails loudly rather than reporting an empty result that reads as "clean".
 
 `failures` carries `{ sourceFile, line, column, reason }`; `line`/`column` are
 `null` when the failure is about the file as a whole rather than one position.
+A positioned failure produced from a non-literal `import()`/`require()`
+argument additionally carries `dynamic: true` — the field the verdict and
+envelope layers read to tell the declared dynamic limit apart from an
+unresolvable literal specifier.
 Both arrays are always present and always arrays — a consumer never has to
 check for `undefined` before iterating.
 

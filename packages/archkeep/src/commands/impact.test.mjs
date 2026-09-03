@@ -519,26 +519,28 @@ describe("impactCommand", () => {
     expect(result.report.json).toContain('"command": "impact"');
   });
 
-  it("includes blind spots from non-whole-file failures", () => {
-    const result = impactCommand(
-      "alpha",
-      commandContext({
-        analysis: {
-          analyzed: 6,
-          imports: [],
-          failures: [
-            {
-              sourceFile: "libs/alpha/a.go",
-              line: 7,
-              column: 2,
-              reason: "unresolvable specifier",
-            },
-          ],
-        },
-      }),
-    );
-    expect(result.status).toBe("ok");
-    expect(result.coverage.complete).toBe(true);
+  it("refuses an impact set over an unresolved site instead of reporting complete (#595)", () => {
+    // #595: an unresolved site may hide an edge the impact set needs — the
+    // refusal (not a warning beside the set) is the loud direction.
+    expect(() =>
+      impactCommand(
+        "alpha",
+        commandContext({
+          analysis: {
+            analyzed: 6,
+            imports: [],
+            failures: [
+              {
+                sourceFile: "libs/alpha/a.go",
+                line: 7,
+                column: 2,
+                reason: "unresolvable specifier",
+              },
+            ],
+          },
+        }),
+      ),
+    ).toThrow(/the graph has incomplete coverage — 1 import site could not be resolved/);
   });
 
   it("never exits 1 — impact is descriptive", () => {

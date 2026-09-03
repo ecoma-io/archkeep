@@ -277,14 +277,19 @@ describe("e3 — impact and scenario alignments name what the events name", () =
   });
 
   it("scenario's evolutionAlignment.boundaries agree with impact's on both sides", async () => {
-    // A change that APPLIES (the beta→alpha edge does not exist yet) and leaves
-    // the alpha→beta edge standing, so both sides of the comparison are
-    // expected to name the same crossing edge the events name.
+    // A change that APPLIES — `edgeType` is what makes `dependency_added`
+    // apply rather than refuse (#598) — and leaves the alpha→beta edge
+    // standing, so both sides of the comparison are expected to name the
+    // same crossing edge the events name.
     const scenarioFile = join(root, "..", "cross-command-scenario.json");
     writeFileSync(
       scenarioFile,
       `${JSON.stringify(
-        { changes: [{ type: "dependency_added", source: "beta", target: "alpha" }] },
+        {
+          changes: [
+            { type: "dependency_added", source: "beta", target: "alpha", edgeType: "static" },
+          ],
+        },
         null,
         2,
       )}\n`,
@@ -299,13 +304,60 @@ describe("e3 — impact and scenario alignments name what the events name", () =
         "json",
       ]);
       expect(run.exitCode).toBe(EXIT.ok);
+      // The change applied (#598): a refused change leaves `refused`
+      // populated, and every alignment assertion below would then pass off
+      // the standing edge alone — the exact way this test stayed green while
+      // pinning nothing.
+      expect(run.envelope.result.refused).toBeUndefined();
       expect(run.envelope.result.current.evolutionAlignment.boundaries).toContain(CROSSING);
       expect(run.envelope.result.scenario.evolutionAlignment.boundaries).toContain(CROSSING);
-      // The applied direction (#598): the virtual edge must EXIST in the
-      // scenario alignment, not only the standing edge survive. RED until
-      // the change object carries `edgeType` — a refused `dependency_added`
-      // never produces it, and the standing-edge assertions above pass
-      // either way.
+    } finally {
+      rmSync(scenarioFile, { force: true });
+    }
+  });
+
+  it("the applied direction lands in the TARGET side's alignment (#598)", async () => {
+    // The alignment names edges INTO the target (`buildEvolutionAlignment`
+    // reads them off `computeImpactConstraints`, which keys its rows by
+    // dependent), so the beta→alpha virtual edge never reaches `scenario
+    // beta`'s alignment — it reaches `scenario alpha`'s, where beta is a
+    // dependent and beta→alpha is an edge into the target. Asserting it
+    // there is the applied-direction pin, and it stays RED without
+    // `edgeType`: a refused `dependency_added` adds no dependent, so no
+    // alignment boundary over this edge can exist, and the before-state
+    // assertion below shows the alignment named none of it beforehand.
+    const scenarioFile = join(root, "..", "cross-command-scenario-applied.json");
+    writeFileSync(
+      scenarioFile,
+      `${JSON.stringify(
+        {
+          changes: [
+            { type: "dependency_added", source: "beta", target: "alpha", edgeType: "static" },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    try {
+      const run = await archJson([
+        "scenario",
+        "alpha",
+        "--scenario-file",
+        scenarioFile,
+        "--format",
+        "json",
+      ]);
+      expect(run.exitCode).toBe(EXIT.ok);
+      expect(run.envelope.result.refused).toBeUndefined();
+      // Before: nobody depends on alpha, so the alignment names no boundary
+      // over this edge — the before-state that makes the assertion below
+      // load-bearing rather than vacuous.
+      expect(run.envelope.result.current.evolutionAlignment.boundaries).not.toContain(VIRTUAL);
+      // After: beta is a dependent and beta→alpha is an edge into the
+      // target — the alignment names it, spelled by the one identity
+      // function the events use.
+      expect(run.envelope.result.scenario.impact.dependents).toContain("beta");
       expect(run.envelope.result.scenario.evolutionAlignment.boundaries).toContain(VIRTUAL);
     } finally {
       rmSync(scenarioFile, { force: true });

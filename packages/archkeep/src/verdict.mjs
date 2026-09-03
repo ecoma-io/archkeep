@@ -4,10 +4,10 @@
  *
  * Both sit here rather than in `../cli.mjs` because two callers need them and
  * only one of the two is the CLI shell: `./commands/check.mjs` words its own
- * `--format json` envelope from `verdictFor`, and `../cli.mjs`'s `runCheck`
- * takes the process's exit code from the same call. `../cli.mjs` re-exports
- * `EXIT` under its own name, so every importer that already reads it from
- * there keeps working.
+ * `--format json` envelope's `status` and `exitCode` from `verdictFor`, and
+ * `../cli.mjs`'s `runCheck` takes the process's exit code from the same call.
+ * `../cli.mjs` re-exports `EXIT` under its own name, so every importer that
+ * already reads it from there keeps working.
  */
 
 import { buildDecision } from "./report/evidence.mjs";
@@ -18,6 +18,29 @@ export const EXIT = Object.freeze({
   usage: 2,
   error: 3,
 });
+/**
+ * The coverage clauses of a no-verdict reason, spelled once — the strings
+ * `verdictFor` joins into `decision.reason` and `check`'s text report renders
+ * beside its headline, so the two faces cannot disagree about WHY a run
+ * failed to reach a verdict. The clauses cover only the three coverage axes
+ * (whole-file failures, unresolved sites, zero analysis); the intent,
+ * fitness and custom-rule clauses stay local to `verdictFor` because they
+ * name verdict surfaces the coverage counts cannot see.
+ *
+ * @param {{unchecked: number, blindSpots: number, analyzed: number}} counts
+ * @returns {string[]} One clause per failed coverage axis, in pinned order.
+ */
+export function coverageIncompleteReasons({ unchecked, blindSpots, analyzed }) {
+  return [
+    unchecked > 0
+      ? `${unchecked} file${unchecked === 1 ? "" : "s"} could not be analyzed — coverage incomplete`
+      : null,
+    blindSpots > 0
+      ? `${blindSpots} import site${blindSpots === 1 ? "" : "s"} could not be resolved — coverage incomplete`
+      : null,
+    analyzed === 0 ? "no file in scope could be analyzed — coverage incomplete" : null,
+  ].filter(Boolean);
+}
 /**
  * The one place that turns a run's counts into the verdict every format
  * agrees on. `runCheck` uses it for the process's exit code; `check` uses the
@@ -41,8 +64,12 @@ export const EXIT = Object.freeze({
  * with no findings), which makes a regression in this mapping a loud error
  * rather than a silent one.
  *
- * @param {{violations: number, declaredEdgeFindings: number, goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number, intentUnresolvedDecisionRefs?: number, unchecked: number, fitnessFail?: number, fitnessUnknown?: number, customRuleFail?: number, customRuleUnknown?: number}} counts
- * @returns {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3, decision: object}}
+ * @param {{violations: number, declaredEdgeFindings: number, goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number, intentUnresolved: number, intentUnresolvedDecisionRefs?: number, unchecked: number, analyzed: number, blindSpots: number, fitnessFail?: number, fitnessUnknown?: number, customRuleFail?: number, customRuleUnknown?: number}} counts
+ * @returns {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3, reasons: string[], decision: object}}
+ *   `reasons` is the coverage clause list behind this verdict — the
+ *   could-not-look clauses on the findings and no-verdict lanes, empty on the
+ *   clean one. `decision.reason` joins it with the intent/fitness/custom
+ *   clauses where the lane is no-verdict.
  */
 export function verdictFor({
   violations,
@@ -53,11 +80,14 @@ export function verdictFor({
   intentUnresolved,
   intentUnresolvedDecisionRefs = 0,
   unchecked,
+  analyzed,
+  blindSpots,
   fitnessFail = 0,
   fitnessUnknown = 0,
   customRuleFail = 0,
   customRuleUnknown = 0,
 }) {
+  const coverageReasons = coverageIncompleteReasons({ unchecked, blindSpots, analyzed });
   if (
     violations > 0 ||
     declaredEdgeFindings > 0 ||
@@ -74,9 +104,10 @@ export function verdictFor({
     return {
       status: "findings",
       exitCode: EXIT.violations,
+      reasons: coverageReasons,
       decision: buildDecision({
         status: "findings",
-        coverageComplete: unchecked === 0,
+        coverageComplete: unchecked === 0 && blindSpots === 0 && analyzed > 0,
         findings:
           violations +
           declaredEdgeFindings +
@@ -90,52 +121,63 @@ export function verdictFor({
   }
   if (
     unchecked > 0 ||
+    // An unresolvable site was seen but never judged (#595): named in
+    // coverage.blindSpots, and echoed here so the exit says it too — a
+    // pass over a site the run could not read claims a verdict it does
+    // not hold.
+    blindSpots > 0 ||
+    // A run that analyzed nothing judged nothing (#599) — a scope that
+    // selected no project-owned file, or in-scope files no analyzer
+    // claims. Judging nothing is not finding nothing.
+    analyzed === 0 ||
     intentUnresolved > 0 ||
     intentUnresolvedDecisionRefs > 0 ||
     fitnessUnknown > 0 ||
     customRuleUnknown > 0
   ) {
+    // The list is built before the return so `decision.reason` joins the very
+    // array the envelope's `reasons` carries — one list, two renderings, and
+    // neither can drift from the other.
+    const reasons = [
+      ...coverageReasons,
+      // The could-not-look condition, named so a reader knows WHICH half of
+      // the run did not reach a verdict (I3). When read-only coverage and
+      // intent both failed, name both — a reason naming only the file count
+      // would hide the unresolved intent boundary from a reader acting on
+      // the reason alone (it stays visible in result.intent.unresolved, and
+      // status is still no-verdict, so nothing is silent). Each clause below
+      // is independent of the others — none is gated on a sibling clause
+      // being zero — so a tree that fails on several axes at once names
+      // every one of them, not only the first the array happens to hit.
+      intentUnresolved > 0
+        ? `${intentUnresolved} architecture-intent boundary or row${intentUnresolved === 1 ? "" : "s"} could not be established`
+        : null,
+      intentUnresolvedDecisionRefs > 0
+        ? `${intentUnresolvedDecisionRefs} intent row${intentUnresolvedDecisionRefs === 1 ? "" : "s"} ${intentUnresolvedDecisionRefs === 1 ? "cites" : "cite"} a decisionRef that does not resolve`
+        : null,
+      fitnessUnknown > 0
+        ? `${fitnessUnknown} fitness functions${fitnessUnknown === 1 ? "" : "s"} could not be determined`
+        : null,
+      customRuleUnknown > 0
+        ? `${customRuleUnknown} custom rule${customRuleUnknown === 1 ? "" : "s"} could not be judged`
+        : null,
+    ].filter(Boolean);
     return {
       status: "no-verdict",
       exitCode: EXIT.error,
+      reasons,
       decision: buildDecision({
         status: "no-verdict",
-        coverageComplete: unchecked === 0,
+        coverageComplete: unchecked === 0 && blindSpots === 0 && analyzed > 0,
         findings: 0,
-        // The could-not-look condition, named so a reader knows WHICH half of
-        // the run did not reach a verdict (I3). When read-only coverage and
-        // intent both failed, name both — a reason naming only the file count
-        // would hide the unresolved intent boundary from a reader acting on
-        // the reason alone (it stays visible in result.intent.unresolved, and
-        // status is still no-verdict, so nothing is silent). Each clause below
-        // is independent of the others — none is gated on a sibling clause
-        // being zero — so a tree that fails on several axes at once names
-        // every one of them, not just the first the array happens to check.
-        reason: [
-          unchecked > 0
-            ? `${unchecked} file${unchecked === 1 ? "" : "s"} could not be analyzed — coverage incomplete`
-            : null,
-          intentUnresolved > 0
-            ? `${intentUnresolved} architecture-intent boundary or row${intentUnresolved === 1 ? "" : "s"} could not be established`
-            : null,
-          intentUnresolvedDecisionRefs > 0
-            ? `${intentUnresolvedDecisionRefs} intent row${intentUnresolvedDecisionRefs === 1 ? "" : "s"} ${intentUnresolvedDecisionRefs === 1 ? "cites" : "cite"} a decisionRef that does not resolve`
-            : null,
-          fitnessUnknown > 0
-            ? `${fitnessUnknown} fitness function${fitnessUnknown === 1 ? "" : "s"} could not be determined`
-            : null,
-          customRuleUnknown > 0
-            ? `${customRuleUnknown} custom rule${customRuleUnknown === 1 ? "" : "s"} could not be judged`
-            : null,
-        ]
-          .filter(Boolean)
-          .join("; "),
+        reason: reasons.join("; "),
       }),
     };
   }
   return {
     status: "ok",
     exitCode: EXIT.ok,
+    reasons: [],
     decision: buildDecision({
       status: "ok",
       coverageComplete: true,

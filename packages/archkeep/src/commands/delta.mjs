@@ -62,7 +62,11 @@
  */
 import { createRequire } from "node:module";
 
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { stripTrailingSlashes } from "../path-util.mjs";
 import { referenceTime } from "../governance/clock.mjs";
 import {
@@ -131,10 +135,23 @@ export function refuseUnjudgeableHead(commandContext, activity) {
     );
   }
   const notAnalyzed = commandContext.analysis.failures.filter(isWholeFileFailure);
-  if (notAnalyzed.length > 0) {
+
+  const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
+  if (notAnalyzed.length > 0 || blindSpotCount > 0) {
     throw new Error(
-      `archkeep: cannot ${activity} — ${notAnalyzed.length} file` +
-        `${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed, so the evidence would ` +
+      `archkeep: cannot ${activity} — ` +
+        [
+          notAnalyzed.length > 0
+            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
+            : null,
+          blindSpotCount > 0
+            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(", ") +
+        `, so 
+the evidence would ` +
         `miss violations living there and a later classification would misread the gap as a ` +
         `code change. Fix the unanalyzed files and re-run.`,
     );
@@ -181,14 +198,7 @@ export function captureDelta(commandContext, { config }) {
       complete: true,
       analyzedFiles: analysis.analyzed,
       notAnalyzed: [],
-      blindSpots: analysis.failures
-        .filter((failure) => !isWholeFileFailure(failure))
-        .map(({ sourceFile, line, column, reason }) => ({
-          file: sourceFile,
-          line,
-          column,
-          reason,
-        })),
+      blindSpots: blindSpotRows(analysis.failures),
     },
     graph,
     records: analysis.imports,
@@ -689,9 +699,7 @@ export async function deltaCommand(
     analyzedFiles: analysis.analyzed,
     imports: analysis.imports.length,
     notAnalyzed: [],
-    blindSpots: analysis.failures
-      .filter((failure) => !isWholeFileFailure(failure))
-      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    blindSpots: blindSpotRows(analysis.failures),
     notes,
   };
 

@@ -29,7 +29,11 @@
  */
 import { createHash } from "node:crypto";
 
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { canonicalizeJson } from "../canonical.mjs";
 import { DEFAULT_WORKSPACE_LAYOUT } from "../rules/specifiers.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
@@ -222,7 +226,14 @@ export function graphCommand(commandContext, { config = null } = {}) {
     .filter(isWholeFileFailure)
     .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
 
-  const complete = notAnalyzed.length === 0;
+  // An unresolvable import site was seen but never judged (#595): the edges
+  // out of it may be missing from this snapshot, so the snapshot must not
+  // claim `complete` over it. It still reports — status no-verdict, exit 3 —
+  // naming the site in `coverage.blindSpots`, the same contract `check` runs.
+  const blindSpots = blindSpotRows(commandContext.analysis.failures);
+  const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
+
+  const complete = notAnalyzed.length === 0 && blindSpotCount === 0;
   const status = complete ? "ok" : "no-verdict";
   const exitCode = complete ? 0 : 3;
 
@@ -245,9 +256,7 @@ export function graphCommand(commandContext, { config = null } = {}) {
     analyzedFiles: commandContext.analysis.analyzed,
     imports: commandContext.analysis.imports.length,
     notAnalyzed,
-    blindSpots: commandContext.analysis.failures
-      .filter((f) => !isWholeFileFailure(f))
-      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    blindSpots,
     notes: [],
   };
 

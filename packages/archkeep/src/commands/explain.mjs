@@ -79,7 +79,11 @@
  * was: the field, and its rendered lines, exist only when the comparison was
  * requested.
  */
-import { isWholeFileFailure } from "../analysis/source-util.mjs";
+import {
+  blindSpotRows,
+  isWholeFileFailure,
+  unresolvableLiteralCount,
+} from "../analysis/source-util.mjs";
 import { UsageError } from "../errors.mjs";
 import { evaluate } from "../rules/index.mjs";
 import { findConstraintsFor } from "../rules/tags.mjs";
@@ -369,7 +373,13 @@ export function explainCommand(site, commandContext, config, options = {}) {
     .filter(isWholeFileFailure)
     .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
 
-  const complete = notAnalyzed.length === 0;
+  // An unresolvable site was seen but never judged (#595): the graph is
+  // missing whatever edge that site would have drawn, and rules that judge
+  // the whole graph (circularity, lazy loading) would answer over a gap. The
+  // explanation still reports — status no-verdict — naming the site in
+  // `coverage.blindSpots`, the same contract `graph`/`discover` run.
+  const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
+  const complete = notAnalyzed.length === 0 && blindSpotCount === 0;
   const status = complete ? "ok" : "no-verdict";
 
   // Find the import record at this site.
@@ -422,14 +432,7 @@ export function explainCommand(site, commandContext, config, options = {}) {
         analyzedFiles: commandContext.analysis.analyzed,
         imports: commandContext.analysis.imports.length,
         notAnalyzed,
-        blindSpots: commandContext.analysis.failures
-          .filter((f) => !isWholeFileFailure(f))
-          .map(({ sourceFile, line, column, reason }) => ({
-            file: sourceFile,
-            line,
-            column,
-            reason,
-          })),
+        blindSpots: blindSpotRows(commandContext.analysis.failures),
         notes: [],
       };
 
@@ -576,9 +579,7 @@ export function explainCommand(site, commandContext, config, options = {}) {
     analyzedFiles: commandContext.analysis.analyzed,
     imports: commandContext.analysis.imports.length,
     notAnalyzed,
-    blindSpots: commandContext.analysis.failures
-      .filter((f) => !isWholeFileFailure(f))
-      .map(({ sourceFile, line, column, reason }) => ({ file: sourceFile, line, column, reason })),
+    blindSpots: blindSpotRows(commandContext.analysis.failures),
     notes: [],
   };
 

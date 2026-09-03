@@ -412,9 +412,19 @@ Nothing that cannot enforce reports success — see the invariant in
   non-waived violation `delta` classifies as introduced; so is a change that
   produced consequences its declaration did not cover; so is a rule artifact
   that fails catalog integrity — and each of the four exits 3 where it could
-  not look. Every other verb in `cli.mjs`'s `COMMANDS` table only ever reads,
-  so a command that finds something reports it without claiming the
-  boundary-violation exit code.
+  not look. Blind spots ride that lane too, with one class line
+  (`src/analysis/contract.md` owns it): an unresolvable LITERAL specifier
+  withholds the verdict (#595 — a concrete question the run could not
+  answer), while a non-literal `import()` argument is a declared limit that
+  does not — the language says the target is computed at runtime, and this
+  repository's own ten config-loader sites are why the line exists. The
+  loud-coverage contract covers every command: `graph`/`discover`/`explain`/
+  `context` report `no-verdict` over unjudged work, and
+  `drift`/`reconcile`/`debt`/`fitness`/`waivers`/`impact`/`scenario`/`diff`/
+  `history`/`delta` refuse loudly rather than print a verdict over a graph
+  the run could not fully read. Every other verb in `cli.mjs`'s `COMMANDS`
+  table only ever reads, so a command that finds something reports it without
+  claiming the boundary-violation exit code.
   `--format json` wraps the same verdict in the versioned envelope
   `src/report/json.mjs` builds and `docs/reference/json-output.md`
   documents — a third rendering, changing no exit code and no byte of the text
