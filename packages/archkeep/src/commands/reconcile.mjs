@@ -43,13 +43,10 @@
  * comparison (never `localeCompare`), so two runs over an unchanged tree and
  * intent produce byte-identical text and JSON.
  */
-import {
-  blindSpotRows,
-  isWholeFileFailure,
-  unresolvableLiteralCount,
-} from "../analysis/source-util.mjs";
+import { blindSpotRows } from "../analysis/source-util.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { judgeIntent } from "../architecture-intent/judge.mjs";
 import { computeIntentFingerprint } from "../architecture-intent/intent-fingerprint.mjs";
 import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
@@ -88,9 +85,12 @@ function intentRows(intent) {
  * @param {{loadIntentOverride?: (root: string) => Promise<object>}} [io]
  *   Injectable intent loader for tests.
  * @param {{propose?: boolean}} [options] `--propose` adds the ranked candidate list.
- * @returns {Promise<{status: "ok", reconcile: object, coverage: object,
+ * @returns {Promise<{status: "ok"|"no-verdict", reconcile?: object, coverage: object,
  *   report: {text: string, json: string}}>}
- * @throws {Error} on every condition the header lists, all exit-3 class.
+ *   `status: "no-verdict"` carries no `reconcile` payload — the verdict was
+ *   withheld, and the envelope's `coverage` block is the whole answer (#608).
+ * @throws {Error} on every condition the header lists except the coverage one,
+ *   which returns instead of throwing.
  */
 export async function reconcileCommand(commandContext, io = {}, options = {}) {
   const { root, provider, marker, analysis } = commandContext;
@@ -98,29 +98,12 @@ export async function reconcileCommand(commandContext, io = {}, options = {}) {
   refuseIncompleteGraph(commandContext);
 
   // A reconcile verdict cannot be established over a tree it could not fully
-  // read — the same fail-closed condition `drift` enforces.
-  const notAnalyzed = analysis.failures
-    .filter(isWholeFileFailure)
-    .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
-
-  const blindSpotCount = unresolvableLiteralCount(analysis.failures);
-
-  if (notAnalyzed.length > 0 || blindSpotCount > 0) {
-    throw new Error(
-      `archkeep: reconcile has incomplete coverage — ` +
-        [
-          notAnalyzed.length > 0
-            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
-            : null,
-          blindSpotCount > 0
-            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(", ") +
-        `, so every "absent" score ` +
-        `would be ambiguous between "gone" and "never seen". Fix the unanalyzed files and re-run.`,
-    );
+  // read — the same fail-closed condition `drift` enforces, refused through
+  // the same structured envelope `./coverage-verdict.mjs` builds (#608): the
+  // verdict is withheld in-band, where a parser and `--output` can read it.
+  const completeness = coverageVerdict(commandContext);
+  if (!completeness.complete) {
+    return coverageRefusal({ command: "reconcile", commandContext, what: "reconciling" });
   }
 
   const intent = await (io.loadIntentOverride ?? loadIntent)(root, {

@@ -1,4 +1,12 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -619,7 +627,17 @@ export const moduleBoundaryOptions = {
   const cliContext = () => ({
     cwd: root,
     readGraph: () => declaredHeadGraph(),
-    listFiles: () => ["nx.json", "module-boundaries.config.mjs", "baseline.json", "intent.json"],
+    // `libs/api/src/index.js` is owned by the acme-api project, so the run
+    // judges at least one file — a run that judged nothing is the no-verdict
+    // lane (#599) and would refuse before any of the refusals these tests
+    // pin.
+    listFiles: () => [
+      "nx.json",
+      "module-boundaries.config.mjs",
+      "libs/api/src/index.js",
+      "baseline.json",
+      "intent.json",
+    ],
   });
 
   const streams = () => {
@@ -632,10 +650,12 @@ export const moduleBoundaryOptions = {
     };
   };
 
-  /** A real workspace on disk: marker, law, baseline evidence, manifest. */
+  /** A real workspace on disk: marker, law, one owned source, baseline evidence, manifest. */
   const writeWorkspace = () => {
     writeFileSync(join(root, "nx.json"), "{}\n");
     writeFileSync(join(root, "module-boundaries.config.mjs"), `${law}\n`);
+    mkdirSync(join(root, "libs", "api", "src"), { recursive: true });
+    writeFileSync(join(root, "libs", "api", "src", "index.js"), 'export const api = "api";\n');
     const { text } = captureDelta(contextOf(), { config: config() });
     writeFileSync(join(root, "baseline.json"), text);
     writeFileSync(join(root, "intent.json"), `${JSON.stringify(manifest(), null, 2)}\n`);

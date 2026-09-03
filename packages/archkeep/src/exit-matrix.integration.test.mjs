@@ -247,6 +247,12 @@ spawnSync(
 writeTree(changeRoot, {
   "nx.json": NX_JSON,
   "module-boundaries.config.mjs": PERMISSIVE_LAW,
+  // One project-owned, analyzable source file: a run that judged nothing is
+  // the no-verdict lane (#599, shared with the throw family since #608), so
+  // the ok-side rows here need a workspace the run actually judged. Import-
+  // free, so it adds no blind spot and no edge to a fixture pinned on
+  // matched.
+  "libs/domain/domain.js": 'export const name = "domain";\n',
 });
 spawnSync("git", ["init", "-q", "-b", "main"], {
   cwd: changeRoot,
@@ -335,7 +341,7 @@ const seamFor = {
   change: () => ({
     cwd: changeRoot,
     readGraph: () => GRAPH,
-    listFiles: () => ["nx.json", "module-boundaries.config.mjs"],
+    listFiles: () => ["nx.json", "module-boundaries.config.mjs", "libs/domain/domain.js"],
   }),
   evolution: () => ({
     cwd: evolutionRoot,
@@ -683,3 +689,28 @@ describe("the verb→exit matrix", { timeout: SPAWN_TEST_BUDGET_MS }, () => {
     }
   });
 });
+
+describe(
+  "the coverage refusal through the real dispatch (#608)",
+  { timeout: SPAWN_TEST_BUDGET_MS },
+  () => {
+    it("delta --format sarif over an unjudgeable tree answers the envelope, not a crash", async () => {
+      // A withheld verdict has no findings, so the refusal carries no SARIF
+      // face — the compare answers EVERY `--format` with the envelope JSON,
+      // both on stdout and under `--output`. Before #608 this run was a stderr
+      // throw with an empty stdout; the pin is the envelope that replaced it,
+      // and the `undefined`-report TypeError a naive sarif branch would raise.
+      const run = { ...streams(), ...seamFor.incomplete() };
+      const exit = await runCli(["delta", deltaBaseline, "--format", "sarif"], run);
+      expect(exit).toBe(EXIT.error);
+      const envelope = JSON.parse(run.lines.out.join("\n"));
+      expect(envelope.status).toBe("no-verdict");
+      expect(envelope.command).toBe("delta");
+      expect(envelope.decision.verdict).toBe("unknown");
+      expect(envelope.result).toBeUndefined();
+      expect(envelope.coverage.notAnalyzed).toContainEqual(
+        expect.objectContaining({ file: "libs/orphan/orphan.go" }),
+      );
+    });
+  },
+);

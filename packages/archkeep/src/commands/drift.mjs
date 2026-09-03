@@ -31,9 +31,11 @@
  *
  * - the intent file cannot be read or parsed (strict JSON, validated) → throw
  *   → exit 3;
- * - the observed side is incomplete (`notAnalyzed` non-empty) → exit 3, the
- *   same reasoning as `diff` — every "project missing" would be ambiguous
- *   between "gone" and "never seen";
+ * - the observed side is incomplete → the structured no-verdict refusal
+ *   (`./coverage-verdict.mjs`), exit 3, the same reasoning as `diff` — every
+ *   "project missing" would be ambiguous between "gone" and "never seen" —
+ *   but in the envelope, not on stderr: the same status/coverage contract
+ *   `graph`/`context` return over the same condition (#608);
  * - an Nx workspace has polyglot manifests but the plugin is not registered →
  *   exit 3, the same refusal `graph`/`diff` make;
  * - a boundary or row side matched no observed project → exit 3, the same
@@ -74,12 +76,9 @@
  * everywhere, never `localeCompare` — so two runs over an unchanged tree and
  * intent produce byte-identical text and JSON.
  */
-import {
-  blindSpotRows,
-  isWholeFileFailure,
-  unresolvableLiteralCount,
-} from "../analysis/source-util.mjs";
+import { blindSpotRows } from "../analysis/source-util.mjs";
 import { buildDependencies, buildProjects } from "./graph.mjs";
+import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { judgeIntent } from "../architecture-intent/judge.mjs";
@@ -294,11 +293,13 @@ function intentRows(intent) {
  *   row's `decisionRef`. `configError` carries a boundary-policy load failure
  *   the caller chose not to throw at the load site — rethrown here, unchanged,
  *   only if an intent row actually cites something.
- * @returns {Promise<{status: "ok", drift: object, coverage: object,
+ * @returns {Promise<{status: "ok"|"no-verdict", drift?: object, coverage: object,
  *   report: {text: string, json: string}}>}
- * @throws {Error} on every condition the header lists, all exit-3 class, plus
- *   a malformed ADR registry — the same loud refusal `provenance` makes for
- *   the identical read.
+ *   `status: "no-verdict"` carries no `drift` payload — the verdict was
+ *   withheld, and the envelope's `coverage` block is the whole answer (#608).
+ * @throws {Error} on every condition the header lists except the coverage one,
+ *   which returns instead of throwing, plus a malformed ADR registry — the
+ *   same loud refusal `provenance` makes for the identical read.
  */
 export async function driftCommand(commandContext, io = {}) {
   const { root, provider, marker, analysis } = commandContext;
@@ -306,28 +307,13 @@ export async function driftCommand(commandContext, io = {}) {
   refuseIncompleteGraph(commandContext);
 
   // A drift verdict cannot be established over a tree it could not fully read.
-  const notAnalyzed = analysis.failures
-    .filter(isWholeFileFailure)
-    .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
-
-  const blindSpotCount = unresolvableLiteralCount(analysis.failures);
-
-  if (notAnalyzed.length > 0 || blindSpotCount > 0) {
-    throw new Error(
-      `archkeep: drift has incomplete coverage — ` +
-        [
-          notAnalyzed.length > 0
-            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
-            : null,
-          blindSpotCount > 0
-            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(", ") +
-        `, so every "project missing" ` +
-        `would be ambiguous between "gone" and "never seen". Fix the unanalyzed files and re-run.`,
-    );
+  // The refusal is the structured one the graph family speaks (#608): the
+  // verdict is withheld in-band — status "no-verdict", exit 3, a `coverage`
+  // block naming every file and site the run could not judge — where a parser
+  // and `--output` can read it, not on stderr where only a human can.
+  const completeness = coverageVerdict(commandContext);
+  if (!completeness.complete) {
+    return coverageRefusal({ command: "drift", commandContext, what: "judging drift" });
   }
 
   const intent = await (io.loadIntentOverride ?? loadIntent)(root, {

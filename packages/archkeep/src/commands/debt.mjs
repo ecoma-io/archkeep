@@ -45,16 +45,13 @@
  * when the ledger was taken; the aging itself is snapshot-relative
  * (`../governance/debt-ledger.mjs`).
  */
-import {
-  blindSpotRows,
-  isWholeFileFailure,
-  unresolvableLiteralCount,
-} from "../analysis/source-util.mjs";
+import { blindSpotRows } from "../analysis/source-util.mjs";
 import { judgeIntent } from "../architecture-intent/judge.mjs";
 import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
 import { computeDebtLedger } from "../governance/debt-ledger.mjs";
 import { readEvents } from "../governance/evolution-store.mjs";
 import { formatDebtReport } from "../report/debt-text.mjs";
+import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { buildObserved, refuseIncompleteGraph } from "./drift.mjs";
@@ -79,9 +76,12 @@ import { readSnapshots } from "./history.mjs";
  *   the `history`/`drift` pattern. `events` is the event-store directory the
  *   `--events <dir>` CLI flag resolves; absent ⇒ no lifecycle refs (the
  *   ledger says so in `lifecycle.note`), never guessed.
- * @returns {Promise<{status: "ok", ledger: object, coverage: object,
+ * @returns {Promise<{status: "ok"|"no-verdict", ledger?: object, coverage: object,
  *   report: {text: string, json: string}}>}
- * @throws {Error} on every condition the header lists, all exit-3 class.
+ *   `status: "no-verdict"` carries no `ledger` payload — the verdict was
+ *   withheld, and the envelope's `coverage` block is the whole answer (#608).
+ * @throws {Error} on every condition the header lists except the coverage one,
+ *   which returns instead of throwing.
  */
 export async function debtCommand(dir, commandContext, options = {}) {
   const { root, provider, marker, analysis } = commandContext;
@@ -90,27 +90,16 @@ export async function debtCommand(dir, commandContext, options = {}) {
 
   refuseIncompleteGraph(commandContext);
 
-  const notAnalyzed = analysis.failures
-    .filter(isWholeFileFailure)
-    .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
-
-  const blindSpotCount = unresolvableLiteralCount(analysis.failures);
-  if (notAnalyzed.length > 0) {
-    throw new Error(
-      `archkeep: debt has incomplete coverage — ` +
-        [
-          notAnalyzed.length > 0
-            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
-            : null,
-          blindSpotCount > 0
-            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(", ") +
-        `, so every "project missing" ` +
-        `would be ambiguous between "gone" and "never seen". Fix the unanalyzed files and re-run.`,
-    );
+  // The ledger is a claim about the tree the run read, refused through the one
+  // structured contract `./coverage-verdict.mjs` builds (#608). This gate used
+  // to check whole-file failures only and then claim `coverage.complete: true`
+  // beside `blindSpots` that could carry an unjudged site — which the envelope
+  // law refuses as a programming error, so a blind-spot-only tree crashed
+  // here. The unified completeness refuses it as the verdict-withholding state
+  // it is, before the snapshot directory is read.
+  const completeness = coverageVerdict(commandContext);
+  if (!completeness.complete) {
+    return coverageRefusal({ command: "debt", commandContext, what: "aging the debt ledger" });
   }
 
   // The snapshot directory is the sole source of truth for aging; a directory

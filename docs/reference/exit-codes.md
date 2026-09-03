@@ -166,6 +166,35 @@ determined. The workspace-law axis its envelope reports is informational and
 never moves this exit code. [../usage/change.md](../usage/change.md) owns the
 model.
 
+### Where the incomplete-coverage refusal appears
+
+Every incomplete-coverage refusal in the commands above arrives as the
+envelope itself: `status: "no-verdict"`, `exitCode: 3`, no `result` payload,
+the whole-file failures named in `coverage.notAnalyzed` and the unjudged sites
+in `coverage.blindSpots`, and the text report carrying the same clauses
+`check` prints. The refusal rides stdout like any report and reaches `--output`
+like any report, so a parser and a terminal reader get the same withheld
+verdict (`delta` and `change` additionally carry their usual `decision`, with
+`decision.reason` naming the clauses). This is one contract for two families
+that used to differ: `check`/`graph`/`discover`/`explain`/`context` answered
+this way already, while `drift`, `reconcile`, `waivers`, `debt`, `fitness`,
+`impact`, `scenario`, `diff`, `delta` (compare) and `change` threw the same
+refusal as a stderr sentence with no envelope and nothing under `--output`.
+
+The refusals that stay throws are the ones about a file or a declaration
+rather than this tree, and they still exit 3 through the catch with nothing on
+stdout and nothing written under `--output`: a baseline that cannot be read,
+parsed, or holds a foreign schema version; an incomplete BASELINE snapshot; a
+provider mismatch between baseline and head; a missing or malformed change
+intent; the unregistered-plugin graph over polyglot manifests; and the capture
+modes (`delta --capture`, `history --capture`), whose product is a snapshot
+file with no envelope contract to refuse through.
+
+The zero-analyzed workspace is refused the same way everywhere the verdict is
+a claim: a scope that selected no file any analyzer claims has judged nothing,
+and "judged nothing" is not "found nothing" (#599) -- the clause is `no file in
+scope could be analyzed -- coverage incomplete`.
+
 `rules verify` is the only `rules` subcommand whose verdict carries an exit:
 it exits 1 when catalog integrity finds a violation -- a digest mismatch, an
 artifact the host refuses, one that escaped its directory -- and 3 when the
@@ -173,9 +202,10 @@ catalog could not be read, so "this artifact does not match the bytes its
 catalog recorded" never reads as "the catalog could not be looked at".
 [custom-rules.md](custom-rules.md) owns the model.
 
-`diff` also refuses an incomplete baseline or current workspace (exit 3, no
-diff), because every "removed" entry would be ambiguous between a real change
-and a coverage gap.
+`diff` also refuses an incomplete workspace (exit 3, no diff) -- now as the
+envelope above -- because every "removed" entry would be ambiguous between a
+real change and a coverage gap; an incomplete BASELINE snapshot stays a throw,
+a caller error about a file rather than a coverage fact about this tree.
 
 `fitness` also exits 3 when the policy declares no `fitness` at all -- judging
 nothing is not the same as judging an empty table, and a `--config` pointing at

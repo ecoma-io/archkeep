@@ -102,7 +102,7 @@ wrapper.
 | `workspace`     | `{root, provider, marker, provenance}`   | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"archkeep.json"`, `".moon"`, or `".config/moon"`) — except on an `adr` envelope, which reads no project model and carries `provider: "native"`, `marker: "docs/adr"` ([adr.md](adr.md)). `provenance` is the git origin of the run, or `null` when git is unavailable — see below. |
 | `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `command`       | string                                   | Which command produced this envelope. `"check"`, `"graph"`, `"diff"`, `"delta"`, `"change"`, `"discover"`, `"drift"`, `"reconcile"`, `"waivers"`, `"fitness"`, `"history"`, `"trajectory"`, `"evolution"`, `"health"`, `"report"`, `"debt"`, `"impact"`, `"scenario"`, `"explain"`, `"context"`, `"provenance"`, or `"adr"`.                                                                                                                                   |
-| `decision`      | object \| absent                         | The same verdict in the four-state vocabulary — `{verdict, reason?, notApplicableReason?, sampleTime?}`. Present on every `check` and `delta` envelope; see [evidence.md](evidence.md).                                                                                                                                                                                                                                                                        |
+| `decision`      | object \| absent                         | The same verdict in the four-state vocabulary — `{verdict, reason?, notApplicableReason?, sampleTime?}`. Present on every `check`, `delta` and `change` envelope, and on the incomplete-coverage refusal of `delta` and `change` with an `unknown` verdict whose `reason` names the coverage clauses (#608); see [evidence.md](evidence.md).                                                                                                                   |
 | `coverage`      | object                                   | What the run inspected, and what it could not. See below.                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `result`        | object                                   | The command's own payload — for `check`, the violations, the three workspace-level checks (`goWork`, `tsconfigPaths`, `declaredEdges`), and — when the workspace has one — the architecture-intent verdict. See below.                                                                                                                                                                                                                                         |
 
@@ -276,22 +276,26 @@ workspace. It takes a file path, not a Git ref:
 archkeep diff baseline.json --format json
 ```
 
-Both sides must be complete. An incomplete baseline or current workspace exits
-`3` and produces no diff, because an apparent added or removed edge would then
-be ambiguous between a real change and a coverage gap. `diff` is descriptive:
-changes do not make it exit `1`; a completed comparison always exits `0`.
+Both sides must be complete. An incomplete current workspace exits `3` through
+the structured no-verdict envelope — no `result`, the unread files and sites
+named in `coverage` — because an apparent added or removed edge would then be
+ambiguous between a real change and a coverage gap. An incomplete BASELINE
+snapshot stays a throw (exit `3`, no envelope): a file nobody captured
+correctly is a caller error about that file, not a coverage fact about this
+tree. `diff` is descriptive: changes do not make it exit `1`; a completed
+comparison always exits `0`.
 
-| field             | type                                   | meaning                                                                                                                                                                                                                                                                                                                     |
-| ----------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `baseline`        | `{path, projects, edges, toolVersion}` | The baseline file path, its project/edge counts, and the `tool.version` that produced the snapshot (or `null` if the baseline predates that field). A consumer can compare `toolVersion` with the current version to audit same-schema semantic drift.                                                                      |
-| `head`            | `{projects, edges}`                    | The current workspace's project/edge counts.                                                                                                                                                                                                                                                                                |
-| `addedProjects`   | `{name, root, tags}[]`                 | Projects present in the current workspace but absent from the baseline, sorted by `name`.                                                                                                                                                                                                                                   |
-| `removedProjects` | `{name, root, tags}[]`                 | Projects present in the baseline but absent from the current workspace, sorted by `name`.                                                                                                                                                                                                                                   |
-| `changedProjects` | `{name, changes}[]`                    | Projects present in both but with different metadata, sorted by `name`. Each `changes` entry is `{field, baseline, head}`. Detected fields: `tags` (array content), `type` (`"app"`/`"lib"`/`"e2e"`/`null`), `root` (project directory).                                                                                    |
-| `addedEdges`      | `{source, target, type}[]`             | Edges present in the current workspace but absent from the baseline, sorted by the full edge identity.                                                                                                                                                                                                                      |
-| `removedEdges`    | `{source, target, type}[]`             | Edges present in the baseline but absent from the current workspace, sorted by the full edge identity.                                                                                                                                                                                                                      |
-| `policyMismatch`  | `{baseline, head}` or absent           | Present when both the baseline snapshot and the head run carry a policy fingerprint and they disagree. `baseline.fingerprint` and `head.fingerprint` are the SHA-256 hex strings. The rule-impact section may reflect the policy change rather than a structural change. Absent when no mismatch or no config was provided. |
-| `ruleImpact`      | `{introduced, resolved}` or absent     | Present when a boundary config with `depConstraints` was provided. `introduced` lists violations the added edges introduce; `resolved` lists violations the removed edges resolve. Covers only tag-based constraints (3 of 15 violation types) — see `coverage.notes`. Absent when no config was provided.                  |
+| field             | type                                               | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ----------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `baseline`        | `{path, projects, edges, toolVersion, provenance}` | The baseline file path, its project/edge counts, the `tool.version` that produced the snapshot (or `null` if the baseline predates that field), and the git provenance the baseline itself recorded — `{commit, remote, dirty}`, `null` when the snapshot predates the field — so a consumer can tell WHICH revision the diff is measured against without opening the baseline file. A consumer can compare `toolVersion` with the current version to audit same-schema semantic drift. |
+| `head`            | `{projects, edges}`                                | The current workspace's project/edge counts.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `addedProjects`   | `{name, root, tags}[]`                             | Projects present in the current workspace but absent from the baseline, sorted by `name`.                                                                                                                                                                                                                                                                                                                                                                                               |
+| `removedProjects` | `{name, root, tags}[]`                             | Projects present in the baseline but absent from the current workspace, sorted by `name`.                                                                                                                                                                                                                                                                                                                                                                                               |
+| `changedProjects` | `{name, changes}[]`                                | Projects present in both but with different metadata, sorted by `name`. Each `changes` entry is `{field, baseline, head}`. Detected fields: `tags` (array content), `type` (`"app"`/`"lib"`/`"e2e"`/`null`), `root` (project directory).                                                                                                                                                                                                                                                |
+| `addedEdges`      | `{source, target, type}[]`                         | Edges present in the current workspace but absent from the baseline, sorted by the full edge identity.                                                                                                                                                                                                                                                                                                                                                                                  |
+| `removedEdges`    | `{source, target, type}[]`                         | Edges present in the baseline but absent from the current workspace, sorted by the full edge identity.                                                                                                                                                                                                                                                                                                                                                                                  |
+| `policyMismatch`  | `{baseline, head}` or absent                       | Present when both the baseline snapshot and the head run carry a policy fingerprint and they disagree. `baseline.fingerprint` and `head.fingerprint` are the SHA-256 hex strings. The rule-impact section may reflect the policy change rather than a structural change. Absent when no mismatch or no config was provided.                                                                                                                                                             |
+| `ruleImpact`      | `{introduced, resolved}` or absent                 | Present when a boundary config with `depConstraints` was provided. `introduced` lists violations the added edges introduce; `resolved` lists violations the removed edges resolve. Covers only tag-based constraints (3 of 15 violation types) — see `coverage.notes`. Absent when no config was provided.                                                                                                                                                                              |
 
 ## `result` (for `command: "delta"`)
 
@@ -302,9 +306,13 @@ envelope — the snapshot has its own independent `schemaVersion`. Unlike
 introduced violation is not covered by an active waiver or any custom-rule
 finding was introduced, `"no-verdict"` (exit `3`) when any item — violation,
 unresolvable record, or custom-rule item — could not be classified, and
-`"ok"` (exit `0`) otherwise. Its refusals (unreadable or
-foreign-schema baseline, provider mismatch, incomplete coverage on either
-side) exit `3` having built no envelope at all. The envelope carries a
+`"ok"` (exit `0`) otherwise. Its refusals split by what they refuse: an
+incomplete head arrives AS the no-verdict envelope — `status: "no-verdict"`,
+no `result`, the unread files and sites named in `coverage`, `decision`
+carrying an `unknown` verdict whose `reason` names the same clauses — while an
+unreadable or foreign-schema baseline, a provider mismatch, and incomplete
+coverage on the capture side throw, exit `3` having built no envelope at all.
+The envelope carries a
 `decision` block, like `check`'s. [../usage/delta.md](../usage/delta.md) owns
 the classification model.
 The same compare run, given `--event-out <dir>`, additionally appends the
@@ -358,12 +366,15 @@ declared, any declared change never happened, or any declared constraint
 failed; `"no-verdict"` (exit `3`) when the base identity could not be proven
 or a declared constraint could not be determined; `"ok"` (exit `0`) when the
 reconciliation is matched with every declared constraint passing. Its
-refusals (unreadable or foreign-schema baseline, provider mismatch, a
-manifest that fails shape or reference validation, a catch-all manifest that
-declares no rows while carrying a summary — the breadth guard
-[../usage/change.md](../usage/change.md) documents — incomplete head
-coverage, the unregistered-plugin graph) exit `3` having built no envelope at
-all. The envelope carries a `decision` block.
+refusals split by what they refuse: incomplete head coverage arrives AS the
+no-verdict envelope — no `result`, the unread files and sites named in
+`coverage`, `decision` carrying an `unknown` verdict whose `reason` names the
+clauses — while an unreadable or foreign-schema baseline, a provider mismatch,
+a manifest that fails shape or reference validation, a catch-all manifest that
+declares no rows while carrying a summary (the breadth guard
+[../usage/change.md](../usage/change.md) documents), and the
+unregistered-plugin graph throw, exit `3` having built no envelope at all.
+The envelope carries a `decision` block.
 [../usage/change.md](../usage/change.md) owns the model. With
 `--event-out <dir>`, the run additionally writes the canonical reconcile
 EvolutionEvent to `<dir>` (see [../concepts/evolution.md](../concepts/evolution.md));
@@ -386,8 +397,10 @@ flag was passed.
 
 `drift` compares the observed architecture to the workspace's declared intended
 one — the tracked root `architecture-intent.json`. It is descriptive: it never
-exits `1`, and it exits `3` when coverage is incomplete or the intent cannot be
-verified against the observed graph. The intended side is a contract, and its
+exits `1`, and it exits `3` when coverage is incomplete — refused as this
+no-verdict envelope itself, `result` absent and the gaps named in `coverage`
+(#608) — or the intent cannot be verified against the observed graph. The
+intended side is a contract, and its
 envelope names it by fingerprint so "no drift" always reads as a claim about a
 specific declared intent.
 
@@ -495,8 +508,9 @@ crossed a partition boundary and the values that placed each end
 
 `reconcile` scores the declared intended model against the observed architecture
 element by element — the inverse of `drift`. It is descriptive: it never exits
-`1`, and it exits `3` when coverage is incomplete or the intent cannot be
-verified against the observed graph. It never writes into
+`1`, and it exits `3` when coverage is incomplete — refused as this no-verdict
+envelope itself, `result` absent and the gaps named in `coverage` (#608) — or
+the intent cannot be verified against the observed graph. It never writes into
 `architecture-intent.json`; with `--propose` the envelope carries the ranked
 candidate list of model edits under the always-true `proposed` /
 `notAuthoritative` markers.
@@ -682,9 +696,10 @@ be _established_, not about whether the architecture is healthy.
 architecture-debt ledger: every waiver the boundary config accepts, every
 `optional` intent row not yet built, and every drift finding the intent judge
 reports — each aged across the snapshots by the owning project. It is
-descriptive: it never exits `1`. An unreadable or malformed history directory,
-incomplete graph coverage, or an intent that cannot be verified is a no-verdict
-run (exit 3) that produces no envelope, never an empty ledger.
+descriptive: it never exits `1`. Incomplete graph coverage arrives as the
+no-verdict envelope itself — no `result`, the gaps named in `coverage` (#608),
+never an empty ledger — while an unreadable or malformed history directory or
+an intent that cannot be verified throws, exit 3 with no envelope at all.
 
 | field        | type       | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -701,7 +716,9 @@ run (exit 3) that produces no envelope, never an empty ledger.
 
 `impact` takes a project name and lists every project that transitively depends
 on it. It is descriptive: it never exits `1`, because a reverse-reachability
-listing is never a finding.
+listing is never a finding. An incomplete analysis withholds the listing as
+`status: "no-verdict"` (exit 3) — no `result`, the unread files and sites named
+in `coverage` (#608) — rather than report a blast radius over a partial read.
 
 | field                                                                            | type                 | meaning                                                                                                                                                                                                                                                                                                                                                             |
 | -------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -728,7 +745,9 @@ listing is never a finding.
 |                                                                                  |
 | `scenario <project> --scenario-file <path>` evaluates a hypothetical change to   |
 | the dependency graph and compares the current impact against the scenario        |
-| impact. It is descriptive: it exits `0` on completion, never `1`. Every result   |
+| impact. It is descriptive: it exits `0` on completion, never `1`. An incomplete  |
+| analysis withholds the evaluation as `status: "no-verdict"` (exit 3, no          |
+| `result`, the unread files and sites named in `coverage`). Every result          |
 | is marked `virtual` and `notAuthoritative` — a what-if projection, never an      |
 | authoritative verdict.                                                           |
 |                                                                                  |

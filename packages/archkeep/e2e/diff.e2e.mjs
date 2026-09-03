@@ -236,7 +236,9 @@ describe("diff incompleteness, metadata, and determinism", () => {
       expect(refused.json.exitCode).toBe(3);
       expect(refused.json.coverage.complete).toBe(false);
       expect(refused.json.coverage.notAnalyzed.length).toBeGreaterThan(0);
-      expect(refused.stdout).toContain("coverage incomplete");
+      // The unreadable file is named with the reason the analyzer recorded —
+      // the same clause the text face renders under "coverage incomplete".
+      expect(refused.json.coverage.notAnalyzed[0].reason).toContain("could not be read");
 
       // The refusal was about coverage, not architecture: restoring the file
       // restores the empty self-diff.

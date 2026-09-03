@@ -89,7 +89,19 @@ function commandContext(overrides = {}) {
       analyzed: 2,
       analyzedFiles: [],
       exemptedFiles: [],
-      imports: [{ sourceFile: "libs/widget/src/lib.rs", specifier: "other", line: 1, column: 1 }],
+      imports: [
+        {
+          sourceFile: "libs/widget/src/lib.rs",
+          specifier: "other",
+          line: 1,
+          column: 1,
+          // The `spelling` triple the analysis contract requires on every
+          // import site (`src/analysis/contract.md`) — commands that judge
+          // the import sites (waivers, delta) evaluate them through the real
+          // rule engine, which refuses a record without it.
+          spelling: { path: false, relative: false, namesOnly: true },
+        },
+      ],
       failures: [],
     },
     owned: [],
@@ -156,6 +168,25 @@ function expectRefusal(result, label) {
   return envelope;
 }
 
+/**
+ * The refusal assertions for a tree whose only failures are unresolved sites:
+ * the same status/exit/completeness, the site row carried, and
+ * `notAnalyzed` honestly empty — the crash this pins used to claim
+ * `complete: true` beside that same site row, which the envelope law refused
+ * as a programming error.
+ */
+function expectBlindSpotRefusal(result, label) {
+  expect(result.status, label).toBe("no-verdict");
+  const envelope = envelopeOf(result);
+  expect(envelope.status, label).toBe("no-verdict");
+  expect(envelope.exitCode, label).toBe(3);
+  expect(envelope.coverage.complete, label).toBe(false);
+  expect(envelope.coverage.notAnalyzed, label).toEqual([]);
+  expect(envelope.coverage.blindSpots, label).toContainEqual(SITE_ROW);
+  expect(result.report.text, label).toContain("coverage incomplete");
+  return envelope;
+}
+
 describe("drift", () => {
   it("returns the no-verdict envelope instead of throwing over incomplete coverage", async () => {
     expectRefusal(await driftCommand(incompleteContext(), withIntent()), "drift");
@@ -199,7 +230,11 @@ describe("impact", () => {
 });
 
 describe("scenario", () => {
-  const scenarioJson = JSON.stringify({ changes: [] });
+  // One declared dependency the scenario adds — the input must carry at least
+  // one change to parse at all.
+  const scenarioJson = JSON.stringify({
+    changes: [{ type: "dependency_added", source: "widget", target: "other" }],
+  });
 
   it("returns the no-verdict envelope instead of throwing over incomplete coverage", () => {
     expectRefusal(scenarioCommand("widget", scenarioJson, incompleteContext(), LAW), "scenario");
@@ -384,7 +419,7 @@ describe("change and delta compare over a real captured baseline", () => {
     const result = await deltaCommand("/baseline.json", incompleteContext({ root }), {
       config: LAW,
       readBaseline: () => baselineOf(),
-      now: 0,
+      now: "2024-01-01T00:00:00.000Z",
     });
     expectRefusal(result, "delta");
   });
@@ -411,21 +446,61 @@ describe("the gates that refused only whole-file failures (#608)", () => {
     });
 
   it("waivers refuses instead of crashing over a blind-spot-only tree", async () => {
-    expectRefusal(await waiversCommand(blindSpotOnly(), LAW), "waivers");
+    expectBlindSpotRefusal(await waiversCommand(blindSpotOnly(), LAW), "waivers");
   });
 
   it("debt refuses instead of crashing over a blind-spot-only tree", async () => {
-    expectRefusal(await debtCommand("/no-such-history", blindSpotOnly(), {}), "debt");
+    expectBlindSpotRefusal(await debtCommand("/no-such-history", blindSpotOnly(), {}), "debt");
   });
 
   it("fitness refuses instead of crashing over a blind-spot-only tree", async () => {
     const law = { ...LAW, fitness: [{ name: "always-applies", condition: { type: "always" } }] };
-    expectRefusal(await fitnessCommand(blindSpotOnly(), { config: law }), "fitness");
+    expectBlindSpotRefusal(await fitnessCommand(blindSpotOnly(), { config: law }), "fitness");
   });
 });
 
 describe("usage errors are not refusals", () => {
   it("a project missing from the graph stays a UsageError", () => {
     expect(() => impactCommand("nope", commandContext(), LAW)).toThrow(UsageError);
+  });
+});
+
+describe("a run that judged nothing refuses too (#599's axis, now shared)", () => {
+  // The third completeness axis the unified verdict reads: a run whose scope
+  // selected no analyzable file has judged nothing, and `ok` over it would be
+  // "checked, and fine" about a run that looked at nothing. `check` has run
+  // this lane since #599; the commands that used to throw skipped it
+  // entirely — a zero-analysis workspace answered `matched`/`observed` from
+  // evidence nobody collected. No failures at all — the clause is the
+  // zero-analysis one, and `coverage.notAnalyzed`/`coverage.blindSpots` are
+  // honestly empty.
+  const judgedNothing = () =>
+    commandContext({
+      analysis: { analyzed: 0, analyzedFiles: [], exemptedFiles: [], imports: [], failures: [] },
+    });
+
+  it("drift refuses a zero-analysis workspace", async () => {
+    const result = await driftCommand(judgedNothing(), withIntent());
+    expect(result.status).toBe("no-verdict");
+    const envelope = envelopeOf(result);
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toEqual([]);
+    expect(envelope.coverage.blindSpots).toEqual([]);
+    expect(result.report.text).toContain("no file in scope could be analyzed");
+  });
+
+  it("delta compare refuses a zero-analysis workspace", async () => {
+    // The reader throws to prove the refusal precedes any baseline work.
+    const result = await deltaCommand("/baseline.json", judgedNothing(), {
+      config: LAW,
+      readBaseline: () => {
+        throw new Error("baseline must not be read when coverage refuses");
+      },
+      now: "2024-01-01T00:00:00.000Z",
+    });
+    expect(result.status).toBe("no-verdict");
+    expect(JSON.parse(result.report.json).decision.verdict).toBe("unknown");
+    expect(result.report.text).toContain("no file in scope could be analyzed");
   });
 });

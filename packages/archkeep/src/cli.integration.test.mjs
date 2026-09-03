@@ -4479,13 +4479,43 @@ export const boundarySuppressions = [
     // never judged contributes no finding, so a waiver naming it would read as
     // "covers nothing" about a finding the run never looked at. `check` treats
     // the same tree as no-verdict (3); the waiver surface must do the same
-    // rather than complete with "1 waiver on the table".
+    // rather than complete with "1 waiver on the table". #608 unified the
+    // machine contract with `check`'s: the envelope — not a stderr throw — is
+    // the load-bearing face, so this pins the parsed envelope and the absence
+    // of any waiver payload beside it.
     const streams = {
       ...waiversEnv(),
       listFiles: () => [...waiversFiles, "libs/domain/absent.go"],
     };
-    expect(await runCli(["waivers"], streams)).toBe(EXIT.error);
-    expect(streams.lines.err.join("\n")).toContain("incomplete coverage");
+    expect(await runCli(["waivers", "--format", "json"], streams)).toBe(EXIT.error);
+    const envelope = JSON.parse(streams.lines.out.join("\n"));
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(EXIT.error);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toContainEqual(
+      expect.objectContaining({ file: "libs/domain/absent.go" }),
+    );
+    expect(envelope.result).toBeUndefined();
+
+    // The same refusal through `--output`: the report is still written — the
+    // envelope is the load-bearing face, reachable under the flag — and the
+    // stderr confirmation names the refusal instead of the old
+    // "1 waiver on the table → …" success line. That stderr literal is the
+    // one all eight command summaries print over a refused run (#608).
+    const outStreams = {
+      ...waiversEnv(),
+      listFiles: () => [...waiversFiles, "libs/domain/absent.go"],
+    };
+    expect(
+      await runCli(["waivers", "--format", "json", "--output", "waivers-refusal.json"], outStreams),
+    ).toBe(EXIT.error);
+    expect(outStreams.lines.err.join("\n")).toContain(
+      "no verdict — the coverage refusal is in the report",
+    );
+    expect(outStreams.lines.err.join("\n")).not.toContain("on the table");
+    expect(JSON.parse(readFileSync(join(waiversRoot, "waivers-refusal.json"), "utf8")).status).toBe(
+      "no-verdict",
+    );
   });
 });
 

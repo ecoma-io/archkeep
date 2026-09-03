@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -727,6 +727,13 @@ export const moduleBoundaryOptions = {
 `;
       writeFileSync(join(root, "nx.json"), "{}\n");
       writeFileSync(join(root, "module-boundaries.config.mjs"), `${law}\n`);
+      // One project-owned source file: the run has to have JUDGED something
+      // for its verdict to be a claim (#599 — a workspace whose scope selects
+      // no analyzable file is the no-verdict lane, not a matched
+      // reconciliation). Import-free, so it adds no blind spot and no
+      // violation to a fixture pinned on `matched`.
+      mkdirSync(join(root, "libs", "api", "src"), { recursive: true });
+      writeFileSync(join(root, "libs", "api", "src", "index.js"), 'export const api = "api";\n');
       const { text } = captureDelta(contextOf(), { config: config() });
       writeFileSync(join(root, "baseline.json"), text);
       writeFileSync(join(root, "intent.json"), `${JSON.stringify(manifest(), null, 2)}\n`);
@@ -743,6 +750,7 @@ export const moduleBoundaryOptions = {
           listFiles: () => [
             "nx.json",
             "module-boundaries.config.mjs",
+            "libs/api/src/index.js",
             "baseline.json",
             "intent.json",
           ],

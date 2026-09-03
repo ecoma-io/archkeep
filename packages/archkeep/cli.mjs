@@ -923,13 +923,20 @@ async function runDiff(options, { cwd, env }) {
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
     if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
-    env.err(`archkeep: diff complete → ${options.output}`);
+    // A refused run still writes the report — but "diff complete" would deny
+    // the refusal that report carries (#608).
+    if (result.status === "no-verdict") {
+      env.err(`archkeep: no verdict — the coverage refusal is in the report → ${options.output}`);
+    } else {
+      env.err(`archkeep: diff complete → ${options.output}`);
+    }
   } else {
     env.out(report);
   }
 
-  // Diff is descriptive: 0 when it completes, never 1.
-  return EXIT.ok;
+  // Diff is descriptive: 0 when it completes, never 1 — and an incomplete
+  // head is the structured no-verdict envelope's exit 3, not a clean 0 (#608).
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
 }
 
 /**
@@ -1003,19 +1010,31 @@ async function runDelta(options, { cwd, env }) {
     return usageError ? EXIT.usage : EXIT.error;
   }
 
+  // A coverage-refused compare (#608) answers every `--format` with the
+  // envelope: a withheld verdict has no findings, so there is no SARIF log
+  // and no text table to render — and `result.report.sarif` does not even
+  // exist on the refusal, which would crash the ternary below into a
+  // TypeError where the contract says exit 3.
   const report =
-    options.format === "json"
+    result.status === "no-verdict"
       ? result.report.json
-      : options.format === "sarif"
-        ? result.report.sarif
-        : result.report.text;
+      : options.format === "json"
+        ? result.report.json
+        : options.format === "sarif"
+          ? result.report.sarif
+          : result.report.text;
 
   if (options.output) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
-    // the mechanism and the threat it closes.
+    // the mechanism and the threat it closes. A refused run still writes the
+    // report — but "delta complete" would deny the refusal it carries (#608).
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
     if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
-    env.err(`archkeep: delta complete → ${options.output}`);
+    if (result.status === "no-verdict") {
+      env.err(`archkeep: no verdict — the coverage refusal is in the report → ${options.output}`);
+    } else {
+      env.err(`archkeep: delta complete → ${options.output}`);
+    }
   } else {
     env.out(report);
   }
@@ -1023,8 +1042,10 @@ async function runDelta(options, { cwd, env }) {
   // The event the run recorded, when `--event-out` was given — the store's
   // own `duplicate` answer, so a rerun over the same transition says so
   // instead of implying a second event was appended. Capture mode refuses the
-  // flag upstream; this line runs only for a compare.
-  if (result.eventWrite !== null) {
+  // flag upstream; this line runs only for a compare. Truthy, not `!== null`:
+  // a coverage-refused run (#608) returns no `eventWrite` key at all, and a
+  // truthiness test is the one form that reads both shapes safely.
+  if (result.eventWrite) {
     env.err(
       `archkeep: evolution event ${
         result.eventWrite.duplicate ? "duplicate, already recorded" : "recorded"
@@ -1105,16 +1126,24 @@ async function runDrift(options, { cwd, env }) {
     // `drift` has no `--config` flag (`DRIFT_FLAG_HELP`) — there is no
     // override to pass, only the workspace's un-overridden default to guard.
     if (!writeOutputReport(options.output, reportText, env, cwd, null)) return EXIT.error;
-    env.err(
-      `archkeep: ${result.drift.observed.projects} projects, ${result.drift.observed.edges} edges ` +
-        `→ ${options.output}`,
-    );
+    // A refused run carries no `drift` payload to summarize — the numbers
+    // would be `undefined` — so the stderr line names the refusal instead.
+    if (result.status === "no-verdict") {
+      env.err(`archkeep: no verdict — the coverage refusal is in the report → ${options.output}`);
+    } else {
+      env.err(
+        `archkeep: ${result.drift.observed.projects} projects, ${result.drift.observed.edges} edges ` +
+          `→ ${options.output}`,
+      );
+    }
   } else {
     env.out(report);
   }
 
-  // Drift is descriptive: 0 when the comparison completes, never 1.
-  return EXIT.ok;
+  // Drift is descriptive: 0 when the comparison completes, never 1 — and an
+  // incomplete analysis is the structured no-verdict envelope's exit 3
+  // (#608), not a clean 0.
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
 }
 
 /**
@@ -1212,16 +1241,22 @@ async function runReconcile(options, { cwd, env }) {
     // `reconcile` has no `--config` flag (`RECONCILE_FLAG_HELP`) — there is no
     // override to pass, only the workspace's un-overridden default to guard.
     if (!writeOutputReport(options.output, reportText, env, cwd, null)) return EXIT.error;
-    env.err(
-      `archkeep: ${result.reconcile.observed.projects} projects, ${result.reconcile.observed.edges} edges ` +
-        `→ ${options.output}`,
-    );
+    // A refused run carries no `reconcile` payload to summarize (#608).
+    if (result.status === "no-verdict") {
+      env.err(`archkeep: no verdict — the coverage refusal is in the report → ${options.output}`);
+    } else {
+      env.err(
+        `archkeep: ${result.reconcile.observed.projects} projects, ${result.reconcile.observed.edges} edges ` +
+          `→ ${options.output}`,
+      );
+    }
   } else {
     env.out(report);
   }
 
-  // Reconcile is descriptive: 0 when the comparison completes, never 1.
-  return EXIT.ok;
+  // Reconcile is descriptive: 0 when the comparison completes, never 1 — and
+  // an incomplete analysis is the no-verdict envelope's exit 3 (#608).
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
 }
 
 /**
@@ -1320,12 +1355,18 @@ async function runChange(options, { cwd, env }) {
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
     if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
-    env.err(
-      `archkeep: change ${result.changeIntent.reconciliation.verdict} ` +
-        `(+${result.changeIntent.reconciliation.matched.length} matched, ` +
-        `!${result.changeIntent.reconciliation.unexpected.length} undeclared, ` +
-        `?${result.changeIntent.reconciliation.missingExpected.length} unfulfilled) → ${options.output}`,
-    );
+    // A coverage-refused run carries no `changeIntent` payload to summarize
+    // (#608) — the refusal's own clause list is in the written report.
+    if (result.status === "no-verdict") {
+      env.err(`archkeep: no verdict — the coverage refusal is in the report → ${options.output}`);
+    } else {
+      env.err(
+        `archkeep: change ${result.changeIntent.reconciliation.verdict} ` +
+          `(+${result.changeIntent.reconciliation.matched.length} matched, ` +
+          `!${result.changeIntent.reconciliation.unexpected.length} undeclared, ` +
+          `?${result.changeIntent.reconciliation.missingExpected.length} unfulfilled) → ${options.output}`,
+      );
+    }
   } else {
     env.out(report);
   }
@@ -1396,22 +1437,29 @@ async function runWaivers(options, { cwd, env }) {
     // only glances at this confirmation must not see "N waivers on the
     // table" and conclude that is the whole surface when a
     // `boundarySuppressions` row with no `expiresAt` is hiding something the
-    // file --output just wrote down.
-    const suppressionNote =
-      result.waivers.suppressions.length > 0
-        ? `, ${result.waivers.suppressions.length} permanent suppression` +
-          `${result.waivers.suppressions.length === 1 ? "" : "s"}`
-        : "";
-    env.err(
-      `archkeep: ${result.waivers.waivers.length} waivers${suppressionNote} on the table ` +
-        `→ ${options.output}`,
-    );
+    // file --output just wrote down. A coverage-refused run carries no
+    // `waivers` payload at all (#608) — the line names the refusal instead.
+    if (result.status === "no-verdict") {
+      env.err(`archkeep: no verdict — the coverage refusal is in the report → ${options.output}`);
+    } else {
+      const suppressionNote =
+        result.waivers.suppressions.length > 0
+          ? `, ${result.waivers.suppressions.length} permanent suppression` +
+            `${result.waivers.suppressions.length === 1 ? "" : "s"}`
+          : "";
+      env.err(
+        `archkeep: ${result.waivers.waivers.length} waivers${suppressionNote} on the table ` +
+          `→ ${options.output}`,
+      );
+    }
   } else {
     env.out(report);
   }
 
-  // Waivers is descriptive: 0 when the surface could be read, never 1.
-  return EXIT.ok;
+  // Waivers is descriptive: 0 when the surface could be read, never 1 — and
+  // an incomplete analysis is the no-verdict envelope's exit 3 (#608), the
+  // same tree `check` refuses.
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
 }
 
 /**
@@ -1469,11 +1517,16 @@ async function runFitness(options, { cwd, env }) {
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
     if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
-    env.err(
-      `archkeep: ${result.fitness.functions.length} fitness function` +
-        `${result.fitness.functions.length === 1 ? "" : "s"} judged (${result.fitness.verdict}) ` +
-        `→ ${options.output}`,
-    );
+    // A coverage-refused run carries no `fitness` payload to summarize (#608).
+    if (result.status === "no-verdict") {
+      env.err(`archkeep: no verdict — the coverage refusal is in the report → ${options.output}`);
+    } else {
+      env.err(
+        `archkeep: ${result.fitness.functions.length} fitness function` +
+          `${result.fitness.functions.length === 1 ? "" : "s"} judged (${result.fitness.verdict}) ` +
+          `→ ${options.output}`,
+      );
+    }
   } else {
     env.out(report);
   }
@@ -1535,18 +1588,24 @@ async function runImpact(options, { cwd, env }) {
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
     if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
-    env.err(
-      `archkeep: ${result.impact.dependents.length} project` +
-        `${result.impact.dependents.length === 1 ? "" : "s"}` +
-        `${result.impact.dependents.length === 1 ? " depends" : " depend"} on ${projectName} ` +
-        `→ ${options.output}`,
-    );
+    // A coverage-refused run carries no `impact` payload to summarize (#608).
+    if (result.status === "no-verdict") {
+      env.err(`archkeep: no verdict — the coverage refusal is in the report → ${options.output}`);
+    } else {
+      env.err(
+        `archkeep: ${result.impact.dependents.length} project` +
+          `${result.impact.dependents.length === 1 ? "" : "s"}` +
+          `${result.impact.dependents.length === 1 ? " depends" : " depend"} on ${projectName} ` +
+          `→ ${options.output}`,
+      );
+    }
   } else {
     env.out(report);
   }
 
-  // Impact is descriptive: 0 when it completes, never 1.
-  return EXIT.ok;
+  // Impact is descriptive: 0 when it completes, never 1 — and an incomplete
+  // analysis is the no-verdict envelope's exit 3 (#608).
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
 }
 /**
  * `scenario`'s `run`: resolves the command context, reads the scenario file,
@@ -1606,13 +1665,20 @@ async function runScenario(options, { cwd, env }) {
 
   if (options.output) {
     if (!writeOutputReport(options.output, report, env, cwd, options.config)) return EXIT.error;
-    env.err(`archkeep: scenario for "${projectName}" complete → ${options.output}`);
+    // A refused run still writes the report — but "complete" would deny the
+    // refusal that report carries (#608).
+    if (result.status === "no-verdict") {
+      env.err(`archkeep: no verdict — the coverage refusal is in the report → ${options.output}`);
+    } else {
+      env.err(`archkeep: scenario for "${projectName}" complete → ${options.output}`);
+    }
   } else {
     env.out(report);
   }
 
-  // Scenario is descriptive: 0 when it completes, never 1.
-  return EXIT.ok;
+  // Scenario is descriptive: 0 when it completes, never 1 — and an incomplete
+  // analysis is the no-verdict envelope's exit 3 (#608).
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
 }
 
 /**
@@ -2259,16 +2325,22 @@ async function runDebt(options, { cwd, env }) {
     // the mechanism and the threat it closes.
     const reportText = report.endsWith("\n") ? report : `${report}\n`;
     if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
-    env.err(
-      `archkeep: ${result.ledger.total} debt entr` +
-        `${result.ledger.total === 1 ? "y" : "ies"} → ${options.output}`,
-    );
+    // A coverage-refused run carries no `ledger` payload to summarize (#608).
+    if (result.status === "no-verdict") {
+      env.err(`archkeep: no verdict — the coverage refusal is in the report → ${options.output}`);
+    } else {
+      env.err(
+        `archkeep: ${result.ledger.total} debt entr` +
+          `${result.ledger.total === 1 ? "y" : "ies"} → ${options.output}`,
+      );
+    }
   } else {
     env.out(report);
   }
 
-  // Debt is descriptive: 0 when the ledger completes, never 1.
-  return EXIT.ok;
+  // Debt is descriptive: 0 when the ledger completes, never 1 — and an
+  // incomplete analysis is the no-verdict envelope's exit 3 (#608).
+  return result.status === "ok" ? EXIT.ok : EXIT.error;
 }
 
 /**

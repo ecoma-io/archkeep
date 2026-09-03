@@ -162,7 +162,9 @@ export function createServer(io = {}) {
         "are scoped to the change), its dependents (capped, with an overflow note), current " +
         "violations scoped to the change, drift signals (go.work, tsconfig paths), the " +
         "architecture-intent verdict when one is declared, and coverage with the exact files " +
-        "that could not be analyzed. Facts only — this never generates a plan; deciding the " +
+        "that could not be analyzed — a run that could not fully read the tree answers " +
+        '`status: "no-verdict"` with those files named, never a partial verdict dressed as ' +
+        "a whole one. Facts only — this never generates a plan; deciding the " +
         "plan is the agent's job. Equivalent to " +
         "`archkeep context <project> --plan --format json`.",
       annotations: { readOnlyHint: true },
@@ -229,7 +231,10 @@ export function createServer(io = {}) {
       description:
         "Every project that transitively depends on the named one — the blast radius of a " +
         "change — direct separated from transitive, each dependent's edge annotated with " +
-        "the constraint rows that govern it and whether that edge violates them. Per-edge " +
+        "the constraint rows that govern it and whether that edge violates them. If the run " +
+        "could not fully read the tree, the dependents list is withheld: the answer is " +
+        '`status: "no-verdict"` (exitCode 3) naming the unread files and import sites in ' +
+        "`coverage` — never a blast radius computed over a partial read. Per-edge " +
         "coverage is narrower than a full check (tag constraints only); run " +
         "`archkeep_check` for the complete verdict. Equivalent to " +
         "`archkeep impact <project> --format json`.",
@@ -253,6 +258,9 @@ export function createServer(io = {}) {
         "check asks whether the current architecture violates the applicable laws; drift " +
         "asks whether reality has moved away from what was declared. Requires a tracked " +
         "intent; a workspace without one is refused (use `archkeep_propose` to draft one). " +
+        'A run that could not fully read the tree answers `status: "no-verdict"` ' +
+        "(exitCode 3) with the unread files and import sites named in `coverage` — no " +
+        "findings are reported over a partial read. " +
         "Equivalent to `archkeep drift --format json`.",
       annotations: { readOnlyHint: true },
       inputSchema: z.strictObject({
@@ -273,7 +281,10 @@ export function createServer(io = {}) {
         "on every violation entry: the workspace author's declared guidance and the " +
         "governing row's own allow list, verbatim when the row declares either, `null` when " +
         "it declares none. Pass the `file`, `line` and `column` exactly as the " +
-        "finding reported them (1-based). Equivalent to " +
+        "finding reported them (1-based). A run that could not fully read the tree still " +
+        'explains the one site asked about, with `status: "no-verdict"` and the unread ' +
+        "files named in `coverage` so the judgment is never mistaken for a whole-tree one. " +
+        "Equivalent to " +
         "`archkeep explain <file>:<line>:<column> --format json`.",
       annotations: { readOnlyHint: true },
       inputSchema: z.strictObject({
@@ -380,7 +391,10 @@ export function createServer(io = {}) {
         "the workspace would look like after those changes, including new or resolved " +
         "violations, compared against the current state. The scenario is a JSON object " +
         "describing one or more changes (see scenario-evaluation.mjs for the schema). " +
-        "The evaluation is read-only — every output field carries a `virtual: true` " +
+        'The evaluation is withheld as `status: "no-verdict"` (exitCode 3) when the run ' +
+        "could not fully read the tree — the unread files and import sites are named in " +
+        "`coverage`, never a what-if computed over a partial graph. The evaluation is " +
+        "read-only — every output field carries a `virtual: true` " +
         "marker. Equivalent to `archkeep scenario <project> --scenario-file <file> " +
         "--format json`.",
       annotations: { readOnlyHint: true },
