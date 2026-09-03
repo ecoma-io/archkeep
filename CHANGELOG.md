@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.21.0](https://github.com/ecoma-io/archkeep/compare/v0.20.1...v0.21.0) (2026-09-03)
+
+
+### Features
+
+* **archkeep:** compose provenance graph — nodes, edges, claims, causal chains ([#566](https://github.com/ecoma-io/archkeep/issues/566)) ([7ea9711](https://github.com/ecoma-io/archkeep/commit/7ea971109bef51f4d1bfbac4641cef5b10a0e356))
+* **archkeep:** extract shared evaluation primitives ([#564](https://github.com/ecoma-io/archkeep/issues/564)) ([120888e](https://github.com/ecoma-io/archkeep/commit/120888e4250c8cc0512d5c029165d45d0272b7a4))
+* **archkeep:** hypothetical re-evaluation, edge mutation semantics, base provenance ([#565](https://github.com/ecoma-io/archkeep/issues/565)) ([278c48c](https://github.com/ecoma-io/archkeep/commit/278c48c34b811393fb9e3e92fa15964f150ebab6))
+* close architecture intelligence gaps A-D ([#571](https://github.com/ecoma-io/archkeep/issues/571)) ([a1015b5](https://github.com/ecoma-io/archkeep/commit/a1015b56e90ed93e2157cf38b69f1e5128b07e7a))
+* close Evidence-Complete gaps — completeness model, scenario identity, envelope shape ([#573](https://github.com/ecoma-io/archkeep/issues/573)) ([23827ee](https://github.com/ecoma-io/archkeep/commit/23827ee2113d7dfe5071e0755c6f8fbb60bfafb4))
+
+
+### Bug Fixes
+
+* **archkeep:** add missing JSDoc type properties for provenance graph and completeness ([#569](https://github.com/ecoma-io/archkeep/issues/569)) ([149ff59](https://github.com/ecoma-io/archkeep/commit/149ff5998c4a4378283020afde0e5c438a98694b))
+* **archkeep:** include governance/evidence in overallComplete ([#562](https://github.com/ecoma-io/archkeep/issues/562)) ([0dcb0f1](https://github.com/ecoma-io/archkeep/commit/0dcb0f1debbfeffff3dd5d0064de14184ea7d795))
+* resolve 3 failure patterns in adversarial-verification tests ([#567](https://github.com/ecoma-io/archkeep/issues/567)) ([3594c21](https://github.com/ecoma-io/archkeep/commit/3594c21354d2c9039eefc5c411642014703fd9cb))
+* update test assertions for completeness and envelope-shape snapshot ([a1015b5](https://github.com/ecoma-io/archkeep/commit/a1015b56e90ed93e2157cf38b69f1e5128b07e7a))
+* update test assertions for completeness and envelope-shape snapshot ([149ff59](https://github.com/ecoma-io/archkeep/commit/149ff5998c4a4378283020afde0e5c438a98694b))
+* update test assertions for completeness and envelope-shape snapshot ([ab11fa9](https://github.com/ecoma-io/archkeep/commit/ab11fa95b963b6b32323653007db514d714017db))
+
 ## [0.20.1](https://github.com/ecoma-io/archkeep/compare/v0.20.0...v0.20.1) (2026-09-02)
 
 
