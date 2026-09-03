@@ -26,7 +26,7 @@
           "type": "source-evidence",
           "path": "src/commands/context.mjs",
           "assertion": "Only commands/context.mjs imports providers — the designated orchestration layer",
-          "sha256": "a881d92b6ddacf8650d7a3e5071bf3176ccacc9d9cb788e1faf241e462e3d055"
+          "sha256": "7f566c06afbb175337529bd9bdc42465f8849498b932abf6a77fe0290a0cd13c"
         }
       ],
       "status": "proven"
@@ -40,7 +40,7 @@
           "type": "behavioral-test",
           "path": "src/report/json.test.mjs",
           "assertion": "JSON envelope throws on status=ok + incomplete coverage, status/exitCode disagreement, coverage.complete/notAnalyzed disagreement",
-          "sha256": "53313e4904ff97309a43bd8ed2f37bfd74fa87862f898eb75d5351f526e692d2"
+          "sha256": "a371d36b89b10c5a4bda4d9e9a2e3bde114256c1377eb95699c9f0f195aabc4a"
         },
         {
           "type": "source-evidence",
@@ -66,25 +66,25 @@
           "type": "behavioral-test",
           "path": "src/intent/intent.test.mjs",
           "assertion": "analysis output conforms to the frozen contract schema (no extra verdict/policy fields); analysis output is invariant under project tag changes (three workspaces differing only in project tag fields compared byte-for-byte)",
-          "sha256": "2463a5b8f92de98562360eb3c5defe6703160b81e43c572ee4d21800594d1fa6"
+          "sha256": "6ed86cb5e7af94b56fa2af3d2da5d45d58937fbbf316105da0224d0060e88582"
         },
         {
           "type": "architecture-test",
           "path": "src/intent/intent.test.mjs",
           "assertion": "the gate walks every production analysis module and fails when judging vocabulary (judge/forbid/permit/allow/ban) appears in code",
-          "sha256": "2463a5b8f92de98562360eb3c5defe6703160b81e43c572ee4d21800594d1fa6"
+          "sha256": "6ed86cb5e7af94b56fa2af3d2da5d45d58937fbbf316105da0224d0060e88582"
         },
         {
           "type": "source-evidence",
           "path": "src/analysis/contract.md",
           "assertion": "Analysis record is a superset of a graph edge — 5 of 15 violations decided on raw specifier",
-          "sha256": "ecab7d49267cba1959bb19b63c61e472f5612e1ef60543b88980cb30c7a84f09"
+          "sha256": "56d2db7816ba5ffc5fbe9e299f7d5e270a857b42eb54bd3bea7c05da17be595b"
         },
         {
           "type": "source-evidence",
           "path": "AGENTS.md",
           "assertion": "src/graph/ is a lossy view of analysis, on purpose; src/analysis/ never judges",
-          "sha256": "c20c79f05254bc059b355627e56b85fab39a759434cde048597d85952963a097"
+          "sha256": "3209154935cc1463127721203da74dc8bf8ba40258b182c5faa7345946611e38"
         }
       ],
       "status": "proven"
@@ -104,13 +104,13 @@
           "type": "source-evidence",
           "path": "src/commands/graph.mjs",
           "assertion": "Plain string comparison, never localeCompare; INTERNAL_DATA_FIELDS stripped; SCHEMA_VERSION = 2",
-          "sha256": "93649d4a317c7c0952d12920227bfc43fbdd614ed49b6fc88fc79d26569f5519"
+          "sha256": "cce9730e33e83e0a183c0139afcc9a0845f2f95f67b07875f9c583f3ca95d046"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/graph.mjs",
           "assertion": "computePolicyFingerprint produces SHA-256 of canonicalized policy",
-          "sha256": "93649d4a317c7c0952d12920227bfc43fbdd614ed49b6fc88fc79d26569f5519"
+          "sha256": "cce9730e33e83e0a183c0139afcc9a0845f2f95f67b07875f9c583f3ca95d046"
         }
       ],
       "status": "proven"
@@ -130,7 +130,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "parseBaseline validates schemaVersion; refuses unknown versions",
-          "sha256": "1210a6be721d1e8a4f47c5961239b26ea980544eac051ec8206ef804b7c6e96e"
+          "sha256": "fd58a61bd86b369f11a7844407b818f9ab3eff9b750331e580b77783e04d8229"
         }
       ],
       "status": "proven"
@@ -150,7 +150,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "computeDiff returns structural diff; policyMismatch detected via fingerprint; computeRuleImpact for depConstraints-only context",
-          "sha256": "1210a6be721d1e8a4f47c5961239b26ea980544eac051ec8206ef804b7c6e96e"
+          "sha256": "fd58a61bd86b369f11a7844407b818f9ab3eff9b750331e580b77783e04d8229"
         }
       ],
       "status": "proven"
@@ -170,7 +170,7 @@
           "type": "behavioral-test",
           "path": "src/commands/impact.test.mjs",
           "assertion": "Sorts results using plain string comparison (never localeCompare)",
-          "sha256": "293cba26d3841b26f3d2b9adc387932e175ac102899878b5dcb9ad32012bf2bd"
+          "sha256": "a0adc292d13798cb13b4fde607e03fa6352b1da9191ed2b30bff046200f62d3f"
         }
       ],
       "status": "proven"
@@ -184,7 +184,7 @@
           "type": "behavioral-test",
           "path": "src/commands/context-command.test.mjs",
           "assertion": "Returns tags, matched constraints, per-edge violations; coverage.notes warns about depConstraints-only scope",
-          "sha256": "c04a310022c9d50cc8a3de19a73b7ad2fee52c56d0c55e7dd3b4d1efbfaac4f3"
+          "sha256": "eccd31e3057bbb0cb45785e0047e0d71e83dbbc00703ee231f085cf52fb76db8"
         },
         {
           "type": "e2e-test",
@@ -210,7 +210,7 @@
           "type": "behavioral-test",
           "path": "src/commands/explain.test.mjs",
           "assertion": "Returns all violations at a site; unresolvable site returns unresolvable:true with reason",
-          "sha256": "0d0a06faae662529f3ff0c62b746cd89015f5371e3fc8f0c740d7ef8e007f1cb"
+          "sha256": "017581d978f277fadecedd6a4a0a4befca3743dbf2b084e1192792a1891466ad"
         },
         {
           "type": "e2e-test",
@@ -230,13 +230,13 @@
           "type": "behavioral-test",
           "path": "src/intent/intent.test.mjs",
           "assertion": "depConstraints verdicts from judgeEdge agree with evaluate in both directions (violating edge found by both, legal edge reported by neither); explain includes the same violations as evaluate at a given site",
-          "sha256": "2463a5b8f92de98562360eb3c5defe6703160b81e43c572ee4d21800594d1fa6"
+          "sha256": "6ed86cb5e7af94b56fa2af3d2da5d45d58937fbbf316105da0224d0060e88582"
         },
         {
           "type": "behavioral-test",
           "path": "src/commands/context-command.test.mjs",
           "assertion": "Test verifies coverage.notes contains depConstraints warning",
-          "sha256": "c04a310022c9d50cc8a3de19a73b7ad2fee52c56d0c55e7dd3b4d1efbfaac4f3"
+          "sha256": "eccd31e3057bbb0cb45785e0047e0d71e83dbbc00703ee231f085cf52fb76db8"
         },
         {
           "type": "e2e-test",
@@ -248,19 +248,19 @@
           "type": "source-evidence",
           "path": "src/commands/context-command.mjs",
           "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)",
-          "sha256": "09fd5bd16835f50f8065a72df34aadb5e17644d3d43007ad0a734c26ea5026af"
+          "sha256": "72526cdaf038da4d9a50b33ab3cb30828713e62bbb891f4e2e51e008a403338e"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/impact.mjs",
           "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)",
-          "sha256": "9ab56d847567b0d50b4431f3029318b295dde290e098034dc7aad1f0d47ee281"
+          "sha256": "63ecdb99cd7578fec1530e3e00deb805df932948e0418c32d45c680175d32f26"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "coverage.notes warns when ruleImpact is computed (depConstraints only, 3 of 15)",
-          "sha256": "1210a6be721d1e8a4f47c5961239b26ea980544eac051ec8206ef804b7c6e96e"
+          "sha256": "fd58a61bd86b369f11a7844407b818f9ab3eff9b750331e580b77783e04d8229"
         },
         {
           "type": "documentation",
@@ -286,7 +286,7 @@
           "type": "source-evidence",
           "path": "src/commands/graph.mjs",
           "assertion": "Plain string comparison throughout; never localeCompare",
-          "sha256": "93649d4a317c7c0952d12920227bfc43fbdd614ed49b6fc88fc79d26569f5519"
+          "sha256": "cce9730e33e83e0a183c0139afcc9a0845f2f95f67b07875f9c583f3ca95d046"
         }
       ],
       "status": "proven"

@@ -93,7 +93,7 @@ describe("scenarioCommand — envelope construction", () => {
     expect(envelope.coverage.notes).toEqual(result.coverage.notes);
   });
 
-  it("maps site-level analysis failures to coverage blind spots, not refusals", () => {
+  it("refuses a site-level analysis failure loudly — no scenario over an unjudged site", () => {
     const context = commandContext({
       analysis: {
         analyzed: 4,
@@ -108,13 +108,12 @@ describe("scenarioCommand — envelope construction", () => {
         ],
       },
     });
-    const result = scenarioCommand("alpha", scenarioJson, context);
-    expect(result.coverage.blindSpots).toEqual([
-      { file: "libs/alpha/partial.ts", line: 3, column: 7, reason: "unresolvable specifier" },
-    ]);
-    // A blind spot is disclosed, not fatal: the scenario still evaluates.
-    expect(result.status).toBe("ok");
-    expect(result.coverage.complete).toBe(true);
+    // An unresolvable site was seen but never judged (#595): the edges out of
+    // it may be missing, so the refusal names the site count instead of
+    // reporting an evaluation the graph could not support.
+    expect(() => scenarioCommand("alpha", scenarioJson, context)).toThrow(
+      /1 import site could not be resolved/,
+    );
   });
 
   it("renders the text report for the scenario it evaluated", () => {
