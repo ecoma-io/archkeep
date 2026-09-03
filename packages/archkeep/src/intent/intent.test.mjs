@@ -7,8 +7,13 @@
  *
  * Each test is named by contract letter (A–L). Where feasible, tests import
  * and call the actual code (behavioral proof). Where that is not practical
- * (circular imports, process-level tests), tests read source and verify
- * structural properties (source-evidence) — these are clearly labelled.
+ * (circular imports, process-level tests), tests read source instead — and
+ * the method is part of the test's name, because the manifest's evidence
+ * taxonomy (`./intent-manifest.json`) requires a claim class to match what
+ * actually verifies it: a test that reads one source file and matches
+ * patterns is labelled `[source-evidence]`, and a test that walks a module
+ * subtree and fails on a hit is labelled `[architecture-test]`. An unlabelled
+ * test is a behavioral one; a scan wearing no label would read as one.
  *
  * The manifest validation section ensures the manifest's claims are
  * mechanically grounded: evidence paths exist, evidence types match the
@@ -540,7 +545,7 @@ describe("Contract C — Workspace resolution ≠ source analysis", () => {
     expect(content).toMatch(/analyzer that starts filtering/);
   });
 
-  it("analysis code contains no judging vocabulary (allow, ban, forbid, violation as verbs)", () => {
+  it("analysis code contains no judging vocabulary — every analysis module walked [architecture-test]", () => {
     const violations = [];
     for (const file of productionMjsFiles()) {
       if (!file.startsWith("analysis/")) continue;
@@ -602,27 +607,48 @@ describe("Contract C — Workspace resolution ≠ source analysis", () => {
     // regardless of the owning project's tags. A filtering analyzer that
     // suppresses "banned" imports when the source project has certain tags
     // would produce different output for the same source text.
+    //
+    // The relation is measured, not asserted in prose: the same source text is
+    // analyzed under THREE workspaces whose project records differ in the only
+    // way a tag could reach the analyzer — the tag fields themselves. The
+    // analyzer's declared input contract (`../analysis/typescript.mjs`'s
+    // `{projects: {name: string}[]}`) carries no tags, so a variant that adds
+    // them under different values is a probe of exactly the channel a
+    // judging analyzer would have to read; if any variant's output diverges by
+    // a byte, the analysis layer has started consulting policy metadata.
     const { analyzeTypeScript } = await import("../analysis/typescript.mjs");
+    const { canonicalizeJson } = await import("../canonical.mjs");
     const text = `import { Component } from '@angular/core';\n`;
     const readFile = () => text;
 
-    const workspaceNoTags = {
+    const workspaceWith = (project) => ({
       root: "/test",
-      projects: [{ name: "alpha", root: "libs/alpha" }],
+      projects: [project],
       filesOf: () => ["libs/alpha/main.ts"],
       readFile,
       tsConfig: null,
-    };
-    // Tags are not part of the workspace.projects shape the analyzer sees,
-    // but we verify the output is the same regardless.
-    const result = analyzeTypeScript({
-      sourceFile: "libs/alpha/main.ts",
-      text,
-      workspace: workspaceNoTags,
     });
-    // The analyzer must return exactly one import for one import statement.
-    expect(result.imports.length).toBe(1);
-    expect(result.imports[0].specifier).toBe("@angular/core");
+    const workspaces = [
+      // No tag fields at all — the shape the contract declares.
+      workspaceWith({ name: "alpha", root: "libs/alpha" }),
+      // The tag a judging analyzer would most plausibly suppress on.
+      workspaceWith({ name: "alpha", root: "libs/alpha", tags: ["layer:domain"] }),
+      // A different value for the same field: if the analyzer read tags,
+      // these two variants could not both produce the same verdict.
+      workspaceWith({ name: "alpha", root: "libs/alpha", tags: ["type:feature", "layer:adapter"] }),
+    ];
+
+    const outputs = workspaces.map((workspace) =>
+      canonicalizeJson(analyzeTypeScript({ sourceFile: "libs/alpha/main.ts", text, workspace })),
+    );
+    // The loudness half: the compared outputs are not three empty results —
+    // the analyzer found the one import each variant carried.
+    const parsed = JSON.parse(outputs[0]);
+    expect(parsed.imports.length).toBe(1);
+    expect(parsed.imports[0].specifier).toBe("@angular/core");
+    // The invariance itself: every variant byte-identical to the first.
+    expect(outputs[1]).toBe(outputs[0]);
+    expect(outputs[2]).toBe(outputs[0]);
   });
 });
 
@@ -763,7 +789,7 @@ describe("Contract G — Impact determinism", () => {
 // ── Contract H: Context — effective architecture contract ───────────────────
 
 describe("Contract H — Context — effective architecture contract", () => {
-  it("collectContext returns tags, constraints, and per-edge violations", () => {
+  it("collectContext returns tags, constraints, and per-edge violations [source-evidence]", () => {
     const content = readFileSync(join(ROOT, "src", "commands", "context-command.mjs"), "utf-8");
     // Return type includes tags, constraints, dependencies with violations.
     expect(content).toMatch(/tags: string\[\]/);
@@ -771,12 +797,12 @@ describe("Contract H — Context — effective architecture contract", () => {
     expect(content).toMatch(/violations: object\[\]/);
   });
 
-  it("context uses judgeEdge for per-edge verdicts (not full evaluate)", () => {
+  it("context uses judgeEdge for per-edge verdicts (not full evaluate) [source-evidence]", () => {
     const content = readFileSync(join(ROOT, "src", "commands", "context-command.mjs"), "utf-8");
     expect(content).toMatch(/judgeEdge/);
   });
 
-  it("context coverage.notes discloses depConstraints-only narrowing", () => {
+  it("context coverage.notes discloses depConstraints-only narrowing [source-evidence]", () => {
     const content = readFileSync(join(ROOT, "src", "commands", "context-command.mjs"), "utf-8");
     expect(content).toMatch(/notes:\s*\[/);
     expect(content).toMatch(/depConstraints/);
@@ -787,14 +813,14 @@ describe("Contract H — Context — effective architecture contract", () => {
 // ── Contract I: Explain — rule, reason, evidence ────────────────────────────
 
 describe("Contract I — Explain — rule, reason, evidence", () => {
-  it("explain uses full evaluate (not judgeEdge)", () => {
+  it("explain uses full evaluate (not judgeEdge) [source-evidence]", () => {
     const content = readFileSync(join(ROOT, "src", "commands", "explain.mjs"), "utf-8");
     expect(content).toMatch(/import \{ evaluate \} from/);
     // judgeEdge must NOT appear in explain.
     expect(content).not.toMatch(/judgeEdge/);
   });
 
-  it("explain marks unresolvable imports explicitly (never silently drops)", () => {
+  it("explain marks unresolvable imports explicitly (never silently drops) [source-evidence]", () => {
     const content = readFileSync(join(ROOT, "src", "commands", "explain.mjs"), "utf-8");
     // unresolvable is an explicit boolean field, not absence.
     expect(content).toMatch(/unresolvable: true/);
@@ -823,7 +849,7 @@ describe("Contract J — Check is enforcement authority", () => {
     expect(content).not.toMatch(/notes:\s*\[\]/);
   });
 
-  it("diff warns in coverage.notes when ruleImpact is computed (behavioral)", async () => {
+  it("diff warns in coverage.notes when ruleImpact is computed [source-evidence]", () => {
     // diff.mjs computes ruleImpact via judgeEdge (depConstraints only, 3 of
     // 15 violation types). When ruleImpact is present in the result, the
     // coverage.notes must disclose the narrowing — a consumer seeing
@@ -843,24 +869,30 @@ describe("Contract J — Check is enforcement authority", () => {
     expect(content).toMatch(/complete verdict/);
   });
 
-  it("depConstraints verdicts from judgeEdge agree with evaluate (behavioral)", async () => {
+  it("depConstraints verdicts from judgeEdge agree with evaluate, in both directions (behavioral)", async () => {
     // Where a focused command evaluates (depConstraints only), its verdicts
-    // must agree with what check would produce. If judgeEdge and evaluate
-    // disagree on a depConstraints violation, the focused command is
-    // creating a different verdict than the enforcement authority.
+    // must agree with what check would produce — in BOTH directions. If
+    // judgeEdge missed a violation evaluate finds, context/impact would show
+    // a clean edge where check exits 1 (the silent direction); if judgeEdge
+    // invented one evaluate does not, the focused command would report a
+    // boundary break the enforcement authority never would (the loud one).
+    // Each direction is measured on the edge it can catch: agreement on a
+    // violating edge, and agreement on a legal one.
     const { evaluate } = await import("../rules/index.mjs");
     const { judgeEdge } = await import("../commands/edge-constraints.mjs");
 
-    const nodes = {
+    const nodesFor = (betaTags) => ({
       alpha: { name: "alpha", type: "lib", data: { root: "libs/alpha", tags: ["layer:domain"] } },
-      beta: { name: "beta", type: "lib", data: { root: "libs/beta", tags: ["layer:adapter"] } },
-    };
-    const dependencies = { alpha: [{ source: "alpha", target: "beta", type: "static" }] };
-    const config = {
+      beta: { name: "beta", type: "lib", data: { root: "libs/beta", tags: betaTags } },
+    });
+    const dependenciesFor = () => ({
+      alpha: [{ source: "alpha", target: "beta", type: "static" }],
+    });
+    const configFor = (allowedTags) => ({
       depConstraints: [
         {
           sourceTag: "layer:domain",
-          onlyDependOnLibsWithTags: ["layer:domain"],
+          onlyDependOnLibsWithTags: allowedTags,
         },
       ],
       options: {
@@ -874,44 +906,59 @@ describe("Contract J — Check is enforcement authority", () => {
         checkNestedExternalImports: false,
       },
       suppressions: [],
+    });
+    const siteFor = (specifier) => ({
+      sourceFile: "libs/alpha/main.ts",
+      line: 1,
+      column: 1,
+      specifier,
+      kind: "static",
+      spelling: { path: false, relative: false, namesOnly: false },
+      resolved: { target: "beta", file: null, external: false, packageName: null },
+    });
+    const depConstraintIds = (violations) =>
+      violations
+        .filter((v) => v.messageId === "onlyTagsConstraintViolation")
+        .map((v) => v.messageId)
+        .sort();
+
+    const agreesOn = ({ betaTags, allowedTags, specifier }) => {
+      const nodes = nodesFor(betaTags);
+      const dependencies = dependenciesFor();
+      const config = configFor(allowedTags);
+      // The evaluate path — the one `check` runs over every import site.
+      const evalIds = depConstraintIds(
+        evaluate([siteFor(specifier)], { nodes, dependencies }, config),
+      );
+      // The judgeEdge path — the one context/impact/diff run per edge. Nodes
+      // must be an object keyed by name, not an array.
+      const edgeIds = depConstraintIds(
+        judgeEdge({ source: "alpha", target: "beta" }, nodes, dependencies, config.depConstraints),
+      );
+      // Both directions at once: neither side may miss a violation the other
+      // finds, and neither may report one the other does not.
+      expect(edgeIds).toEqual(evalIds);
+      return evalIds;
     };
 
-    // evaluate path
-    const sites = [
-      {
-        sourceFile: "libs/alpha/main.ts",
-        line: 1,
-        column: 1,
-        specifier: "@beta",
-        kind: "static",
-        spelling: { path: false, relative: false, namesOnly: false },
-        resolved: { target: "beta", file: null, external: false, packageName: null },
-      },
-    ];
-    const evalViolations = evaluate(sites, { nodes, dependencies }, config);
-    const evalDepConstraintIds = new Set(
-      evalViolations
-        .filter((v) => v.messageId === "onlyTagsConstraintViolation")
-        .map((v) => v.messageId),
-    );
+    // Direction one — a violating edge: both paths must find it, so the
+    // agreement cannot pass over two empty answers.
+    const violating = agreesOn({
+      betaTags: ["layer:adapter"],
+      allowedTags: ["layer:domain"],
+      specifier: "@beta",
+    });
+    expect(violating.length).toBeGreaterThan(0);
 
-    // judgeEdge path — nodes must be an object keyed by name, not an array.
-    const edgeViolations = judgeEdge(
-      { source: "alpha", target: "beta" },
-      nodes,
-      dependencies,
-      config.depConstraints,
-    );
-    const edgeDepConstraintIds = new Set(
-      edgeViolations
-        .filter((v) => v.messageId === "onlyTagsConstraintViolation")
-        .map((v) => v.messageId),
-    );
-
-    // Both paths must agree: if evaluate finds a depConstraints violation,
-    // judgeEdge must also find it (and vice versa).
-    expect(evalDepConstraintIds.size).toBeGreaterThan(0);
-    expect(edgeDepConstraintIds.size).toBeGreaterThan(0);
+    // Direction two — a legal edge under the same constraint shape: both
+    // paths must agree it is clean, so judgeEdge cannot invent a finding
+    // evaluate would never report.
+    const legal = agreesOn({
+      betaTags: ["layer:domain"],
+      allowedTags: ["layer:domain"],
+      specifier: "@beta",
+    });
+    expect(legal).toEqual([]);
   });
 
   it("explain includes the same violations as evaluate at a given site (behavioral)", async () => {
