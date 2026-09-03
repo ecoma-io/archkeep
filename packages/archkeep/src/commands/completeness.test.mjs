@@ -9,6 +9,7 @@ import {
   buildEvidenceComplete,
   EVIDENCE_COMPLETE_GATES,
   REQUIRED_DOMAINS,
+  EVALUATION_CONTRACT_TYPES,
   createDomain,
   computeDomainCoverage,
 } from "./completeness.mjs";
@@ -189,7 +190,20 @@ describe("buildCompleteness", () => {
     return createDomain(status, note);
   }
 
-  it("reports overallComplete true when all 8 domains are EVALUATED", () => {
+  it("reports overallComplete true when all 8 domains are EVALUATED and Evidence-Complete passes", () => {
+    const ec = buildEvidenceComplete({
+      domainCoverage: 1,
+      claimEvidenceCoverage: 1,
+      causalCoverage: 1,
+      provenanceCoverage: 1,
+      mutationCoverage: 1,
+      surfaceParity: 1,
+      hiddenGapCount: 0,
+      falseCompleteCount: 0,
+      baseIdentityValid: true,
+      deterministic: true,
+      contractType: EVALUATION_CONTRACT_TYPES.CANONICAL,
+    });
     const result = buildCompleteness({
       structural: domain(EVALUATION_STATUS.EVALUATED),
       constraint: domain(EVALUATION_STATUS.EVALUATED),
@@ -199,6 +213,7 @@ describe("buildCompleteness", () => {
       debt: domain(EVALUATION_STATUS.EVALUATED),
       governance: domain(EVALUATION_STATUS.EVALUATED),
       evidence: domain(EVALUATION_STATUS.EVALUATED),
+      evidenceComplete: ec,
     });
     expect(result.overallComplete).toBe(true);
     expect(result.overallStatus).toBe(EVALUATION_STATUS.EVALUATED);
@@ -220,6 +235,19 @@ describe("buildCompleteness", () => {
   });
 
   it("reports overallComplete false when one domain is PARTIAL", () => {
+    const ec = buildEvidenceComplete({
+      domainCoverage: 1,
+      claimEvidenceCoverage: 1,
+      causalCoverage: 1,
+      provenanceCoverage: 1,
+      mutationCoverage: 1,
+      surfaceParity: 1,
+      hiddenGapCount: 0,
+      falseCompleteCount: 0,
+      baseIdentityValid: true,
+      deterministic: true,
+      contractType: EVALUATION_CONTRACT_TYPES.CANONICAL,
+    });
     const result = buildCompleteness({
       structural: domain(EVALUATION_STATUS.EVALUATED),
       constraint: domain(EVALUATION_STATUS.EVALUATED),
@@ -229,11 +257,11 @@ describe("buildCompleteness", () => {
       debt: domain(EVALUATION_STATUS.EVALUATED),
       governance: domain(EVALUATION_STATUS.PARTIAL),
       evidence: domain(EVALUATION_STATUS.EVALUATED),
+      evidenceComplete: ec,
     });
     expect(result.overallComplete).toBe(false);
     expect(result.overallStatus).toBe(EVALUATION_STATUS.PARTIAL);
   });
-
   it("reports overallComplete false when one domain is REFUSED", () => {
     const result = buildCompleteness({
       structural: domain(EVALUATION_STATUS.EVALUATED),
@@ -503,16 +531,30 @@ describe("buildGovernanceCompleteness", () => {
 // ---------------------------------------------------------------------------
 
 describe("buildScenarioCompleteness", () => {
-  it("reports overallComplete true when changes, base, mutation and governance complete", () => {
+  it("reports overallComplete true when changes, base, mutation, governance complete and evidenceComplete passes", () => {
     const governance = buildGovernanceCompleteness({
       findingsStatus: EVALUATION_STATUS.EVALUATED,
       debtStatus: EVALUATION_STATUS.EVALUATED,
+    });
+    const ec = buildEvidenceComplete({
+      domainCoverage: 1,
+      claimEvidenceCoverage: 1,
+      causalCoverage: 1,
+      provenanceCoverage: 1,
+      mutationCoverage: 1,
+      surfaceParity: 1,
+      hiddenGapCount: 0,
+      falseCompleteCount: 0,
+      baseIdentityValid: true,
+      deterministic: true,
+      contractType: EVALUATION_CONTRACT_TYPES.CANONICAL,
     });
     const result = buildScenarioCompleteness({
       changesComplete: true,
       baseIdentityVerified: true,
       mutationCoverageComplete: true,
       governance,
+      evidenceComplete: ec,
       domains: {
         structural: createDomain(EVALUATION_STATUS.EVALUATED),
         constraint: createDomain(EVALUATION_STATUS.EVALUATED),

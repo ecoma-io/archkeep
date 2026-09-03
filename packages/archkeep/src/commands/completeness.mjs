@@ -46,6 +46,72 @@ export const UNSUPPORTED = EVALUATION_STATUS.UNSUPPORTED;
 export const REFUSED = EVALUATION_STATUS.REFUSED;
 
 // ---------------------------------------------------------------------------
+// Evaluation contract types — which gates are required per evaluation type
+// ---------------------------------------------------------------------------
+
+/**
+ * The evaluation contract types that determine which Evidence-Complete gates
+ * are required for `overallComplete`.
+ *
+ * - `canonical`: Standard architecture evaluation (no mutations, no scenario).
+ *   Gates NOT required: mutationCoverage, surfaceParity, baseIdentityValid.
+ * - `scenario`: Hypothetical scenario evaluation. ALL gates required.
+ *
+ * @type {Readonly<{CANONICAL: string, SCENARIO: string}>}
+ */
+export const EVALUATION_CONTRACT_TYPES = Object.freeze({
+  CANONICAL: "canonical",
+  SCENARIO: "scenario",
+});
+
+/**
+ * Which Evidence-Complete gates are required for each contract type.
+ * A gate not listed here is still tracked and reported but does NOT block
+ * `overallComplete` — it is explicitly not applicable for that evaluation type.
+ *
+ * @type {Readonly<Object<string, ReadonlySet<string>>>}
+ */
+export const REQUIRED_GATES_FOR_CONTRACT = Object.freeze({
+  [EVALUATION_CONTRACT_TYPES.CANONICAL]: Object.freeze(
+    new Set([
+      "domainCoverage",
+      "claimEvidenceCoverage",
+      "causalCoverage",
+      "provenanceCoverage",
+      "hiddenGapCount",
+      "falseCompleteCount",
+      "deterministic",
+    ]),
+  ),
+  [EVALUATION_CONTRACT_TYPES.SCENARIO]: Object.freeze(
+    new Set([
+      "domainCoverage",
+      "claimEvidenceCoverage",
+      "causalCoverage",
+      "provenanceCoverage",
+      "mutationCoverage",
+      "surfaceParity",
+      "hiddenGapCount",
+      "falseCompleteCount",
+      "baseIdentityValid",
+      "deterministic",
+    ]),
+  ),
+});
+
+/**
+ * Returns true when the given gate key is required for the given contract type.
+ *
+ * @param {string} gateKey The gate key (e.g. "domainCoverage").
+ * @param {string} [contractType] The evaluation contract type.
+ *   Defaults to SCENARIO (most restrictive).
+ * @returns {boolean}
+ */
+export function isGateRequired(gateKey, contractType = EVALUATION_CONTRACT_TYPES.SCENARIO) {
+  const required = REQUIRED_GATES_FOR_CONTRACT[contractType];
+  return required ? required.has(gateKey) : true;
+}
+// ---------------------------------------------------------------------------
 // Evidence-Complete gate names — the canonical roster
 // ---------------------------------------------------------------------------
 
@@ -69,6 +135,7 @@ export const EVIDENCE_COMPLETE_GATES = Object.freeze([
 
 /**
  * @typedef {object} EvidenceCompleteContract
+ * @property {string} contractType The evaluation contract type (canonical | scenario).
  * @property {number} domainCoverage Ratio of evaluated required domains to required domains (0-1).
  * @property {number} claimEvidenceCoverage Ratio of claims with valid evidence to material claims (0-1).
  * @property {number} causalCoverage Ratio of consequences with complete causal chain to material consequences (0-1).
@@ -82,16 +149,16 @@ export const EVIDENCE_COMPLETE_GATES = Object.freeze([
  * @property {string} overallStatus Overall Evidence-Complete status: "complete" | "incomplete" | "not_evaluated".
  * @property {boolean} overallComplete True only when ALL required gates pass.
  * @property {object} gates Individual gate statuses, keyed by gate name.
- * @property {object} gates.domainCoverage Gate status.
- * @property {object} gates.claimEvidenceCoverage Gate status.
- * @property {object} gates.causalCoverage Gate status.
- * @property {object} gates.provenanceCoverage Gate status.
- * @property {object} gates.mutationCoverage Gate status.
- * @property {object} gates.surfaceParity Gate status.
- * @property {object} gates.hiddenGapCount Gate status.
- * @property {object} gates.falseCompleteCount Gate status.
- * @property {object} gates.baseIdentityValid Gate status.
- * @property {object} gates.deterministic Gate status.
+ * @property {object} gates.domainCoverage Gate status with {value, pass, required}.
+ * @property {object} gates.claimEvidenceCoverage Gate status with {value, pass, required}.
+ * @property {object} gates.causalCoverage Gate status with {value, pass, required}.
+ * @property {object} gates.provenanceCoverage Gate status with {value, pass, required}.
+ * @property {object} gates.mutationCoverage Gate status with {value, pass, required}.
+ * @property {object} gates.surfaceParity Gate status with {value, pass, required}.
+ * @property {object} gates.hiddenGapCount Gate status with {value, pass, required}.
+ * @property {object} gates.falseCompleteCount Gate status with {value, pass, required}.
+ * @property {object} gates.baseIdentityValid Gate status with {value, pass, required}.
+ * @property {object} gates.deterministic Gate status with {value, pass, required}.
  */
 
 // ---------------------------------------------------------------------------
@@ -306,8 +373,10 @@ export function buildCompleteness({
   const statuses = Object.values(domains).map((d) => d.status);
   const domainOverallComplete = statuses.every((s) => s === EVALUATION_STATUS.EVALUATED);
 
-  // If an Evidence-Complete contract is provided, enforce it as a gate
-  let ecComplete = true;
+  // If an Evidence-Complete contract is provided, enforce it as a gate.
+  // When no contract is provided, overallComplete MUST be false — the
+  // evaluation has not proven its evidence gates.
+  let ecComplete = false;
   let falseCompleteCount = 0;
   if (evidenceComplete) {
     ecComplete = evidenceComplete.overallComplete;
@@ -346,6 +415,10 @@ export function buildCompleteness({
 /**
  * Builds an Evidence-Complete contract from the individual gate values.
  *
+ * Only gates required for the given `contractType` are considered for
+ * `overallComplete`. Gates not required are still tracked and reported
+ * but do NOT block completeness.
+ *
  * @param {object} gates
  * @param {number} [gates.domainCoverage] Ratio (0-1).
  * @param {number} [gates.claimEvidenceCoverage] Ratio (0-1).
@@ -357,6 +430,8 @@ export function buildCompleteness({
  * @param {number} [gates.falseCompleteCount] Count (0 = pass).
  * @param {boolean} [gates.baseIdentityValid] Boolean (true = pass).
  * @param {boolean} [gates.deterministic] Boolean (true = pass).
+ * @param {string} [gates.contractType] Evaluation contract type for gate
+ *   requirements (defaults to SCENARIO, the most restrictive).
  * @returns {EvidenceCompleteContract}
  */
 export function buildEvidenceComplete({
@@ -370,8 +445,9 @@ export function buildEvidenceComplete({
   falseCompleteCount = -1,
   baseIdentityValid = false,
   deterministic = false,
+  contractType = EVALUATION_CONTRACT_TYPES.SCENARIO,
 } = {}) {
-  const gates = {
+  const rawGates = {
     domainCoverage: { value: domainCoverage, pass: domainCoverage === 1 },
     claimEvidenceCoverage: { value: claimEvidenceCoverage, pass: claimEvidenceCoverage === 1 },
     causalCoverage: { value: causalCoverage, pass: causalCoverage === 1 },
@@ -384,9 +460,22 @@ export function buildEvidenceComplete({
     deterministic: { value: deterministic, pass: deterministic === true },
   };
 
-  const allPass = Object.values(gates).every((g) => g.pass);
+  // Only required gates block overallComplete
+  const allRequiredPass = Object.keys(rawGates)
+    .filter((key) => isGateRequired(key, contractType))
+    .every((key) => rawGates[key].pass);
+
+  // Annotate each gate with whether it is required for this contract type
+  const gates = {};
+  for (const [key, gate] of Object.entries(rawGates)) {
+    gates[key] = {
+      ...gate,
+      required: isGateRequired(key, contractType),
+    };
+  }
 
   return {
+    contractType,
     domainCoverage,
     claimEvidenceCoverage,
     causalCoverage,
@@ -397,8 +486,8 @@ export function buildEvidenceComplete({
     falseCompleteCount,
     baseIdentityValid,
     deterministic,
-    overallStatus: allPass ? "complete" : "incomplete",
-    overallComplete: allPass,
+    overallStatus: allRequiredPass ? "complete" : "incomplete",
+    overallComplete: allRequiredPass,
     gates,
   };
 }
@@ -414,16 +503,22 @@ export function buildEvidenceComplete({
 export function assertEvidenceComplete(ec) {
   if (ec.overallComplete) return;
 
+  const contractType = ec.contractType || EVALUATION_CONTRACT_TYPES.SCENARIO;
   const failures = [];
   for (const gate of EVIDENCE_COMPLETE_GATES) {
     const g = ec.gates[gate.key];
+    // Skip non-required gates for this contract type
+    if (g.required === false) continue;
     if (!g.pass) {
       failures.push(`${gate.label}: ${JSON.stringify(g.value)} (expected pass)`);
     }
   }
 
+  if (failures.length === 0) return;
+
   throw new Error(
     `Evidence-Complete contract not satisfied.\n` +
+      `  Contract type: ${contractType}\n` +
       `  Overall: ${ec.overallStatus}\n` +
       `  Failed gates:\n    ${failures.join("\n    ")}`,
   );
@@ -571,15 +666,28 @@ export function buildScenarioCompleteness({
     evidenceComplete,
   });
 
-  // Recompute overall with scenario domains included
+  // Recompute overall: base domains + EC gate + scenario domains.
+  // baseResult.overallComplete already includes the evidenceComplete gate,
+  // so reusing it prevents the silent-complete defect.
+  const overallComplete =
+    baseResult.overallComplete &&
+    changesDomain.status === EVALUATION_STATUS.EVALUATED &&
+    baseDomain.status === EVALUATION_STATUS.EVALUATED &&
+    mutationDomain.status === EVALUATION_STATUS.EVALUATED;
   const allStatuses = [
     ...Object.values(baseResult.domains).map((d) => d.status),
     changesDomain.status,
     baseDomain.status,
     mutationDomain.status,
   ];
-  const overallComplete = allStatuses.every((s) => s === EVALUATION_STATUS.EVALUATED);
-  const overallStatus = worstStatus(...allStatuses);
+  // Include EC gate status in overall status: when evidenceComplete is
+  // provided and fails, overall status must reflect that.
+  const ecStatus = evidenceComplete
+    ? evidenceComplete.overallComplete
+      ? EVALUATION_STATUS.EVALUATED
+      : EVALUATION_STATUS.NOT_EVALUATED
+    : EVALUATION_STATUS.NOT_EVALUATED;
+  const overallStatus = worstStatus(...allStatuses, ecStatus);
 
   return {
     domains: baseResult.domains,

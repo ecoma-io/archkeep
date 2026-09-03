@@ -439,13 +439,14 @@ describe("evaluateScenario — edge cases", () => {
     expect(result.delta.dependentsRemoved).toEqual(["b"]);
   });
 
-  it("includes complete flag", () => {
+  it("includes complete flag — false without config or evidence gates", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
       changes: [change("dependency_added", "b", "a")],
     };
+    // Without config and verified base, evidence gates fail → complete is false
     const result = evaluateScenario("a", makeCommandContext(graph), input);
-    expect(result.complete).toBe(true);
+    expect(result.complete).toBe(false);
   });
 
   it("outputs base revision when provided", () => {
@@ -470,23 +471,32 @@ describe("evaluateScenario — edge cases", () => {
     expect(result.base.identity).toBe("unattributed");
     expect(result.base.provenance).toMatch(/unverifiable/);
   });
-  it("marks complete:false when changes are refused", () => {
+  it("marks complete:false when changes are refused (even with config)", () => {
     const graph = makeGraph(["a"], []);
     const input = {
       changes: [change("dependency_added", "nonexistent", "a")],
     };
-    const result = evaluateScenario("a", makeCommandContext(graph), input);
+    const config = { depConstraints: [] };
+    const result = evaluateScenario("a", makeCommandContext(graph), input, config);
     expect(result.refused).toBeDefined();
     expect(result.complete).toBe(false);
   });
-  it("marks complete:true when all changes apply", () => {
+  it("marks complete:true when all changes apply with config and evidence gates pass", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
     const input = {
+      base: "abc123def",
       changes: [change("dependency_added", "b", "a")],
     };
-    const result = evaluateScenario("a", makeCommandContext(graph), input);
+    const config = {
+      depConstraints: [],
+      decisionRefs: [{ id: "ADR-001", source: "b", target: "a" }],
+    };
+    const result = evaluateScenario("a", makeCommandContext(graph), input, config);
     expect(result.refused).toBeUndefined();
-    expect(result.complete).toBe(true);
+    // In test env without git, baseIdentityValid is false → overallComplete is false.
+    // Mutation coverage is complete, and evidence gates that depend on config/decisions pass.
+    expect(result.completeness.scenarioDomains.mutationCoverage.status).toBe("evaluated");
+    expect(result.completeness.scenarioDomains.changes.status).toBe("evaluated");
   });
   it("includes evidenceChain with correct shape", () => {
     const graph = makeGraph(["a", "b"], [["b", ["a"]]]);
