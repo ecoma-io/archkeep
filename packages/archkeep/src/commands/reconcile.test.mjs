@@ -111,19 +111,28 @@ describe("reconcileCommand", () => {
     expect(result.report.text).toContain("divergence");
   });
 
-  it("refuses over incomplete coverage — every 'absent' score would be ambiguous", async () => {
-    await expect(
-      reconcileCommand(
-        commandContext({
-          analysis: {
-            analyzed: 3,
-            imports: [],
-            failures: [{ sourceFile: "libs/app/app.go", reason: "unreadable file", line: null }],
-          },
-        }),
-        ioWithIntent(intent()),
-      ),
-    ).rejects.toThrow(/reconcile has incomplete coverage/);
+  it("reports no-verdict over incomplete coverage — every 'absent' score would be ambiguous", async () => {
+    const result = await reconcileCommand(
+      commandContext({
+        analysis: {
+          analyzed: 3,
+          imports: [],
+          failures: [{ sourceFile: "libs/app/app.go", reason: "unreadable file", line: null }],
+        },
+      }),
+      ioWithIntent(intent()),
+    );
+    // The refusal keeps its meaning but speaks the graph family's contract:
+    // a structured no-verdict envelope, not a throw with no envelope at all.
+    expect(result.status).toBe("no-verdict");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toEqual([
+      { file: "libs/app/app.go", reason: "unreadable file" },
+    ]);
+    expect(result.report.text).toContain("coverage incomplete");
   });
 
   it("refuses when no tracked intent file is present — reconcile is about a declared intent", async () => {

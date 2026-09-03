@@ -230,7 +230,13 @@ describe("diff incompleteness, metadata, and determinism", () => {
 
       const refused = archkeep(consumer.root, ["diff", baselineFile, "--format", "json"]);
       expect(refused.exitCode, "diff refuses an unreadable head source").toBe(3);
-      expect(refused.stderr).toContain("head graph has incomplete coverage");
+      // The refusal is the structured envelope the graph family speaks: the
+      // verdict is withheld in-band, where a parser and `--output` can read it.
+      expect(refused.json.status).toBe("no-verdict");
+      expect(refused.json.exitCode).toBe(3);
+      expect(refused.json.coverage.complete).toBe(false);
+      expect(refused.json.coverage.notAnalyzed.length).toBeGreaterThan(0);
+      expect(refused.stdout).toContain("coverage incomplete");
 
       // The refusal was about coverage, not architecture: restoring the file
       // restores the empty self-diff.

@@ -638,27 +638,34 @@ describe("diffCommand", () => {
     ).toThrow(/refusing to compute a diff/);
   });
 
-  it("throws when the head has incomplete coverage (whole-file failures)", () => {
-    expect(() =>
-      diffCommand(
-        "/baseline.json",
-        commandContext({
-          analysis: {
-            analyzed: 3,
-            imports: [],
-            failures: [
-              {
-                sourceFile: "libs/beta/broken.go",
-                line: null,
-                column: null,
-                reason: "parse error",
-              },
-            ],
-          },
-        }),
-        { readBaseline: () => baselineEnvelope() },
-      ),
-    ).toThrow(/head graph has incomplete coverage/);
+  it("reports no-verdict when the head has incomplete coverage (whole-file failures)", () => {
+    const result = diffCommand(
+      "/baseline.json",
+      commandContext({
+        analysis: {
+          analyzed: 3,
+          imports: [],
+          failures: [
+            {
+              sourceFile: "libs/beta/broken.go",
+              line: null,
+              column: null,
+              reason: "parse error",
+            },
+          ],
+        },
+      }),
+      { readBaseline: () => baselineEnvelope() },
+    );
+    expect(result.status).toBe("no-verdict");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toEqual([
+      { file: "libs/beta/broken.go", reason: "parse error" },
+    ]);
+    expect(result.report.text).toContain("coverage incomplete");
   });
 
   it("produces both text and JSON report renderings", () => {
@@ -692,29 +699,35 @@ describe("diffCommand", () => {
 
   it("refuses a diff over an unresolved site instead of reporting complete (#595)", () => {
     // #595: a site the run saw but could not resolve may draw an edge the
-    // diff would miss — every "added" entry would be ambiguous. The refusal
-    // (not a warning beside a verdict) is the loud direction: a regression
+    // diff would miss — every "added" entry would be ambiguous. The withheld
+    // verdict (not a warning beside one) is the loud direction: a regression
     // to a computed diff over this fixture would read as a clean compare.
-    expect(() =>
-      diffCommand(
-        "/baseline.json",
-        commandContext({
-          analysis: {
-            analyzed: 4,
-            imports: [],
-            failures: [
-              {
-                sourceFile: "libs/alpha/a.go",
-                line: 7,
-                column: 2,
-                reason: "unresolvable specifier",
-              },
-            ],
-          },
-        }),
-        { readBaseline: () => baselineEnvelope() },
-      ),
-    ).toThrow(/the head graph has incomplete coverage — 1 import site could not be resolved/);
+    const result = diffCommand(
+      "/baseline.json",
+      commandContext({
+        analysis: {
+          analyzed: 4,
+          imports: [],
+          failures: [
+            {
+              sourceFile: "libs/alpha/a.go",
+              line: 7,
+              column: 2,
+              reason: "unresolvable specifier",
+            },
+          ],
+        },
+      }),
+      { readBaseline: () => baselineEnvelope() },
+    );
+    expect(result.status).toBe("no-verdict");
+    expect(result.coverage.complete).toBe(false);
+    expect(result.coverage.blindSpots).toEqual([
+      { file: "libs/alpha/a.go", line: 7, column: 2, reason: "unresolvable specifier" },
+    ]);
+    expect(result.report.text).toContain(
+      "1 import site could not be resolved — coverage incomplete",
+    );
   });
 
   it("reports boundary violations introduced by added edges", () => {
@@ -1138,22 +1151,23 @@ describe("diffCommand", () => {
   });
 
   it("names every file when the head has multiple whole-file failures", () => {
-    expect(() =>
-      diffCommand(
-        "/baseline.json",
-        commandContext({
-          analysis: {
-            analyzed: 2,
-            imports: [],
-            failures: [
-              { sourceFile: "a.go", line: null, column: null, reason: "r1" },
-              { sourceFile: "b.go", line: null, column: null, reason: "r2" },
-            ],
-          },
-        }),
-        { readBaseline: () => baselineEnvelope() },
-      ),
-    ).toThrow(/2 files could not be analyzed/);
+    const result = diffCommand(
+      "/baseline.json",
+      commandContext({
+        analysis: {
+          analyzed: 2,
+          imports: [],
+          failures: [
+            { sourceFile: "a.go", line: null, column: null, reason: "r1" },
+            { sourceFile: "b.go", line: null, column: null, reason: "r2" },
+          ],
+        },
+      }),
+      { readBaseline: () => baselineEnvelope() },
+    );
+    expect(result.status).toBe("no-verdict");
+    expect(result.report.text).toContain("2 files could not be analyzed — coverage incomplete");
+    expect(result.coverage.notAnalyzed.map(({ file }) => file)).toEqual(["a.go", "b.go"]);
   });
 
   it("notes a provider mismatch between baseline and head", () => {

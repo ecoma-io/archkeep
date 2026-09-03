@@ -310,31 +310,43 @@ describe("driftCommand", () => {
     expect(result.report.text).toContain("✔ no drift");
   });
 
-  it("refuses over incomplete coverage — every 'project missing' would be ambiguous", async () => {
-    await expect(
-      driftCommand(
-        commandContext({
-          analysis: {
-            analyzed: 3,
-            imports: [],
-            failures: [
-              {
-                sourceFile: "libs/core/main.go",
-                reason: "not a whole-file failure",
-                line: 1,
-                column: 1,
-              },
-              {
-                sourceFile: "libs/app/app.go",
-                reason: "unreadable file",
-                line: null,
-              },
-            ],
-          },
-        }),
-        ioWithIntent(intent()),
-      ),
-    ).rejects.toThrow(/drift has incomplete coverage/);
+  it("reports no-verdict over incomplete coverage — every 'project missing' would be ambiguous", async () => {
+    const result = await driftCommand(
+      commandContext({
+        analysis: {
+          analyzed: 3,
+          imports: [],
+          failures: [
+            {
+              sourceFile: "libs/core/main.go",
+              reason: "not a whole-file failure",
+              line: 1,
+              column: 1,
+            },
+            {
+              sourceFile: "libs/app/app.go",
+              reason: "unreadable file",
+              line: null,
+            },
+          ],
+        },
+      }),
+      ioWithIntent(intent()),
+    );
+    // The refusal keeps its meaning but speaks the graph family's contract:
+    // a structured no-verdict envelope, not a throw with no envelope at all.
+    expect(result.status).toBe("no-verdict");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toEqual([
+      { file: "libs/app/app.go", reason: "unreadable file" },
+    ]);
+    expect(envelope.coverage.blindSpots).toEqual([
+      { file: "libs/core/main.go", line: 1, column: 1, reason: "not a whole-file failure" },
+    ]);
+    expect(result.report.text).toContain("coverage incomplete");
   });
 
   it("refuses when no tracked intent file is present — drift is about a declared intent", async () => {

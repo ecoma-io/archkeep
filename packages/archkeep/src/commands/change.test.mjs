@@ -531,15 +531,25 @@ describe("refusals — every could-not-look path says so", () => {
 
   it("refuses incomplete head coverage — a hole reads as a removal it may not be", async () => {
     const baseline = baselineOf();
-    await expect(
-      run({
-        ctx: contextOf({
-          failures: [{ sourceFile: "libs/db/broken.go", line: null, reason: "parse error" }],
-        }),
-        baseline,
-        intent: manifest(),
+    const result = await run({
+      ctx: contextOf({
+        failures: [{ sourceFile: "libs/db/broken.go", line: null, reason: "parse error" }],
       }),
-    ).rejects.toThrow(/could not be analyzed/);
+      baseline,
+      intent: manifest(),
+    });
+    // The refusal keeps its meaning — the reconciliation is never computed —
+    // but it now arrives as the structured no-verdict envelope, the same
+    // machine contract the graph family speaks, not a bare throw.
+    expect(result.status).toBe("no-verdict");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.notAnalyzed).toEqual([
+      { file: "libs/db/broken.go", reason: "parse error" },
+    ]);
+    expect(result.report.text).toContain("coverage incomplete");
   });
 
   it("throws when the manifest references architecture the baseline does not contain", async () => {
