@@ -175,6 +175,53 @@ describe("the four rule SDKs, against one contract", () => {
     }
   }, 120_000);
 
+  it("answers byte-identically when the same evidence is evaluated twice", async () => {
+    // The repeatability loop the verdict test above cannot show: it compares
+    // four SDKs' answers to each other, so an eval that leaked state between
+    // calls (a memoized finding list, a counter that advanced per instance)
+    // would still see all four sides drift together and pass. Each SDK
+    // therefore answers every fixture a second time — a fresh instance over
+    // the same evidence bytes — and the two canonical documents must be
+    // byte-identical. The recorded expectation is re-asserted on the repeat
+    // so the loop cannot go quiet over two answers that agree on the wrong
+    // verdict.
+    for (const [fixture, expectedVerdict] of Object.entries(EXPECTED_VERDICTS)) {
+      const evidenceBytes = new TextEncoder().encode(
+        readFileSync(resolve(`${RULE_SDKS[0].fixtures}/${fixture}.json`), "utf8"),
+      );
+      for (const entry of loaded) {
+        /** @type {string[]} */
+        const runs = [];
+        for (let run = 0; run < 2; run += 1) {
+          const answered = await evaluateCustomRule({
+            module: entry.loaded.module,
+            describe: entry.loaded.describe,
+            evidenceBytes,
+            timeoutMs: TIMEOUT_MS,
+          });
+          expect({
+            sdk: entry.name,
+            fixture,
+            run,
+            failure: answered.failure ?? null,
+          }).toEqual({ sdk: entry.name, fixture, run, failure: null });
+          expect({ sdk: entry.name, fixture, run, verdict: answered.verdict.verdict }).toEqual({
+            sdk: entry.name,
+            fixture,
+            run,
+            verdict: expectedVerdict,
+          });
+          runs.push(canonicalizeJson(answered.verdict));
+        }
+        expect({ sdk: entry.name, fixture, secondRun: runs[1] }).toEqual({
+          sdk: entry.name,
+          fixture,
+          secondRun: runs[0],
+        });
+      }
+    }
+  }, 120_000);
+
   it("answers the same over a bundle that grew fields no rule declared", async () => {
     // The additive-growth promise, measured rather than asserted in prose.
     // `../../../../docs/adr/0002-custom-rules-one-contract.md` says the
