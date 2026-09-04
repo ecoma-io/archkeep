@@ -88,23 +88,25 @@ the full roster is `packages/archkeep/cli.mjs`'s `COMMAND_NAMES` (24 verbs): `"c
 `"diff"`, `"delta"`, `"change"`, `"discover"`, `"drift"`, `"reconcile"`, `"waivers"`,
 `"fitness"`, `"history"`, `"trajectory"`, `"evolution"`, `"health"`, `"report"`,
 `"debt"`, `"impact"`, `"scenario"`, `"explain"`, `"context"`, `"provenance"`,
-`"decisions"`, `"adr"`, or `"rules"`. `src/report/json.mjs`
+`"decisions"`, `"adr"`, or `"rules"` — a `rules` envelope naming the
+subcommand as run (`"rules list"`, `"rules info"`, `"rules verify"`, or
+`"rules add"`; see the `rules` result below). `src/report/json.mjs`
 (the module that builds the envelope) and `src/commands/README.md` (the
 module layout it follows) are both written for each command to reuse the same
 wrapper.
 
 ## Top-level fields
 
-| field           | type                                     | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| --------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `schemaVersion` | integer                                  | This document's version. Currently `2`.                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/archkeep"`; `version` is the installed package's own `package.json` version.                                                                                                                                                                                                                                                                                                                                                      |
-| `command`       | string                                   | Which command produced this envelope. The roster is `packages/archkeep/cli.mjs`'s `COMMAND_NAMES`: `"check"`, `"graph"`, `"diff"`, `"delta"`, `"change"`, `"discover"`, `"drift"`, `"reconcile"`, `"waivers"`, `"fitness"`, `"history"`, `"trajectory"`, `"evolution"`, `"health"`, `"report"`, `"debt"`, `"impact"`, `"scenario"`, `"explain"`, `"context"`, `"provenance"`, `"decisions"`, `"adr"`, or `"rules"`.                                            |
-| `workspace`     | `{root, provider, marker, provenance}`   | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"archkeep.json"`, `".moon"`, or `".config/moon"`) — except on an `adr` envelope, which reads no project model and carries `provider: "native"`, `marker: "docs/adr"` ([adr.md](adr.md)). `provenance` is the git origin of the run, or `null` when git is unavailable — see below. |
-| `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `decision`      | object \| absent                         | The same verdict in the four-state vocabulary — `{verdict, reason?, notApplicableReason?, sampleTime?}`. Present on every `check`, `delta` and `change` envelope, and on the incomplete-coverage refusal of `delta` and `change` with an `unknown` verdict whose `reason` names the coverage clauses (#608); see [evidence.md](evidence.md).                                                                                                                   |
-| `coverage`      | object                                   | What the run inspected, and what it could not. See below.                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `result`        | object                                   | The command's own payload — for `check`, the violations, the three workspace-level checks (`goWork`, `tsconfigPaths`, `declaredEdges`), and — when the workspace has one — the architecture-intent verdict. See below.                                                                                                                                                                                                                                         |
+| field           | type                                     | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion` | integer                                  | This document's version. Currently `2`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `tool`          | `{name, version}`                        | `name` is always `"@ecoma-io/archkeep"`; `version` is the installed package's own `package.json` version.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `command`       | string                                   | Which command produced this envelope. The roster is `packages/archkeep/cli.mjs`'s `COMMAND_NAMES`: `"check"`, `"graph"`, `"diff"`, `"delta"`, `"change"`, `"discover"`, `"drift"`, `"reconcile"`, `"waivers"`, `"fitness"`, `"history"`, `"trajectory"`, `"evolution"`, `"health"`, `"report"`, `"debt"`, `"impact"`, `"scenario"`, `"explain"`, `"context"`, `"provenance"`, `"decisions"`, `"adr"`, or `"rules"`.                                                                                                                                                                         |
+| `workspace`     | `{root, provider, marker, provenance}`   | `root` is the resolved workspace root (absolute path); `provider` is `"nx"`, `"native"`, or `"moon"`; `marker` is the root file or directory that decided it (`"nx.json"`, `"archkeep.json"`, `".moon"`, or `".config/moon"`) — except on an `adr` envelope, which reads no project model and carries `provider: "native"`, `marker: "docs/adr"` ([adr.md](adr.md)), and on a `rules` envelope, which reads the rules catalog instead and carries `provider: "native"`, `marker: "catalog.json"`. `provenance` is the git origin of the run, or `null` when git is unavailable — see below. |
+| `status`        | `"ok"` \| `"findings"` \| `"no-verdict"` | The verdict. See below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `decision`      | object \| absent                         | The same verdict in the four-state vocabulary — `{verdict, reason?, notApplicableReason?, sampleTime?}`. Present on every `check`, `delta` and `change` envelope, and on the incomplete-coverage refusal of `delta` and `change` with an `unknown` verdict whose `reason` names the coverage clauses (#608); see [evidence.md](evidence.md).                                                                                                                                                                                                                                                |
+| `coverage`      | object                                   | What the run inspected, and what it could not. See below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `result`        | object                                   | The command's own payload — for `check`, the violations, the three workspace-level checks (`goWork`, `tsconfigPaths`, `declaredEdges`), and — when the workspace has one — the architecture-intent verdict. See below.                                                                                                                                                                                                                                                                                                                                                                      |
 
 ## `status`, and the exit code it must agree with
 
@@ -141,7 +143,10 @@ downgraded from `"ok"` to `"no-verdict"`.
 `decision` renders the same verdict the `status`/`exitCode` pair already
 carries into the canonical four-state vocabulary
 ([evidence.md](evidence.md) is the vocabulary's source). It is present on every
-`check` and `delta` envelope and absent from every other command's, and its `verdict` is
+`check`, `delta` and `change` envelope and absent from every other command's —
+including `fitness` and `rules verify`, the other two exit-1 verbs in
+[exit-codes.md](exit-codes.md)'s accounting, whose verdicts ride the result
+payload instead. Its `verdict` is
 exactly the one `status` implies — `"ok"` → `"pass"`, `"findings"` → `"fail"`,
 `"no-verdict"` → `"unknown"`. `jsonEnvelope` throws rather than build an
 envelope where `decision.verdict` and `status` disagree, the same consistency
@@ -392,6 +397,34 @@ flag was passed.
 | `classifications` | `string[]`                                                                 | The evolution classes the transition earned — `CHANGE`, `DRIFT`, `VIOLATION`, `REPAIR`, `DECISION_CHANGE` — sorted, computed by `classifyEvolution` from the reconciliation output itself (never a second opinion). `[]` appears only for a fully comparable, unchanged pair, and says so in the event's notes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `affected`        | `{projects, boundaries, constraints, decisions}`                           | Identity strings of what the transition touched, each sorted and de-duplicated: changed project names, changed edge identity strings under the one spelling `edgeEvolutionIdentity` (`source>target:type`, type always present, fields that carry a delimiter escaped — mapped inside `classifyEvolution`, never a caller's own spelling; [../concepts/evolution.md](../concepts/evolution.md) owns the escaping rule, which the event's `findings` ids share), every declared constraint id (each was under this run's judgment) plus the intent row `"intent"` when its verdict was not `matched`, and the ADR ids whose lineage moved (none here — `change` compares no decision registry).                                                                                                                                                                                                          |
 | `debt`            | `{introduced, resolved}`                                                   | The change's divergence from its declaration. `introduced` lists the reconciliation findings (the `unexpected`/`missingExpected` fact-row ids) and the failed declared constraints; `resolved` is always `[]` — a change run observes no repair and claims none.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+
+## `result` (for `command: "discover"`)
+
+`discover` reports the observed architecture — the projects, the edges between
+them, and the tags they carry — read from the same project model every command
+judges against. It is descriptive: it never exits `1`. An incomplete read is
+`status: "no-verdict"` (exit 3) with the unread files and sites named in
+`coverage`, and the observations that WERE made still ride `result.discovery`
+— the run reports what it saw and lets `coverage.complete` say how much of the
+tree that was. A workspace with zero projects is not one: an empty observation
+is complete, and the empty proposal states it with `unknown: true`. Under
+`--propose` an incomplete read refuses outright instead
+(exit 3, no envelope at all): a candidate derived over a gap would be a
+fabrication wearing a proposal's name. [discovery.md](discovery.md) owns the
+command and the flags; [../concepts/discovery.md](../concepts/discovery.md)
+owns the proposal-only line.
+
+| field                | type                                   | meaning                                                                                                                                                                                                                                                                                                                                                     |
+| -------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `discovery.projects` | `{name, root, type, tags, targets?}[]` | Every project — the same entries `graph`'s `result.projects` carries, one `buildProjects` call over the same graph: sorted by `name`, `tags` sorted by plain string comparison, `targets` present only when declared.                                                                                                                                       |
+| `discovery.edges`    | `{source, target, type}[]`             | Every edge whose ends are both declared projects, sorted by `source`, then `target`, then `type` — the array `graph`'s `result.dependencies` carries with `implicit`-typed edges dropped and edges naming anything outside the project model removed, the same filter `drift` applies: an external package is not a project an observation could ever name. |
+| `discovery.tags`     | `string[]`                             | The union of the projects' `tags`, deduplicated and sorted by plain string comparison. Empty exactly when no project carries a tag.                                                                                                                                                                                                                         |
+
+With `--propose`, `result.proposal` rides beside `discovery` — the additive
+candidate block [discovery.md](discovery.md#the-json-envelope) documents, every
+candidate marked `proposed: true` and `notAuthoritative: true`. A descriptive
+run carries no `proposal` key at all: the flag-gated addition, the same
+posture `context --plan` takes below.
 
 ## `result` (for `command: "drift"`)
 
@@ -987,6 +1020,54 @@ observed graph and analysis counts; `notAnalyzed` names each unresolved
 reference as `{file, reason}` — a `kind: "decision"` reference renders as
 `docs/adr/<ref>.md`, anything else by its raw `ref` — and `blindSpots`/`notes`
 are `[]`.
+
+## `result` (for `command: "rules"`)
+
+`rules` is the CLI face of the official rules catalog
+(`@ecoma-io/archkeep-rules`), and each of its four subcommands — `list`,
+`info`, `verify`, `add` — wraps its answer in this envelope. The `command`
+field names the subcommand as run, and the `workspace` block reads no project
+model: `provider` is `"native"` and `marker` is `"catalog.json"`. No
+subcommand judges the tree, so `coverage.projects` is `0` and the
+completeness and analysis counts describe the catalog read, never source
+files. [custom-rules.md](custom-rules.md)
+owns the contract a catalog rule ships under, and [cli.md](cli.md) owns the
+flags.
+
+**`rules list`** — the surface the envelope-shape roster holds — is purely
+descriptive: `status: "ok"` (exit 0) whenever the catalog could be read.
+
+| field     | type     | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `catalog` | string   | The path the catalog was read from, as the run resolved it — the `--catalog` value or the default path.                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `rules`   | object[] | Every catalog entry verbatim — the command validates the catalog's shape, not its entries. The official catalog records `{name, description, contract, needs, params, artifact, sha256}`: `contract` the contract version the artifact must speak, `needs` the evidence kinds the rule reads ([custom-rules.md](custom-rules.md)), `params` the parameter schema (the values are the workspace's law to choose, never the catalog's), `artifact` the wasm path the entry names, `sha256` the digest that pins those bytes. |
+
+**`rules info <name>`** answers `{catalog, rule}` — `rule` the same catalog
+entry — and, when the name matches no entry, `{catalog, availableRules}` with
+`status: "no-verdict"` (exit 3), the miss named in `coverage.notAnalyzed` as
+`{file: <catalog path>, reason: "requested rule not found"}`. An unmatched
+name is a named refusal, never a clean empty answer.
+
+**`rules verify`** is the one subcommand that can exit `1`:
+`{catalog, totalRules, passed,
+findingsCount, findings}`, each `findings` entry `{rule, severity: "fail",
+message}` — a digest mismatch, an artifact the host refused, or a path that
+escapes the catalog's directory, each named with its entry. It exits `1` when
+`findings` is non-empty and `0` when every entry verified — the two lanes
+[exit-codes.md](exit-codes.md) draws for this command, never collapsed into
+one.
+
+**`rules add <name>`** copies the artifact into the workspace and answers
+`{catalog, rule, artifactPath, customRulesRow}`: `rule` the catalog name,
+`artifactPath` where the bytes were written, and `customRulesRow` the
+ready-to-paste policy row `{name, artifact, sha256, reason}` — printed, never
+written into a config. Every refusal — an unknown name, an artifact path that
+escapes its directory, a missing artifact, a digest mismatch — is
+`status: "no-verdict"` (exit 3) with the reason in `coverage.notAnalyzed`,
+and nothing is copied.
+
+An unreadable or malformed catalog throws on every subcommand: exit 3, no
+envelope, nothing under `--output`.
 
 ## A worked example
 
