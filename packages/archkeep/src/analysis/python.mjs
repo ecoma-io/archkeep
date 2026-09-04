@@ -1293,6 +1293,23 @@ export function analyzePython({ sourceFile, text, workspace }) {
             external: true,
             packageName: absolute.split(".")[0],
           };
+          // The bare-package class the contract discloses without withholding
+          // (#603): every layout is modelled and the name still reaches no
+          // tracked package, so the external answer is the language's, and the
+          // site is DISCLOSED — a positioned row carrying `external: true`
+          // (`isExternalSiteFailure`), the run's verdict untouched — rather
+          // than swallowed, the same classification the TypeScript analyzer
+          // already emits. The unmodelled branch above keeps withholding,
+          // because there the external answer is NOT the language's; the
+          // relative-import and ambiguous branches keep withholding because
+          // those names the workspace's own surface.
+          result.failures.push({
+            sourceFile,
+            line,
+            column,
+            reason: `Python cannot resolve '${site.specifier}' from '${sourceFile}'`,
+            external: true,
+          });
         } else if (resolution.ambiguous) {
           fail(
             `'${site.specifier}' resolves through the namespace package '${resolution.prefix}', which ` +

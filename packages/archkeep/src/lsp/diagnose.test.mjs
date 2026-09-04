@@ -146,6 +146,35 @@ describe("an empty diagnostic list means no violation, and nothing else", () => 
     expect(diagnostics[0].severity).toBe(2);
   });
 
+  it("publishes a workspace-surface failure beside an external one, but not the external one (#603)", () => {
+    // An `external: true` row was JUDGED: the analyzer resolved the site to
+    // the dependency universe, the verdict below covers it, and publishing a
+    // warning on it would say "not checked" about a checked import — once per
+    // third-party import in every open file. The row without the marker is
+    // the withholding class and MUST still publish, which is this pin's loud
+    // direction: a filter widened past the external class turns red here.
+    analyzeFile.mockReturnValue({
+      imports: [],
+      failures: [
+        {
+          sourceFile: SOURCE_FILE,
+          line: 3,
+          column: 8,
+          reason: "Go cannot resolve 'github.com/uninstalled/lib' from 'libs/inner/main.go'",
+          external: true,
+        },
+        { sourceFile: SOURCE_FILE, line: 3, column: 2, reason: "parse error: '}' expected." },
+      ],
+    });
+    evaluate.mockReturnValue([]);
+
+    const { analyzed, diagnostics } = diagnoseDocument(REQUEST);
+
+    expect(analyzed).toBe(true);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].message).toContain("'}' expected.");
+  });
+
   it("refuses to call a document analyzed while the index is missing part of the tree", () => {
     // The failure the two existing guards structurally cannot see. Nothing
     // threw: the analyzer returned, the rule engine returned, and every

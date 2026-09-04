@@ -429,6 +429,24 @@ export function analyzeCSharp({ sourceFile, text, workspace }) {
             external: true,
             packageName: site.importableName,
           };
+          // The bare-coordinate class the contract discloses without
+          // withholding (#603): the namespace names the external dependency
+          // universe, not the governed graph, so the site is DISCLOSED — a
+          // positioned row carrying `external: true`
+          // (`isExternalSiteFailure`), the run's verdict untouched — rather
+          // than swallowed, the same classification the TypeScript analyzer
+          // already emits. A name a tracked namespace claims resolved through
+          // the index above and never reaches this branch; the split-package
+          // branch below keeps withholding. The `importableName === null`
+          // arm above is the extern-alias construct, not an unresolvable
+          // coordinate, and stays unfailed.
+          result.failures.push({
+            sourceFile,
+            line,
+            column,
+            reason: `C# cannot resolve '${site.importableName}' from '${sourceFile}'`,
+            external: true,
+          });
         } else if (resolved.ambiguous) {
           resolution = null;
           result.failures.push({

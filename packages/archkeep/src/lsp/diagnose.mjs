@@ -42,7 +42,7 @@
  * places outside the boundary system entirely.
  */
 import { analyzeFile } from "../analysis/analyze.mjs";
-import { projectOwning } from "../analysis/source-util.mjs";
+import { isExternalSiteFailure, projectOwning } from "../analysis/source-util.mjs";
 import { declaredEdgeViolationsForCheck } from "../commands/edge-constraints.mjs";
 import { evaluate } from "../rules/index.mjs";
 
@@ -97,10 +97,19 @@ export function diagnoseDocument({ sourceFile, text, index, config }) {
 
   // Recorded failures come next, and they are published whether or not the
   // rule pass below succeeds: they are the part of the file that was NOT
-  // judged, and a reader needs that before they read what was.
+  // judged, and a reader needs that before they read what was. The external
+  // class is not that part (`isExternalSiteFailure`): a bare coordinate that
+  // resolves to the dependency universe was judged — resolved external,
+  // disclosed in the run's blind-spot rows, excluded from the withholding
+  // count — so a warning on it would say "not checked" about a site the
+  // verdict below covers, and one per third-party import would be a wall of
+  // warnings a reader rightly learns to ignore (#603). The workspace-surface
+  // and whole-file classes keep publishing.
   const diagnostics = [
     ...prelude,
-    ...analysis.failures.map((failure) => failureDiagnostic(failure, lines)),
+    ...analysis.failures
+      .filter((failure) => !isExternalSiteFailure(failure))
+      .map((failure) => failureDiagnostic(failure, lines)),
   ];
 
   // The engine derives its evidence index from exactly the records it is

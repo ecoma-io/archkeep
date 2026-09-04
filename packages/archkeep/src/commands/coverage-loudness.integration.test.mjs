@@ -207,10 +207,20 @@ describe("#595, narrowed — a dynamic import site is disclosed but withholds no
     expect(envelope.exitCode).toBe(0);
     expect(envelope.decision.verdict).toBe("pass");
     expect(envelope.coverage.complete).toBe(true);
-    expect(envelope.coverage.blindSpots).toHaveLength(1);
-    expect(envelope.coverage.blindSpots[0]).toMatchObject({
+    // Two disclosed classes ride together: the fixture's Rust bare `use` is
+    // external (#603) and the loader is dynamic — neither withholds.
+    expect(envelope.coverage.blindSpots).toHaveLength(2);
+    expect(
+      envelope.coverage.blindSpots.find((row) => row.file === "libs/widget/src/loader.js"),
+    ).toMatchObject({
       file: "libs/widget/src/loader.js",
       dynamic: true,
+    });
+    expect(
+      envelope.coverage.blindSpots.find((row) => row.file === "libs/widget/src/lib.rs"),
+    ).toMatchObject({
+      file: "libs/widget/src/lib.rs",
+      external: true,
     });
   });
 });
@@ -342,12 +352,22 @@ describe("#595, TypeScript face — a # subpath or broken relative path withhold
     expect(envelope.exitCode).toBe(3);
     expect(envelope.decision.verdict).toBe("unknown");
     expect(envelope.coverage.complete).toBe(false);
-    expect(envelope.coverage.blindSpots).toHaveLength(2);
-    for (const row of envelope.coverage.blindSpots) {
+    // Three rows now: the fixture's Rust bare `use` is external (#603) and
+    // does not withhold, so the withholding count — and this no-verdict lane —
+    // is the two TypeScript workspace-referencing sites alone.
+    expect(envelope.coverage.blindSpots).toHaveLength(3);
+    for (const file of ["libs/widget/src/subpath.js", "libs/widget/src/relative.js"]) {
+      const row = envelope.coverage.blindSpots.find((entry) => entry.file === file);
+      expect(row).toBeTruthy();
       expect(row.external).toBeUndefined();
       expect(row.dynamic).toBeUndefined();
-      expect(["libs/widget/src/subpath.js", "libs/widget/src/relative.js"]).toContain(row.file);
     }
+    expect(
+      envelope.coverage.blindSpots.find((entry) => entry.file === "libs/widget/src/lib.rs"),
+    ).toMatchObject({
+      file: "libs/widget/src/lib.rs",
+      external: true,
+    });
   });
 });
 
@@ -388,10 +408,31 @@ const EXTERNAL_PARITY_CASES = [
   },
   {
     language: "Python",
+    // The declared-project importer lives in a SECOND project: an absolute
+    // import of one's own project root package is `noSelfCircularDependencies`
+    // (the barrel-cycle rule), not a resolution question, and this fixture
+    // pins resolution, not that rule. Both projects share the layer tag, so
+    // the consumer→widget edge the declared import produces is allowed.
     manifest: ["libs/widget/pyproject.toml", '[project]\nname = "widget"\nversion = "0.1.0"\n'],
-    extra: [["libs/widget/src/widget/__init__.py", "\n"]],
+    extra: [
+      ["libs/widget/src/widget/__init__.py", "\n"],
+      ["libs/consumer/pyproject.toml", '[project]\nname = "consumer"\nversion = "0.1.0"\n'],
+    ],
     external: ["libs/widget/src/widget/ext.py", "import requests\n"],
-    declared: ["libs/widget/src/widget/app.py", "import widget\n"],
+    declared: ["libs/consumer/main.py", "import widget\n"],
+    nodes: {
+      widget: {
+        name: "widget",
+        type: "lib",
+        data: { root: "libs/widget", tags: ["layer:domain"] },
+      },
+      consumer: {
+        name: "consumer",
+        type: "lib",
+        data: { root: "libs/consumer", tags: ["layer:domain"] },
+      },
+    },
+    analyzedFiles: 3,
   },
   {
     language: "Java",
@@ -453,14 +494,14 @@ describe("#603 — every analyzer discloses a bare external coordinate", () => {
       ];
       const { report } = await check(
         { format: "json", config: null, paths: [] },
-        contextFor(tree.root, files, widgetNode()),
+        contextFor(tree.root, files, parity.nodes ?? widgetNode()),
       );
       const envelope = JSON.parse(report);
       expect(envelope.status).toBe("ok");
       expect(envelope.exitCode).toBe(0);
       expect(envelope.decision.verdict).toBe("pass");
       expect(envelope.coverage.complete).toBe(true);
-      expect(envelope.coverage.analyzedFiles).toBe(2);
+      expect(envelope.coverage.analyzedFiles).toBe(parity.analyzedFiles ?? 2);
       // Exactly one row — the external coordinate's. The declared project's
       // own import contributed nothing: not a second external row, not a
       // withheld site.

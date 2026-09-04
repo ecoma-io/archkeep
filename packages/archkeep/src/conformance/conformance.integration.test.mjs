@@ -136,11 +136,15 @@ describe("this engine against @nx/enforce-module-boundaries", () => {
     // reaches the rules layer looking exactly like a clean file. Any failure
     // here would make some part of the comparison above vacuous, so each case
     // names the specifiers it deliberately leaves unresolvable and every other
-    // failure is a finding.
+    // failure is a finding. A disclosed external coordinate is not such a
+    // finding (#603): the analyzer looked, resolved the site to the dependency
+    // universe, and named it in the row — a resolution, not a read failure.
+    // Only the withholding class needs a per-case declaration.
     const unexpected = [];
     for (const spec of CONFORMANCE_CASES) {
       const declared = spec.unresolvable ?? [];
       for (const failure of outcome.failures.get(spec.id) ?? []) {
+        if (failure.external === true) continue;
         if (declared.some((specifier) => failure.reason.includes(`'${specifier}'`))) continue;
         unexpected.push(`${spec.id}: ${failure.reason}`);
       }

@@ -868,7 +868,16 @@ describe("analyzeGo", () => {
     // depends on beta. This is the record a reader can act on.
     const text = 'package main\n\nimport (\n\t"fmt"\n\t"example.com/acme/beta/store"\n)\n';
     const { imports, failures } = analyze(text);
-    expect(failures).toEqual([]);
+    // `fmt` is a bare external coordinate (#603): disclosed, verdict-neutral.
+    expect(failures).toEqual([
+      {
+        sourceFile: "acme/libs/alpha/main.go",
+        line: 4,
+        column: 2,
+        reason: "Go cannot resolve 'fmt' from 'acme/libs/alpha/main.go'",
+        external: true,
+      },
+    ]);
     expect(imports[1]).toEqual({
       sourceFile: "acme/libs/alpha/main.go",
       line: 5,
@@ -886,7 +895,16 @@ describe("analyzeGo", () => {
     // cross-project dependency reported clean.
     const text = 'package main\n\nimport "fmt"; import "example.com/acme/beta/store"\n';
     const { imports, failures } = analyze(text);
-    expect(failures).toEqual([]);
+    // `fmt` discloses (#603); the beta import resolves and contributes no row.
+    expect(failures).toEqual([
+      {
+        sourceFile: "acme/libs/alpha/main.go",
+        line: 3,
+        column: 8,
+        reason: "Go cannot resolve 'fmt' from 'acme/libs/alpha/main.go'",
+        external: true,
+      },
+    ]);
     expect(imports).toHaveLength(2);
     expect(imports[1].specifier).toBe("example.com/acme/beta/store");
     expect(imports[1].resolved.target).toBe("beta");
@@ -947,7 +965,17 @@ describe("analyzeGo", () => {
       ")", // 7
     ].join("\n");
     const { imports, failures } = analyze(text);
-    expect(failures).toEqual([]);
+    // `fmt` discloses at its own line (#603), shifted by the same comment the
+    // import records were shifted by.
+    expect(failures).toEqual([
+      {
+        sourceFile: "acme/libs/alpha/main.go",
+        line: 4,
+        column: 2,
+        reason: "Go cannot resolve 'fmt' from 'acme/libs/alpha/main.go'",
+        external: true,
+      },
+    ]);
     expect(imports.map((record) => [record.line, record.column, record.specifier])).toEqual([
       [4, 2, "fmt"],
       [6, 2, "example.com/acme/beta/store"],
@@ -1147,7 +1175,17 @@ describe("analyzeGo", () => {
       text,
       workspace: bomWorkspace,
     });
-    expect(failures).toEqual([]);
+    // The one row is `fmt`'s disclosure (#603) — the identifiers above it
+    // produce nothing, which is #468's point.
+    expect(failures).toEqual([
+      {
+        sourceFile: "acme/apps/gamma/main.go",
+        line: 4,
+        column: 2,
+        reason: "Go cannot resolve 'fmt' from 'acme/apps/gamma/main.go'",
+        external: true,
+      },
+    ]);
     expect(imports.map((record) => [record.specifier, record.line])).toEqual([
       ["fmt", 4],
       ["example.com/acme/beta/store", 5],

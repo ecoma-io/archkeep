@@ -682,7 +682,17 @@ describe("a Python package outside the two default bases", () => {
         "lib",
       ),
     });
-    expect(failures).toEqual([]);
+    // `os` discloses now that the external answer is earned (#603) — the same
+    // classification the record below carries.
+    expect(failures).toEqual([
+      {
+        sourceFile: "apps/viewer/src/viewer/app.py",
+        line: 1,
+        column: 8,
+        reason: "Python cannot resolve 'os' from 'apps/viewer/src/viewer/app.py'",
+        external: true,
+      },
+    ]);
     expect(imports[0].resolved).toEqual({
       target: null,
       file: null,
@@ -965,7 +975,16 @@ describe("analyzePython", () => {
     // produced no record and no failure at all — a real cross-project import
     // reporting exactly like a clean file.
     const { imports, failures } = analyze("import os, \\\n    beta.store\n");
-    expect(failures).toEqual([]);
+    // `os` discloses (#603); the beta import resolves and contributes no row.
+    expect(failures).toEqual([
+      {
+        sourceFile: "libs/alpha/src/alpha/service.py",
+        line: 1,
+        column: 8,
+        reason: "Python cannot resolve 'os' from 'libs/alpha/src/alpha/service.py'",
+        external: true,
+      },
+    ]);
     expect(imports).toHaveLength(2);
     expect(imports[1].specifier).toBe("beta.store");
     expect(imports[1].resolved.target).toBe("beta");
@@ -978,7 +997,16 @@ describe("analyzePython", () => {
     // byte-for-byte identical to a clean parse.
     const text = "import os, \\\r\n    beta.store\r\n";
     const { imports, failures } = analyze(text);
-    expect(failures).toEqual([]);
+    // `os` discloses (#603), its position unaffected by the CRLF endings.
+    expect(failures).toEqual([
+      {
+        sourceFile: "libs/alpha/src/alpha/service.py",
+        line: 1,
+        column: 8,
+        reason: "Python cannot resolve 'os' from 'libs/alpha/src/alpha/service.py'",
+        external: true,
+      },
+    ]);
     expect(imports.map((record) => record.specifier)).toEqual(["os", "beta.store"]);
     expect(imports[1].resolved.target).toBe("beta");
   });
@@ -1012,7 +1040,16 @@ describe("analyzePython", () => {
   it("crosses a boundary named only after a `;` on the same line as another import", () => {
     // The silent-miss direction for case 4.
     const { imports, failures } = analyze("import os; import beta.store\n");
-    expect(failures).toEqual([]);
+    // `os` discloses at its site on the shared line (#603).
+    expect(failures).toEqual([
+      {
+        sourceFile: "libs/alpha/src/alpha/service.py",
+        line: 1,
+        column: 8,
+        reason: "Python cannot resolve 'os' from 'libs/alpha/src/alpha/service.py'",
+        external: true,
+      },
+    ]);
     expect(imports).toHaveLength(2);
     expect(imports[1].specifier).toBe("beta.store");
     expect(imports[1].resolved.target).toBe("beta");

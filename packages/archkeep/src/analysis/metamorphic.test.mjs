@@ -59,6 +59,12 @@ const withLinesShifted = (records, by) =>
 /**
  * Layout-preserving comparison: deep-equal records including line and column,
  * over baselines proven non-empty. Returns nothing; it either passes or throws.
+ *
+ * The failure list rides the same equality as the import records — including
+ * the disclosed classes (`dynamic`, `external`; #603), which a transform that
+ * leaves the imports alone must leave alone too. A baseline may carry such
+ * rows; what it may not carry is a row that CHANGED across an invariant
+ * transform.
  */
 const expectRecordsUnchanged = (analyze, original, transformed) => {
   const before = analyze(original);
@@ -66,9 +72,8 @@ const expectRecordsUnchanged = (analyze, original, transformed) => {
   // The vacuity guard: an analyzer returning nothing would satisfy the deep
   // equality below while seeing neither file. Both sides must hold records.
   expect(before.imports.length).toBeGreaterThan(0);
-  expect(before.failures).toEqual([]);
   expect(after.imports).toEqual(before.imports);
-  expect(after.failures).toEqual([]);
+  expect(after.failures).toEqual(before.failures);
 };
 
 /**
@@ -79,10 +84,9 @@ const expectOnlyShifted = (analyze, original, transformed, by) => {
   const before = analyze(original);
   const after = analyze(transformed);
   expect(before.imports.length).toBeGreaterThan(0);
-  expect(before.failures).toEqual([]);
-  expect(after.failures).toEqual([]);
   expect(after.imports.map(facts)).toEqual(before.imports.map(facts));
   expect(after.imports).toEqual(withLinesShifted(before.imports, by));
+  expect(after.failures).toEqual(withLinesShifted(before.failures, by));
 };
 
 describe("Go — comments and renames are not dependencies", () => {
@@ -120,7 +124,17 @@ describe("Go — comments and renames are not dependencies", () => {
       'import (\n\t"example.com/acme/core/api"\n\t"example.com/acme/storage/kv"\n)',
     );
     const result = analyze(violated);
-    expect(result.failures).toEqual([]);
+    // The only failure is `fmt`'s disclosure (#603) — the added crossing
+    // produces a record, not a failure.
+    expect(result.failures).toEqual([
+      {
+        sourceFile: "acme/apps/gamma/main.go",
+        line: 7,
+        column: 8,
+        reason: "Go cannot resolve 'fmt' from 'acme/apps/gamma/main.go'",
+        external: true,
+      },
+    ]);
     expect(
       result.imports.some((record) => record.specifier === "example.com/acme/storage/kv"),
     ).toBe(true);
