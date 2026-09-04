@@ -49,7 +49,7 @@ import {
   isWholeFileFailure,
   unresolvableLiteralCount,
 } from "../analysis/source-util.mjs";
-import { EXIT, coverageIncompleteReasons } from "../verdict.mjs";
+import { EXIT, coverageComplete, coverageIncompleteReasons } from "../verdict.mjs";
 import { buildDecision } from "../report/evidence.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatCoverageIncomplete } from "../report/text.mjs";
@@ -96,7 +96,17 @@ export function coverageVerdict(commandContext, { acceptedFiles } = {}) {
     .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
   const blindSpots = blindSpotRows(analysis.failures);
   const blindSpotCount = unresolvableLiteralCount(analysis.failures);
-  const complete = notAnalyzed.length === 0 && blindSpotCount === 0 && analysis.analyzed > 0;
+  // The conjunction is `../verdict.mjs`'s `coverageComplete` — the same
+  // predicate `verdictFor`'s decision face reads, so `check`'s envelope
+  // cannot carry a `coverage.complete` and a `decision.coverageComplete`
+  // that disagree about one run. The predicate is defined there, not here,
+  // because `verdictFor` needs it and this module already imports from that
+  // one: the reverse import would be a cycle.
+  const complete = coverageComplete({
+    unchecked: notAnalyzed.length,
+    blindSpotCount,
+    analyzed: analysis.analyzed,
+  });
   return {
     notAnalyzed,
     blindSpots,

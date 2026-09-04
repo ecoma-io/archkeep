@@ -61,6 +61,33 @@ export function coverageIncompleteReasons({ unchecked, blindSpots, analyzed }) {
     analyzed === 0 ? "no file in scope could be analyzed — coverage incomplete" : null,
   ].filter(Boolean);
 }
+
+/**
+ * The one completeness predicate — the three coverage axes conjoined, the
+ * boolean twin of `coverageIncompleteReasons` directly above, which words the
+ * same axes as clauses. `coverageVerdict` (`./commands/coverage-verdict.mjs`)
+ * reads its `complete` from here, `verdictFor` reads the decision's
+ * `coverageComplete` from here, and `check`'s coverage block reads its
+ * `complete` from here — three faces of one claim, so the envelope's
+ * `coverage.complete` and its `decision.coverageComplete` cannot disagree
+ * about a run neither re-derives from the other.
+ *
+ * The counts come from the caller because a command's coverage universe is
+ * its own: `check`'s is wider than `commandContext.analysis` (the go.work and
+ * tsconfig whole-file failures it pushes, the accepted `coverage.unowned`
+ * files it withdraws), and each face feeds the counts it is a claim about. A
+ * caller that reads plain `commandContext.analysis` should call
+ * `coverageVerdict` instead — this predicate is the law's last step, not the
+ * place failure classes get decided (`./analysis/source-util.mjs`'s
+ * classifiers own that line).
+ *
+ * @param {{unchecked: number, blindSpotCount: number, analyzed: number}} counts
+ * @returns {boolean} Whether the run judged everything in its scope.
+ */
+export function coverageComplete({ unchecked, blindSpotCount, analyzed }) {
+  return unchecked === 0 && blindSpotCount === 0 && analyzed > 0;
+}
+
 /**
  * The one place that turns a run's counts into the verdict every format
  * agrees on. `runCheck` uses it for the process's exit code; `check` uses the
@@ -127,7 +154,11 @@ export function verdictFor({
       reasons: coverageReasons,
       decision: buildDecision({
         status: "findings",
-        coverageComplete: unchecked === 0 && blindSpots === 0 && analyzed > 0,
+        // The one completeness predicate, not a restatement: the decision's
+        // `coverageComplete` and the envelope's `coverage.complete` are the
+        // same claim about the same counts (`check` feeds both from one
+        // object), so they read it from one expression.
+        coverageComplete: coverageComplete({ unchecked, blindSpotCount: blindSpots, analyzed }),
         findings:
           violations +
           declaredEdgeFindings +
@@ -188,7 +219,7 @@ export function verdictFor({
       reasons,
       decision: buildDecision({
         status: "no-verdict",
-        coverageComplete: unchecked === 0 && blindSpots === 0 && analyzed > 0,
+        coverageComplete: coverageComplete({ unchecked, blindSpotCount: blindSpots, analyzed }),
         findings: 0,
         reason: reasons.join("; "),
       }),

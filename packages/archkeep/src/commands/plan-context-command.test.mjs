@@ -383,6 +383,26 @@ describe("planContextCommand", () => {
     expect(result.coverage.complete).toBe(false);
   });
 
+  it("pins today's two-axis completeness over a tree the run judged nothing of (#652 stop)", async () => {
+    // A PIN, not an endorsement. This face restates completeness inline as
+    // `notAnalyzed.length === 0 && unresolvableLiteralCount(failures) === 0`
+    // — no `analyzed > 0` axis (#599) — over its own whole-tree-plus-drift
+    // failure set, so a run that judged no file at all still reports
+    // `complete: true` / `ok` here, byte-for-byte the coverage a complete run
+    // claims. Composing this face onto `coverageVerdict` flips this lane, and
+    // its failure set is not `commandContext.analysis` anyway (a whole-tree
+    // re-analysis plus drift failures), so the collapse is a semantic
+    // reconciliation, not a refactor. That decision is reported to the
+    // maintainer, not made here; this pin makes the silent flip loud the
+    // moment someone makes it. Flip this pin when the axis question is
+    // decided.
+    const ctx = commandContext({ owned: [] });
+    const result = await planContextCommand("alpha", [], ctx, config());
+    expect(result.status).toBe("ok");
+    expect(result.coverage.complete).toBe(true);
+    expect(result.coverage.analyzedFiles).toBe(0);
+  });
+
   it("never exits 1 — the planning context is facts, not a finding", async () => {
     const result = await planContextCommand("alpha", [], commandContext(), config());
     expect(result.status).not.toBe("findings");

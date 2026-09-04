@@ -50,7 +50,7 @@ import { applySuppressionTable, evaluateRun, exemptResolvedFile } from "../rules
 import { buildReachability } from "../rules/reachability.mjs";
 import { orphanedNotDependOnTags, unmatchedConstraintRows } from "../rules/tags.mjs";
 import { judgeTsconfigPaths } from "../tsconfig-paths.mjs";
-import { verdictFor } from "../verdict.mjs";
+import { coverageComplete, verdictFor } from "../verdict.mjs";
 import { listTrackedFiles, listUntrackedFiles } from "../workspace.mjs";
 
 /**
@@ -1104,8 +1104,14 @@ export async function check(
               // Complete means the run judged everything in scope: no
               // whole-file failure (unchecked), no unresolvable site (#595),
               // and at least one file analyzed (#599 — a run that judged
-              // nothing has no verdict to claim).
-              complete: unchecked === 0 && blindSpotCount === 0 && analyzed > 0,
+              // nothing has no verdict to claim). Read from the one predicate
+              // `verdictFor`'s decision face reads, so this field and the
+              // envelope's `decision.coverageComplete` are one derivation —
+              // the counts are this command's (the go.work/tsconfig failures
+              // pushed above and the accepted files withdrawn above make the
+              // universe wider than `commandContext.analysis`), the law is
+              // not.
+              complete: coverageComplete({ unchecked, blindSpotCount, analyzed }),
               projects: Object.keys(graph.nodes).length,
               analyzedFiles: analyzed,
               imports: imports.length,
