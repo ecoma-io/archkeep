@@ -183,6 +183,20 @@ describe("evidenceGraphToProjectGraph", () => {
     expect(graph.workspaceLayout).toEqual({ appsDir: "products", libsDir: "modules" });
     expect(graph.exemptedFiles).toEqual(["vendor/generated.go"]);
   });
+
+  it("refuses an exemption entry that is not a string, naming the entry", () => {
+    // `createContext` (`../rules/index.mjs`) filters `graph.exemptedFiles`
+    // with `typeof file === "string"`, so a corrupted snapshot's non-string
+    // entry used to ride through this conversion and vanish there — the
+    // exemption set silently shrinking by one file, disclosed nowhere.
+    expect(() =>
+      evidenceGraphToProjectGraph({
+        projects: [],
+        dependencies: [],
+        exemptedFiles: ["vendor/generated.go", 7],
+      }),
+    ).toThrow(/graph\.exemptedFiles\[1\] is 7, not a string/u);
+  });
 });
 
 // ---------------------------------------------------------------------------
