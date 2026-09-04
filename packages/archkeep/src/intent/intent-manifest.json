@@ -20,7 +20,7 @@
           "type": "architecture-test",
           "path": "src/conformance/boundary.test.mjs",
           "assertion": "SHIPPED_PACKAGES allow-list prevents unapproved dependencies; specifiersIn() walk catches all imports including createRequire; no provider import found in core layers",
-          "sha256": "12d4e179f88de2622a41e56f42b2bab1c88a677ec2232430752138c57ba5fb18"
+          "sha256": "e4e24ed9f36e31126249c7d079b3656d17ac78ee4f12033321467ffa6666f033"
         },
         {
           "type": "source-evidence",

@@ -44,7 +44,13 @@ afterEach(() => {
 /**
  * A throwaway directory inside this package — `@nx/eslint-plugin` resolves
  * from it through the ordinary ancestor `node_modules` walk, reaching this
- * workspace's own real install.
+ * workspace's own real install. The `.eslint-config-fixture-` prefix is listed
+ * in this package's `.gitignore`, which is what makes the fixture's ownership
+ * unambiguous to everyone but this file: `./conformance/boundary.test.mjs`
+ * derives the roots its project walk must skip from that same entry, so a walk
+ * running in a parallel vitest worker never descends into a tree this file's
+ * `afterEach` is tearing down (#637 was exactly that race, before the entry
+ * existed).
  *
  * @returns {string} absolute path of the fixture root.
  */
