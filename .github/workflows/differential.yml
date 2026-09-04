@@ -16,7 +16,11 @@
 # never in what a result means: `src/conformance/README.md` (condition 3 under
 # "What this licenses") points here as the evidence, and a red run of this
 # workflow is a conformance regression to be fixed like a failing required
-# check, not a flake to re-run. The weekly schedule exists so that a
+# check, not a flake to re-run. That promise is backed for BOTH jobs below:
+# each writes its verdict envelope and each has a `Reconcile the issue trail`
+# step, so a red run lands as a durable issue (`conformance-differential` for
+# the differential job, `conformance-coverage` for the coverage job) and not
+# only as a red X in the Actions tab. The weekly schedule exists so that a
 # renovate-bumped `@nx/eslint-plugin` or eslint is re-measured against the
 # pinned trees within days of landing, not on whichever release notices.
 #
@@ -114,14 +118,27 @@ jobs:
   # rather than a step so a red differential and a red coverage lane are
   # distinguishable at a glance, and so one being down does not hide the other.
   #
+  # A red run is as durable as the differential job's: the step below writes
+  # the lane's verdict envelope and the `Reconcile the issue trail` step
+  # consumes it — `scripts/reconcile-coverage-issue.mjs`, the differential
+  # trail's engine under this lane's own label (`conformance-coverage`) and
+  # title, so the two lanes' trails never collide. A findings-red opens or
+  # updates this lane's issue, a later green run closes it, and an infra-red
+  # (a tree that could not be cloned or read) never touches it.
+  #
   # It shares nothing with the differential job — no cache, no clone — because
   # the clones are pinned by sha and a fresh one cannot be stale.
   coverage:
     name: Analyzer coverage on real trees
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Narrowed from the workflow-level block, for the same reason the
+    # differential job restates its own: job-level `permissions` REPLACES it
+    # rather than extending it, so `contents: read` is restated for the
+    # checkout, and `issues: write` exists for the reconcile step below.
     permissions:
       contents: read
+      issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -138,5 +155,29 @@ jobs:
 
       # Exit 3 (a tree could not be cloned or read — the run could not look) is
       # as red as exit 1 (a pinned count moved); the log's last lines say which.
+      # The envelope must be written on BOTH paths so the reconcile step below
+      # can tell the classes apart — which is why the step captures and re-exits
+      # the code instead of letting a non-zero exit short-circuit the step
+      # under it.
       - name: Measure the analyzers against real Go, Rust, Python, JVM and .NET trees
-        run: node scripts/coverage-real-trees.mjs
+        run: |
+          set +e
+          node scripts/coverage-real-trees.mjs --summary-out "$RUNNER_TEMP/coverage-summary.json"
+          code=$?
+          exit "$code"
+
+      # `if: always()`: the issue trail must be reconciled on a RED run too —
+      # that is the whole point of its existence. The step decides from the
+      # envelope's exitClass; a missing or malformed envelope makes it fail
+      # loudly, because a red run whose issue never landed is a silent miss.
+      # The scheduled run measures the default branch, which is exactly the ref
+      # the trail's auto-close may trust.
+      - name: Reconcile the issue trail
+        if: always()
+        env:
+          COVERAGE_SUMMARY: "${{ runner.temp }}/coverage-summary.json"
+          COVERAGE_REPO: "${{ github.repository }}"
+          COVERAGE_RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          COVERAGE_SHA: "${{ github.sha }}"
+          GH_TOKEN: "${{ github.token }}"
+        run: node scripts/reconcile-coverage-issue.mjs

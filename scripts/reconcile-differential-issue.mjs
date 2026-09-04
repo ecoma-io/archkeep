@@ -6,6 +6,13 @@
 // verdict envelope `scripts/differential-real-trees.mjs --summary-out` wrote,
 // and drives `gh` over the ONE issue this mechanism owns.
 //
+// The engine half of this file is lane-agnostic: `decideIssue`, `issueFooter`
+// and `applyTrail` take the lane's identity as arguments, and the coverage
+// lane's trail (`scripts/reconcile-coverage-issue.mjs`) is this same lifecycle
+// pointed at the coverage envelope under its own label and title. The rule
+// below is stated here, once; the coverage script contributes only its lane's
+// identity and the mapping from its envelope into the engine's inputs.
+//
 // Lifecycle contract, every branch pinned by
 // `scripts/reconcile-differential-issue.test.mjs`:
 //
@@ -28,9 +35,10 @@
 // right amount of noise: it stays open until a later run measures the fix.
 //
 // The exit-class vocabulary is read from the envelope, never derived here —
-// `buildSummary` in `scripts/differential-real-trees.mjs` is the one place
-// that spells it, and a workflow or this script holding a second copy of the
-// mapping would drift the way `AGENTS.md`'s "never state a rule twice" names.
+// each lane's `buildSummary` (`scripts/differential-real-trees.mjs`,
+// `scripts/coverage-real-trees.mjs`) is the one place its own mapping is
+// spelled, and a workflow or this script holding a second copy of either
+// would drift the way `AGENTS.md`'s "never state a rule twice" names.
 //
 // Environment: DIFFERENTIAL_SUMMARY (path to the envelope), DIFFERENTIAL_REPO,
 // DIFFERENTIAL_RUN_URL, DIFFERENTIAL_SHA (default-branch head the scheduled
@@ -50,6 +58,34 @@ import { fileURLToPath } from "node:url";
  * `gh issue list` query uses to find its own issue. */
 export const LABEL = "conformance-differential";
 
+/** The one issue title this lane's trail opens under, and the label
+ * description `ensureLabel` bootstraps with. Both key to THIS lane: the
+ * coverage lane's trail carries its own spellings of each, so the two lanes'
+ * trails cannot collide — a query by one lane's label cannot find the other
+ * lane's issue. */
+export const ISSUE_TITLE =
+  "differential: findings — conformance divergence from @nx/enforce-module-boundaries";
+export const LABEL_DESCRIPTION =
+  "The conformance differential found a divergence from @nx/enforce-module-boundaries";
+
+/**
+ * The maintenance promise every trail's issue closes with, parameterized by
+ * the workflow step that maintains it. Both lanes' bodies end with this exact
+ * text — the lifecycle it states is the one `decideIssue` implements, so it
+ * is spelled here, once, and each lane's body builder names only its own
+ * maintainer.
+ *
+ * @param {string} maintainer the workflow step the issue is maintained by
+ * @returns {string}
+ */
+export function issueFooter(maintainer) {
+  return [
+    `This issue is maintained by ${maintainer}.`,
+    "A findings-red run opens or updates it; a later green run on the default branch",
+    "closes it. Closing it manually does not stop the next red run from reopening it.",
+  ].join("\n");
+}
+
 /**
  * The issue body: the run that produced the finding, the ref it measured, and
  * the exact UNEXPLAINED / STALE / BREACH lines the run printed — the envelope
@@ -68,32 +104,32 @@ export function buildIssueBody({ runUrl, sha, trees }) {
     for (const line of tree.lines) lines.push(`  ${line}`);
     lines.push("");
   }
-  lines.push("This issue is maintained by `.github/workflows/differential.yml`'s reconcile step.");
-  lines.push("A findings-red run opens or updates it; a later green run on the default branch");
-  lines.push("closes it. Closing it manually does not stop the next red run from reopening it.");
+  lines.push(issueFooter("`.github/workflows/differential.yml`'s reconcile step"));
   return lines.join("\n");
 }
 
 /**
- * The whole lifecycle decision, pure: takes the envelope's class and the
- * existing issue (or its absence) and answers what `gh` must do. The silent
- * directions are the ones the tests pin first: `infra` with an open issue
- * must NOT close it, and an `exitClass` this script does not know must throw
- * rather than quietly do nothing.
+ * The whole lifecycle decision, pure: takes the envelope's class, the lane's
+ * identity (the ONE issue title, and the body already rendered from that
+ * lane's envelope), the run facts, and the existing issue (or its absence),
+ * and answers what `gh` must do. Which envelope the class came from, and how
+ * the body was rendered, are the caller's mapping — every lane's trail lands
+ * here, so the branches below are the lifecycle, stated once.
  *
- * @param {{exitClass: string, summary: object, existing?: {number: number, state: "open"|"closed"}}} input
+ * The silent directions are the ones the tests pin first: `infra` with an
+ * open issue must NOT close it, an `ok` class with an open issue MUST close
+ * it (a green run that left a stale issue open would say a divergence
+ * persists when it does not), and an `exitClass` no envelope can carry must
+ * throw rather than quietly do nothing.
+ *
+ * @param {{exitClass: string, title: string, body: string, runUrl: string, sha: string, existing?: {number: number, state: "open"|"closed"}}} input
  * @returns {{action: string, number?: number, title?: string, body?: string, closeComment?: string, reason?: string}}
  * @throws {Error} on an `exitClass` that is none of the four the envelope can carry.
  */
-export function decideIssue({ exitClass, summary, existing }) {
+export function decideIssue({ exitClass, title, body, runUrl, sha, existing }) {
   if (exitClass === "findings") {
-    const body = buildIssueBody(summary);
     if (!existing) {
-      return {
-        action: "open",
-        title: `differential: findings — conformance divergence from @nx/enforce-module-boundaries`,
-        body,
-      };
+      return { action: "open", title, body };
     }
     if (existing.state === "open") return { action: "update", number: existing.number, body };
     return { action: "reopen", number: existing.number, body };
@@ -103,7 +139,7 @@ export function decideIssue({ exitClass, summary, existing }) {
       return {
         action: "close",
         number: existing.number,
-        closeComment: `Green run ${summary.runUrl} (default branch @ ${summary.sha}) — closing automatically.`,
+        closeComment: `Green run ${runUrl} (default branch @ ${sha}) — closing automatically.`,
       };
     }
     return { action: "none", reason: "no open issue to close" };
@@ -117,8 +153,8 @@ export function decideIssue({ exitClass, summary, existing }) {
     };
   }
   throw new Error(
-    `reconcile-differential-issue: unrecognised exitClass ${JSON.stringify(exitClass)} — a ` +
-      `summary field this script does not know must not silently do nothing`,
+    `unrecognised exitClass ${JSON.stringify(exitClass)} — a ` +
+      `summary field no consumer knows must not silently do nothing`,
   );
 }
 
@@ -167,10 +203,12 @@ function requireGh(args) {
  *
  * @param {{action: string, number?: number, title?: string, body?: string, closeComment?: string}} decision
  * @param {string} repo
+ * @param {string} label the lane's label — the handle the open command tags
+ *   the issue with, and the handle that lane's query searches by
  * @returns {string[][]} zero or more `gh` argument arrays, in call order
  * @throws {Error} on an `action` this function does not know.
  */
-export function buildGhCommands(decision, repo) {
+export function buildGhCommands(decision, repo, label = LABEL) {
   switch (decision.action) {
     case "open":
       return [
@@ -184,7 +222,7 @@ export function buildGhCommands(decision, repo) {
           "--body",
           decision.body,
           "--label",
-          LABEL,
+          label,
         ],
       ];
     case "update":
@@ -232,35 +270,37 @@ export function buildGhCommands(decision, repo) {
  * there — a caller whose token CAN list labels (local runs, a fuller scope)
  * leaves a human-edited label untouched, and a caller that cannot reaches
  * the same create-or-update the old code intended. */
-function ensureLabel(repo) {
+function ensureLabel(repo, label, description) {
   const base = [
     "label",
     "create",
-    LABEL,
+    label,
     "--repo",
     repo,
     "--color",
     "d73a4a",
     "--description",
-    "The conformance differential found a divergence from @nx/enforce-module-boundaries",
+    description,
   ];
   const created = gh(base);
   if (created.status === 0) return;
   const force = gh([...base, "--force"]);
   if (force.status !== 0) {
-    throw new Error(`label ${LABEL} could not be created or updated: ${force.stderr.trim()}`);
+    throw new Error(`label ${label} could not be created or updated: ${force.stderr.trim()}`);
   }
 }
 
-/** The open-or-closed issue this mechanism owns, if one exists at all. */
-function existingIssue(repo) {
+/** The open-or-closed issue this lane's label owns, if one exists at all.
+ * Exported because the coverage lane's trail runs the same query under its
+ * own label — the one `gh` read both trails share, so it exists once. */
+export function existingIssue(repo, label) {
   const list = requireGh([
     "issue",
     "list",
     "--repo",
     repo,
     "--label",
-    LABEL,
+    label,
     "--state",
     "all",
     "--json",
@@ -274,6 +314,32 @@ function existingIssue(repo) {
   // `decideIssue` compares against lowercase. Normalized here, at the boundary
   // that reads from the CLI, so the decision function keeps its pure contract.
   return { number: found[0].number, state: found[0].state.toLowerCase() };
+}
+
+/**
+ * The act half, shared by both lanes' trails: make sure the lane's label
+ * exists (the first run of a trail is its own bootstrap), run the decision's
+ * `gh` commands, and log one line naming what happened. Impure by design —
+ * it is the half the tests deliberately leave untested, the same discipline
+ * the differential lane's `main()` has always applied to `gh`.
+ *
+ * @param {{decision: object, repo: string, label: string, labelDescription: string}} input
+ */
+export function applyTrail({ decision, repo, label, labelDescription }) {
+  ensureLabel(repo, label, labelDescription);
+  const commands = buildGhCommands(decision, repo, label);
+  if (commands.length === 0) {
+    console.log(`no issue action: ${decision.reason}`);
+    return;
+  }
+  for (const args of commands) requireGh(args);
+  const summaries = {
+    open: `opened the ${label} issue for findings`,
+    update: `updated issue #${decision.number}`,
+    reopen: `reopened issue #${decision.number}`,
+    close: `closed issue #${decision.number}`,
+  };
+  console.log(summaries[decision.action]);
 }
 
 function main() {
@@ -315,8 +381,11 @@ function main() {
   try {
     decision = decideIssue({
       exitClass: envelope.exitClass,
-      summary: { runUrl, sha, trees: envelope.trees ?? [] },
-      existing: existingIssue(repo),
+      title: ISSUE_TITLE,
+      body: buildIssueBody({ runUrl, sha, trees: envelope.trees ?? [] }),
+      runUrl,
+      sha,
+      existing: existingIssue(repo, LABEL),
     });
   } catch (error) {
     console.error(String(error?.message ?? error));
@@ -324,20 +393,7 @@ function main() {
   }
 
   try {
-    ensureLabel(repo);
-    const commands = buildGhCommands(decision, repo);
-    if (commands.length === 0) {
-      console.log(`no issue action: ${decision.reason}`);
-    } else {
-      for (const args of commands) requireGh(args);
-      const summaries = {
-        open: `opened the ${LABEL} issue for findings`,
-        update: `updated issue #${decision.number}`,
-        reopen: `reopened issue #${decision.number}`,
-        close: `closed issue #${decision.number}`,
-      };
-      console.log(summaries[decision.action]);
-    }
+    applyTrail({ decision, repo, label: LABEL, labelDescription: LABEL_DESCRIPTION });
   } catch (error) {
     console.error(String(error?.message ?? error));
     process.exit(1);

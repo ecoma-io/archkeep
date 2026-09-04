@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { TREES, evaluate } from "./coverage-real-trees.mjs";
+import { buildSummary, parseArgs, TREES, evaluate } from "./coverage-real-trees.mjs";
 
 /** A one-tree table, so a case states only what it is about. */
 const table = (expected) => [{ name: "tree", expected }];
@@ -87,4 +87,52 @@ test("every shipped tree pins a sha, a license and a non-empty expectation", () 
     assert.ok(tree.expected.sources > 0, `${tree.name} pins no sources`);
     assert.ok(tree.expected.records > 0, `${tree.name} pins no records`);
   }
+});
+
+// The envelope's classification half — the mapping the coverage job's
+// reconcile step decides from (#691: the lane red four times and filed
+// nothing, because it wrote no envelope at all). The silent direction here is
+// a class that understates the run: an infra message classified as ok, or a
+// breach classified as infra, would let a red run touch — or fail to open —
+// the trail's issue for the wrong reason.
+test("a clean run's envelope reads ok and carries no breach", () => {
+  assert.deepEqual(buildSummary(0, []), { exitCode: 0, exitClass: "ok", breaches: [] });
+});
+
+test("breaches classify findings and are carried verbatim, never re-formatted", () => {
+  const breach =
+    "gin: records is 500, pinned at 518 — the analyzer reads less of this tree than it did";
+  const summary = buildSummary(1, [breach]);
+  assert.equal(summary.exitClass, "findings");
+  assert.equal(summary.exitCode, 1);
+  assert.deepEqual(summary.breaches, [breach]);
+  assert.equal("infrastructure" in summary, false);
+});
+
+test("an infrastructure message classifies infra even with an empty breach list", () => {
+  const summary = buildSummary(3, [], "git fetch exited 128");
+  assert.equal(summary.exitClass, "infra");
+  assert.equal(summary.exitCode, 3);
+  assert.deepEqual(summary.breaches, []);
+  assert.equal(summary.infrastructure, "git fetch exited 128");
+});
+
+test("the exit code and the class never disagree about which run was red", () => {
+  // The reconcile step reads the class; a human reads the code. One mapping,
+  // both facts from the same call.
+  assert.equal(buildSummary(0, []).exitClass, "ok");
+  assert.equal(buildSummary(1, ["x"]).exitClass, "findings");
+  assert.equal(buildSummary(3, [], "x").exitClass, "infra");
+});
+
+test("parseArgs accepts --summary-out alone and refuses anything else loudly", () => {
+  assert.deepEqual(parseArgs([]), { summaryOut: undefined });
+  assert.deepEqual(parseArgs(["--summary-out", "/tmp/envelope.json"]), {
+    summaryOut: "/tmp/envelope.json",
+  });
+  assert.throws(
+    () => parseArgs(["--exit-class-of", "/tmp/envelope.json"]),
+    /unrecognised argument/u,
+  );
+  assert.throws(() => parseArgs(["--summary-out"]), /needs a file path/u);
 });
