@@ -190,20 +190,3 @@ export function resolveJvmPackagePrefix(specifier, index) {
   }
   return null;
 }
-
-/**
- * The owning project of a resolved prefix, when exactly one project claims
- * the matched name.
- *
- * @param {{ owners: { project: string }[], prefix: string }} resolution
- * @returns {{ target: string, ambiguous?: undefined } |
- *            { target: null, ambiguous: true, projects: string[] }} A single
- *   target when the owners agree; otherwise every distinct claimant, for the
- *   caller's failure record.
- */
-export function projectOfResolution(resolution) {
-  const projects = [...new Set(resolution.owners.map((owner) => owner.project))];
-  return projects.length === 1
-    ? { target: projects[0] }
-    : { target: null, ambiguous: true, projects };
-}

@@ -491,38 +491,6 @@ export function buildEvidenceComplete({
   };
 }
 
-/**
- * Asserts that the Evidence-Complete contract is satisfied.
- * Throws with a detailed message listing every failing gate.
- *
- * @param {EvidenceCompleteContract} ec The Evidence-Complete contract to verify.
- * @returns {void}
- * @throws {Error} When any gate fails.
- */
-export function assertEvidenceComplete(ec) {
-  if (ec.overallComplete) return;
-
-  const contractType = ec.contractType || EVALUATION_CONTRACT_TYPES.SCENARIO;
-  const failures = [];
-  for (const gate of EVIDENCE_COMPLETE_GATES) {
-    const g = ec.gates[gate.key];
-    // Skip non-required gates for this contract type
-    if (g.required === false) continue;
-    if (!g.pass) {
-      failures.push(`${gate.label}: ${JSON.stringify(g.value)} (expected pass)`);
-    }
-  }
-
-  if (failures.length === 0) return;
-
-  throw new Error(
-    `Evidence-Complete contract not satisfied.\n` +
-      `  Contract type: ${contractType}\n` +
-      `  Overall: ${ec.overallStatus}\n` +
-      `  Failed gates:\n    ${failures.join("\n    ")}`,
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Governance completeness
 // ---------------------------------------------------------------------------
