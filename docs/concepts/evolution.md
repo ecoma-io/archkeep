@@ -92,6 +92,18 @@ that included `recordedAt` would make every rerun a new event, and re-running
 `archkeep change --event-out` over an unchanged transition would append a
 duplicate of itself forever.
 
+**The identity is only reproducible from committed, clean evidence.** A
+commitless head serializes its `head` as `{}`, and a dirty tree names a commit
+its evidence does not back — either way two distinct evidence states collapse
+onto one event id, and a later transition is silently lost or aliased. So the
+two event-writing commands that can run against an uncommitted desk — `delta
+--event-out` and `change --event-out` — refuse the write loudly instead
+(exit 3), naming the command and the reason. The same run without
+`--event-out` is unaffected: the gate is the write, never the verdict.
+`history --event-out` needs no gate, because it analyzes committed revisions
+in detached worktrees by construction — its events are reproducible by
+construction too.
+
 `declarationDigest` covers only the **declarative** parts of a normalized
 change-intent — `{ version, base, projects, edges, constraints }`. The prose
 `summary` is excluded, because prose is not semantics: two runs whose summary

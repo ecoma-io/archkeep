@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import {
+  assertReproducibleEventIdentity,
   classifyEvolution,
   declarationDigest,
   edgeEvolutionIdentity,
@@ -106,6 +107,64 @@ describe("eventId", () => {
     expect(eventId(makeEvent({ recordedAt: later.recordedAt }))).toBe(eventId(event));
     expect(eventId(makeEvent({ notes: differentNotes.notes }))).toBe(eventId(event));
     expect(eventId(makeEvent({ provenance: differentProvenance.provenance }))).toBe(eventId(event));
+  });
+});
+
+describe("assertReproducibleEventIdentity — the refusal law every event-writing command holds", () => {
+  it("refuses a commitless head, naming the writing command — the message is frozen wording", () => {
+    expect(() =>
+      assertReproducibleEventIdentity({
+        label: "delta",
+        headCommit: undefined,
+        baseDirty: false,
+        headDirty: false,
+      }),
+    ).toThrow(
+      "archkeep: refusing to write a delta event without a committed head — a commitless head has no reproducible event identity, and every distinct head state would collide on one event id. Commit the head, or capture without --event-out.",
+    );
+  });
+
+  it("refuses a dirty head — the wording is the delta command's original, parameterized by label", () => {
+    expect(() =>
+      assertReproducibleEventIdentity({
+        label: "change",
+        headCommit: "abc123",
+        baseDirty: false,
+        headDirty: true,
+      }),
+    ).toThrow(
+      "archkeep: refusing to write a change event from a dirty working tree — the event would name a commit whose evidence is uncommitted, and distinct uncommitted states would collide on one event id. Commit both sides first.",
+    );
+  });
+
+  it("refuses a dirty base with the same dirty-tree message", () => {
+    expect(() =>
+      assertReproducibleEventIdentity({
+        label: "change",
+        headCommit: "abc123",
+        baseDirty: true,
+        headDirty: false,
+      }),
+    ).toThrow(/dirty working tree/u);
+  });
+
+  it("writes from a committed, clean pair — the pass-through both commands ride", () => {
+    expect(() =>
+      assertReproducibleEventIdentity({
+        label: "delta",
+        headCommit: "abc123",
+        baseDirty: false,
+        headDirty: false,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertReproducibleEventIdentity({
+        label: "change",
+        headCommit: "abc123",
+        baseDirty: false,
+        headDirty: false,
+      }),
+    ).not.toThrow();
   });
 });
 

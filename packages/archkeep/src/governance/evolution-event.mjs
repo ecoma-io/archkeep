@@ -81,6 +81,48 @@ export function eventId(event) {
 }
 
 /**
+ * The refusal law every command that writes an evolution event holds: the
+ * write happens only from a reproducible identity — a committed, clean head
+ * and a clean base. A commitless head has no revision to name (the event
+ * would serialize its `head` as `{}`, and every run over that workspace
+ * would collide on one event id); a dirty tree names a commit its evidence
+ * does not back, so two distinct uncommitted states collapse onto one event
+ * id — a later transition is silently lost or aliased. That is the silent
+ * direction this repository refuses, so the write is refused loudly instead.
+ * The same run without `--event-out` stays a byte-identical in-memory run —
+ * the gate is the event write, never the verdict.
+ *
+ * The messages are the `delta` command's original wording, parameterized by
+ * the writing command's label. Consumers match on these strings (a refusal
+ * is part of a run's observable contract), so the wording is frozen here —
+ * one home, one copy, no per-command drift.
+ *
+ * @param {{label: "delta"|"change", headCommit: string|undefined,
+ *   baseDirty: boolean, headDirty: boolean}} input `label` names the writing
+ *   command in the refusal message; `headCommit` is the head revision the
+ *   event would carry (`undefined` when provenance could not resolve one);
+ *   `baseDirty`/`headDirty` are the two sides' provenance dirty bits.
+ * @returns {void} Throws on every state that cannot produce a reproducible
+ *   event identity.
+ */
+export function assertReproducibleEventIdentity({ label, headCommit, baseDirty, headDirty }) {
+  if (typeof headCommit !== "string") {
+    throw new Error(
+      `archkeep: refusing to write a ${label} event without a committed head — a commitless ` +
+        "head has no reproducible event identity, and every distinct head state would " +
+        "collide on one event id. Commit the head, or capture without --event-out.",
+    );
+  }
+  if (baseDirty === true || headDirty === true) {
+    throw new Error(
+      `archkeep: refusing to write a ${label} event from a dirty working tree — the event ` +
+        "would name a commit whose evidence is uncommitted, and distinct uncommitted " +
+        "states would collide on one event id. Commit both sides first.",
+    );
+  }
+}
+
+/**
  * The digest of a normalized change-intent's DECLARATIVE parts only:
  * `{version, base, projects, edges, constraints}`. The prose `summary` is
  * excluded by construction — this object never references it, so a re-worded
