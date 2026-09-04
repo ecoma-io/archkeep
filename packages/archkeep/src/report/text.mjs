@@ -630,6 +630,7 @@ function formatCoverageGap(gap) {
   if (gap.kind === "unregistered-plugin") return formatUnregisteredPluginGap(gap);
   if (gap.kind === "unowned-files") return formatUnownedFilesGap(gap);
   if (gap.kind === "accepted-unowned-files") return formatAcceptedUnownedFilesGap(gap);
+  if (gap.kind === "untracked-files") return formatUntrackedFilesGap(gap);
   return `⚠ coverage gap "${gap.kind}" — part of this workspace is outside what this run covered`;
 }
 
@@ -729,6 +730,44 @@ function formatAcceptedUnownedFilesGap(gap) {
     `so no boundary verdict covers ${them}\n` +
     `${lines.join("\n")}\n` +
     `${DETAIL}each accepting row's reason: archkeep waivers`
+  );
+}
+
+/**
+ * The untracked-files gap (#675): files a project owns that git does not
+ * track — present in the worktree, analyzable, and absent from the
+ * `git ls-files` universe this run was built from, so no analyzer ever read
+ * them. They are not failures and they change no exit code: the verdict over
+ * the tracked universe stands (`../../commands/check.mjs` states the whole
+ * argument beside the row's construction). What this section exists for is
+ * the difference between "checked, and clean" and "checked the tracked tree,
+ * and clean" — before this section existed those two printed the same bytes.
+ *
+ * The count leads and the paths follow, bounded by the same sample limit the
+ * two unowned gaps above print — the identical shape of list, so the
+ * identical bound (`UNOWNED_SAMPLE_LIMIT`, whose rule this face owns once).
+ *
+ * @param {{files?: string[]}} gap
+ * @returns {string}
+ */
+function formatUntrackedFilesGap(gap) {
+  // Read as defensively as its siblings: `./check.mjs` contributes this entry
+  // only when the list is non-empty, but `formatCoverageGaps` is exported and
+  // a heading with nothing under it reads as a truncation, not as "none".
+  const files = gap.files ?? [];
+  const count = files.length;
+  const shown = files.slice(0, UNOWNED_SAMPLE_LIMIT);
+  const remaining = count - shown.length;
+  const lines = shown.map((file) => `${CONTINUED}${file}`);
+  if (remaining > 0) {
+    lines.push(`${CONTINUED}… and ${remaining} more — the full list is in --format json`);
+  }
+  const them = count === 1 ? "it" : "them";
+  return (
+    `⚠ ${count} project-owned file${count === 1 ? "" : "s"} ${count === 1 ? "is" : "are"} ` +
+    `not tracked by git — never read by this run, so no boundary verdict here covers ${them}\n` +
+    `${lines.join("\n")}\n` +
+    `${DETAIL}git add ${them} so the next run reads ${them}, or let git ignore ${them}`
   );
 }
 

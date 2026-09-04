@@ -35,7 +35,7 @@ import { jvmIndexFailures } from "../analysis/jvm/packages.mjs";
 import { languageOf } from "../analysis/registry.mjs";
 import { pythonUnmodelledFailures } from "../analysis/python.mjs";
 import { rustManifestFailures } from "../analysis/rust.mjs";
-import { dedupeWholeFileFailures, fileFailure } from "../analysis/source-util.mjs";
+import { dedupeWholeFileFailures, fileFailure, projectOwning } from "../analysis/source-util.mjs";
 import {
   DEFAULT_OPTIONS,
   NX_CONFIG_FILE,
@@ -444,6 +444,43 @@ export function unownedGapWithoutRunConfiguration(gap, configNames) {
     files,
     languages: [...new Set(files.map((file) => languageOf(file)))].sort(),
   };
+}
+
+/**
+ * The population a tracked-file universe silently leaves out (#675): files
+ * present in the worktree that git does not track, that a project owns, and
+ * that an analyzer could have judged — the exact complement of the universe
+ * `listTrackedFiles` cuts, narrowed to the files whose absence changes what a
+ * verdict can claim.
+ *
+ * Ownership is decided by `projectOwning` — the same predicate
+ * `createWorkspace` attributed the tracked list with, so a file cannot be
+ * "owned" here and unowned there — and the language test is the same one
+ * `unownedAnalyzableFiles` above applies: a file no analyzer claims (a
+ * README, a manifest, an image) could never have entered a verdict, so naming
+ * it would be a gap that fires on every work-in-progress tree and teaches a
+ * reader to skip the line it is written on. Both filters reuse existing
+ * answers; neither re-derives a judgment this module already owns.
+ *
+ * Sorted by plain string comparison, because the caller renders the list as
+ * report bytes: `git ls-files --others` answers in worktree-traversal order,
+ * and a row whose order varied with the order files happened to be created
+ * would break the byte-identity contract (`../../../../docs/reference/json-output.md`)
+ * for a tree that never changed.
+ *
+ * @param {{untracked: string[], projects: {name: string, root: string}[]}} args
+ *   `untracked` is `listUntrackedFiles`' answer (`../workspace.mjs`),
+ *   `projects` the workspace's `{name, root}` list — the same array
+ *   `createWorkspace` attributed the tracked files with.
+ * @returns {string[]} Sorted, deduplicated by construction (git lists a path
+ *   once), and empty exactly when the universe omitted nothing a verdict
+ *   could have reached.
+ */
+export function untrackedOwnedFiles({ untracked, projects }) {
+  const files = untracked.filter(
+    (file) => projectOwning(projects, file) !== null && languageOf(file) !== null,
+  );
+  return files.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
 /**

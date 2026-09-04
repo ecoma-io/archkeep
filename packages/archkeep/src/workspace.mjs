@@ -178,6 +178,35 @@ export function listTrackedFiles(workspaceRoot, { run = runProcess } = {}) {
 }
 
 /**
+ * Every file present in the worktree that git does NOT track, workspace-
+ * relative — the complement of `listTrackedFiles` above, and the answer to
+ * the only question that pair can ask: what exists in the tree the tracked
+ * universe was cut from, but never entered it (#675).
+ *
+ * `--exclude-standard` is what keeps this answer a git answer and not a walk
+ * of our own: ignored files — build outputs, dependency installs, anything a
+ * `.gitignore`, `.git/info/exclude` or `core.excludesFile` names — are not
+ * part of the workspace's population, exactly as for the tracked list. The
+ * header's argument for `git ls-files` over a tree walk applies here with one
+ * more clause: walking the tree for the untracked half would need those ignore
+ * rules reimplemented, and the copy would drift from `.gitignore` the first
+ * time a build directory was added.
+ *
+ * The order is git's worktree-traversal order, not a sorted order — every
+ * consumer of this list sorts before it renders (a file list in a report must
+ * not vary with git's traversal), the same discipline
+ * `../commands/check.mjs`'s `sortViolations` states for the tracked list.
+ *
+ * @param {string} workspaceRoot
+ * @param {{ run?: typeof runProcess }} [io]
+ * @returns {string[]}
+ */
+export function listUntrackedFiles(workspaceRoot, { run = runProcess } = {}) {
+  const out = run("git", ["ls-files", "--others", "--exclude-standard", "-z"], workspaceRoot);
+  return out.split("\0").filter((path) => path !== "");
+}
+
+/**
  * The `Workspace` the analysis contract defines — `{ root, projects, filesOf,
  * readFile, tsConfig }` — plus the per-project file index it is built from,
  * which the caller needs to decide what to analyze.

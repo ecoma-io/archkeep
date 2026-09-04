@@ -26,7 +26,7 @@
           "type": "source-evidence",
           "path": "src/commands/context.mjs",
           "assertion": "Only commands/context.mjs imports providers — the designated orchestration layer",
-          "sha256": "1a093796a46a74dd10ff83feb146fa95832d1002bdab9d264c97cfc61c12fced"
+          "sha256": "b505e3a7476c64af4b2daeb106e2f9cb05be82e314604229d508dda04b629a98"
         }
       ],
       "status": "proven"
