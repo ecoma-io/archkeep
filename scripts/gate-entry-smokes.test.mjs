@@ -144,6 +144,19 @@ test("#236 — reconcile-differential-issue.mjs refuses loudly through a symlink
   assert.match(result.stderr ?? "", /DIFFERENTIAL_SUMMARY is not set/);
 });
 
+test("#691 — reconcile-coverage-issue.mjs refuses loudly through a symlinked entry when its envelope is missing", () => {
+  // The coverage lane's trail is the same engine behind its own entry guard,
+  // so the same silent failure would be available to it: a broken guard would
+  // exit 0 on a red run and file nothing, the exact miss #691 recorded.
+  const env = { ...process.env };
+  delete env.COVERAGE_SUMMARY;
+  delete env.COVERAGE_REPO;
+  delete env.GH_TOKEN;
+  const result = spawnViaSymlink("reconcile-coverage-issue.mjs", { env });
+  assert.equal(result.status, 1, "a missing summary must refuse, not exit clean");
+  assert.match(result.stderr ?? "", /COVERAGE_SUMMARY is not set/);
+});
+
 test("#236 — verify-vsix.mjs refuses loudly through a symlinked entry when its argument is missing", () => {
   const result = spawnViaSymlink("verify-vsix.mjs");
   assert.equal(result.status, 2, "a missing vsix path must be a usage error, not silence");

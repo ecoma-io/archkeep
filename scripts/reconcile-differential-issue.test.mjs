@@ -15,6 +15,7 @@ import {
   buildGhCommands,
   buildIssueBody,
   decideIssue,
+  ISSUE_TITLE,
   LABEL,
 } from "./reconcile-differential-issue.mjs";
 
@@ -34,8 +35,22 @@ const summary = {
   ],
 };
 
+// The engine takes the lane's identity (title, rendered body, run facts) and
+// answers with the action — the caller's mapping is exactly what this helper
+// stands in for. Every case below decides from the same differential body the
+// workflow's `main()` would build from the envelope.
+const decide = ({ exitClass, existing }) =>
+  decideIssue({
+    exitClass,
+    title: ISSUE_TITLE,
+    body: buildIssueBody({ runUrl: summary.runUrl, sha: summary.sha, trees: summary.trees }),
+    runUrl: summary.runUrl,
+    sha: summary.sha,
+    existing,
+  });
+
 test("findings with no existing issue opens one; the body carries run, ref and the exact log lines", () => {
-  const decision = decideIssue({ exitClass: "findings", summary, existing: undefined });
+  const decision = decide({ exitClass: "findings", existing: undefined });
   assert.equal(decision.action, "open");
   assert.match(decision.title, /differential: findings/u);
   assert.ok(decision.body.includes("Run: https://github.com/ecoma-io/archkeep/actions/runs/42"));
@@ -52,11 +67,7 @@ test("findings with no existing issue opens one; the body carries run, ref and t
 });
 
 test("findings with an open issue updates it in place — an edit, never a comment", () => {
-  const decision = decideIssue({
-    exitClass: "findings",
-    summary,
-    existing: { number: 7, state: "open" },
-  });
+  const decision = decide({ exitClass: "findings", existing: { number: 7, state: "open" } });
   assert.equal(decision.action, "update");
   assert.equal(decision.number, 7);
   assert.equal("closeComment" in decision, false);
@@ -64,22 +75,14 @@ test("findings with an open issue updates it in place — an edit, never a comme
 });
 
 test("findings with a closed issue reopens it — a human closing early does not silence the next red", () => {
-  const decision = decideIssue({
-    exitClass: "findings",
-    summary,
-    existing: { number: 7, state: "closed" },
-  });
+  const decision = decide({ exitClass: "findings", existing: { number: 7, state: "closed" } });
   assert.equal(decision.action, "reopen");
   assert.equal(decision.number, 7);
   assert.ok(decision.body.includes("UNEXPLAINED"));
 });
 
 test("a green run closes an open issue with one comment naming the green run", () => {
-  const decision = decideIssue({
-    exitClass: "ok",
-    summary,
-    existing: { number: 7, state: "open" },
-  });
+  const decision = decide({ exitClass: "ok", existing: { number: 7, state: "open" } });
   assert.equal(decision.action, "close");
   assert.equal(decision.number, 7);
   assert.ok(
@@ -90,9 +93,9 @@ test("a green run closes an open issue with one comment naming the green run", (
 });
 
 test("a green run with no issue — or an already-closed one — does nothing", () => {
-  assert.equal(decideIssue({ exitClass: "ok", summary, existing: undefined }).action, "none");
+  assert.equal(decide({ exitClass: "ok", existing: undefined }).action, "none");
   assert.equal(
-    decideIssue({ exitClass: "ok", summary, existing: { number: 7, state: "closed" } }).action,
+    decide({ exitClass: "ok", existing: { number: 7, state: "closed" } }).action,
     "none",
   );
 });
@@ -100,30 +103,22 @@ test("a green run with no issue — or an already-closed one — does nothing", 
 test("infra NEVER touches the issue, either way — the silent-direction case", () => {
   // A run that could not look at the trees must not close an open issue: its
   // green would be absence of measurement, not absence of divergence.
-  const withOpen = decideIssue({
-    exitClass: "infra",
-    summary,
-    existing: { number: 7, state: "open" },
-  });
+  const withOpen = decide({ exitClass: "infra", existing: { number: 7, state: "open" } });
   assert.equal(withOpen.action, "none");
   assert.match(withOpen.reason, /could not look/u);
-  const withNone = decideIssue({ exitClass: "infra", summary, existing: undefined });
+  const withNone = decide({ exitClass: "infra", existing: undefined });
   assert.equal(withNone.action, "none");
-  const withClosed = decideIssue({
-    exitClass: "infra",
-    summary,
-    existing: { number: 7, state: "closed" },
-  });
+  const withClosed = decide({ exitClass: "infra", existing: { number: 7, state: "closed" } });
   assert.equal(withClosed.action, "none");
   assert.equal(
-    decideIssue({ exitClass: "usage", summary, existing: { number: 7, state: "open" } }).action,
+    decide({ exitClass: "usage", existing: { number: 7, state: "open" } }).action,
     "none",
   );
 });
 
 test("an exitClass this script does not know throws rather than silently doing nothing", () => {
   assert.throws(
-    () => decideIssue({ exitClass: "banana", summary, existing: undefined }),
+    () => decide({ exitClass: "banana", existing: undefined }),
     /unrecognised exitClass/u,
   );
 });
@@ -153,11 +148,7 @@ test("the label constant is the single handle both the query and the create use"
 // `main()` and never reopened it. This is the silent-direction case: assert
 // the actual subcommand used, not just that SOME argv comes back.
 test("reopen issues `gh issue reopen`, never `gh issue edit --state` — the flag gh does not have", () => {
-  const decision = decideIssue({
-    exitClass: "findings",
-    summary,
-    existing: { number: 7, state: "closed" },
-  });
+  const decision = decide({ exitClass: "findings", existing: { number: 7, state: "closed" } });
   const commands = buildGhCommands(decision, "ecoma-io/archkeep");
   assert.equal(commands.length, 2);
   assert.deepEqual(commands[0], ["issue", "reopen", "--repo", "ecoma-io/archkeep", "7"]);
@@ -177,7 +168,7 @@ test("reopen issues `gh issue reopen`, never `gh issue edit --state` — the fla
 });
 
 test("open, update and close each build exactly one gh command, unchanged from before the reopen fix", () => {
-  const openDecision = decideIssue({ exitClass: "findings", summary, existing: undefined });
+  const openDecision = decide({ exitClass: "findings", existing: undefined });
   const openCommands = buildGhCommands(openDecision, "ecoma-io/archkeep");
   assert.equal(openCommands.length, 1);
   assert.deepEqual(openCommands[0], [
@@ -193,21 +184,13 @@ test("open, update and close each build exactly one gh command, unchanged from b
     LABEL,
   ]);
 
-  const updateDecision = decideIssue({
-    exitClass: "findings",
-    summary,
-    existing: { number: 7, state: "open" },
-  });
+  const updateDecision = decide({ exitClass: "findings", existing: { number: 7, state: "open" } });
   const updateCommands = buildGhCommands(updateDecision, "ecoma-io/archkeep");
   assert.deepEqual(updateCommands, [
     ["issue", "edit", "--repo", "ecoma-io/archkeep", "7", "--body", updateDecision.body],
   ]);
 
-  const closeDecision = decideIssue({
-    exitClass: "ok",
-    summary,
-    existing: { number: 7, state: "open" },
-  });
+  const closeDecision = decide({ exitClass: "ok", existing: { number: 7, state: "open" } });
   const closeCommands = buildGhCommands(closeDecision, "ecoma-io/archkeep");
   assert.deepEqual(closeCommands, [
     ["issue", "close", "--repo", "ecoma-io/archkeep", "7", "--comment", closeDecision.closeComment],
@@ -215,7 +198,7 @@ test("open, update and close each build exactly one gh command, unchanged from b
 });
 
 test("a none decision requires no gh command at all", () => {
-  const decision = decideIssue({ exitClass: "ok", summary, existing: undefined });
+  const decision = decide({ exitClass: "ok", existing: undefined });
   assert.deepEqual(buildGhCommands(decision, "ecoma-io/archkeep"), []);
 });
 

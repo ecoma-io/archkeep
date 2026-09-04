@@ -47,7 +47,7 @@
 // needs no clone — the same split `../AGENTS.md` states for the gate scripts.
 
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -63,7 +63,11 @@ import { analyzeFile } from "../packages/archkeep/src/analysis/analyze.mjs";
  * spectre-console re-measured on 2026-09-04 after #480 and #481 fixed the
  * defects their first measurement had recorded (#606) — not targets anybody
  * chose. Each tree names why its `unreadable` count is what it is, because
- * an unexplained failure count is a number nobody can act on:
+ * an unexplained failure count is a number nobody can act on. Repin
+ * discipline, the rule those two entries follow: a pin change must cite the
+ * commit that moved the count, because a repinned number with no commit
+ * behind it is the lane measuring its own staleness — which is exactly what
+ * the 08-31 and 09-03 red runs were (#606).
  *
  * - **gin** reads clean: 0 failures over 99 Go files. Every import in the tree
  *   is a plain quoted specifier, which is the shape the Go analyzer's declared
@@ -309,10 +313,99 @@ export function measureTree(tree) {
   }
 }
 
-/** Exit 0 clean, 1 on a breach, 3 when the run could not look. */
+/**
+ * The verdict envelope `--summary-out` writes: the same mechanism, and the
+ * same consumer shape, as `differential-real-trees.mjs`'s envelope — the
+ * issue trail (`scripts/reconcile-coverage-issue.mjs`) reads the file, never
+ * this workflow's log. `exitCode` keeps the script's CLI contract
+ * ("Exit 0 clean, 1 on a breach, 3 when the run could not look");
+ * `exitClass` is the machine-readable mapping the reconcile step decides
+ * from, derived here — the one place this lane's vocabulary is spelled —
+ * from the same facts the console already printed. `breaches` carries
+ * `evaluate`'s sentences verbatim, so the trail's issue IS the log fragment
+ * rather than a re-formatted claim of it.
+ *
+ * The fourth class the engine knows, `usage`, is the one this envelope never
+ * carries: a misused command line exits before any measurement, so there is
+ * no envelope at all and the reconcile step fails loudly on the missing
+ * file — a red run whose issue never landed is a silent miss.
+ *
+ * @param {number} exitCode
+ * @param {string[]} breaches
+ * @param {string} [infrastructure] why the run could not look, when it could not
+ * @returns {{exitCode: number, exitClass: "ok"|"findings"|"infra"|"usage", breaches: string[], infrastructure?: string}}
+ */
+export function buildSummary(exitCode, breaches, infrastructure) {
+  /** @type {"ok"|"findings"|"infra"|"usage"} */
+  const exitClass =
+    infrastructure !== undefined ? "infra" : breaches.length > 0 ? "findings" : "ok";
+  return infrastructure === undefined
+    ? { exitCode, exitClass, breaches }
+    : { exitCode, exitClass, breaches, infrastructure };
+}
+
+/**
+ * The one file mode this script's `main()` accepts, mirroring
+ * `differential-real-trees.mjs`'s: `--summary-out <file>` appends the verdict
+ * envelope to the run for the trail's reconcile step to consume. Deliberately
+ * not imported from there — the flags a script accepts are its own CLI
+ * contract, and this lane has no release-lane consumer to share one with.
+ *
+ * @param {string[]} argv
+ * @returns {{summaryOut: string|undefined}}
+ * @throws {Error} on an unrecognised argument or a missing value.
+ */
+export function parseArgs(argv) {
+  const options = { summaryOut: undefined };
+  for (let index = 0; index < argv.length; index += 1) {
+    const flag = argv[index];
+    const value = argv[index + 1];
+    if (flag === "--summary-out") {
+      if (!value) throw new Error(`${flag} needs a file path`);
+      options.summaryOut = value;
+      index += 1;
+    } else {
+      throw new Error(
+        `unrecognised argument ${JSON.stringify(flag)} — expected --summary-out <file>`,
+      );
+    }
+  }
+  return options;
+}
+
+/**
+ * Writes the envelope, failing loudly rather than half-writing it: a run
+ * whose consumers cannot decide must not look like a run that decided
+ * nothing was wrong.
+ *
+ * @param {string} path
+ * @param {ReturnType<typeof buildSummary>} summary
+ */
+function writeSummary(path, summary) {
+  try {
+    writeFileSync(path, `${JSON.stringify(summary, null, 2)}\n`);
+  } catch (error) {
+    console.error(`could not write the summary to ${path}: ${error.message}`);
+    process.exit(3);
+  }
+}
+
+/** Exit 0 clean, 1 on a breach, 3 when the run could not look, 2 on usage. */
 function main() {
+  /** @type {{summaryOut: string|undefined}} */
+  let options;
+  try {
+    options = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    console.error("usage: node scripts/coverage-real-trees.mjs [--summary-out <file>]");
+    console.error(error.message);
+    process.exit(2);
+  }
+
   /** @type {Measurement[]} */
   const measurements = [];
+  /** @type {string|undefined} */
+  let infrastructure;
   for (const tree of TREES) {
     try {
       const measurement = measureTree(tree);
@@ -324,23 +417,36 @@ function main() {
     } catch (error) {
       // Could not look: the network, the host, or the checkout. Loud, and its
       // own exit code — a run that never read a tree must not be reported as a
-      // run that read it and found the pinned numbers.
-      console.error(`archkeep: ${tree.name} could not be measured — ${error?.message ?? error}`);
-      process.exit(3);
+      // run that read it and found the pinned numbers. The envelope is written
+      // on this path too, so the reconcile step can tell the classes apart: a
+      // run that could not look must never close the trail's issue as if a
+      // green run had proved the divergence gone.
+      infrastructure = String(error?.message ?? error);
+      console.error(`archkeep: ${tree.name} could not be measured — ${infrastructure}`);
+      break;
     }
+  }
+
+  if (infrastructure !== undefined) {
+    if (options.summaryOut) writeSummary(options.summaryOut, buildSummary(3, [], infrastructure));
+    process.exit(3);
   }
 
   const breaches = evaluate(TREES, measurements);
   if (breaches.length === 0) {
     console.log(`\n${TREES.length} trees, every pinned count matched.`);
+    if (options.summaryOut) writeSummary(options.summaryOut, buildSummary(0, []));
     return;
   }
+  // The human-facing half prints BEFORE the envelope is written, so a write
+  // failure can never take the findings down with it.
   console.error("");
   for (const breach of breaches) console.error(`✗ ${breach}`);
   console.error(
     `\n${breaches.length} pinned count(s) moved. Read the diff before repinning: a count that ` +
       `fell is an analyzer that went quiet on real code.`,
   );
+  if (options.summaryOut) writeSummary(options.summaryOut, buildSummary(1, breaches));
   process.exit(1);
 }
 
