@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.22.3](https://github.com/ecoma-io/archkeep/compare/v0.22.2...v0.22.3) (2026-09-04)
+
+
+### Documentation
+
+* the PR title's 100-character cap, stated beside the rule ([#661](https://github.com/ecoma-io/archkeep/issues/661)) ([#662](https://github.com/ecoma-io/archkeep/issues/662)) ([f864954](https://github.com/ecoma-io/archkeep/commit/f864954cb70b3ee92a310a2b3647c746863dc6f3))
+* tighten the discover and rules result wording ([#639](https://github.com/ecoma-io/archkeep/issues/639)) ([#657](https://github.com/ecoma-io/archkeep/issues/657)) ([73dec2f](https://github.com/ecoma-io/archkeep/commit/73dec2f3833f32b0b0164c6208b3875cab2bd00b))
+
 ## [0.22.2](https://github.com/ecoma-io/archkeep/compare/v0.22.1...v0.22.2) (2026-09-04)
 
 
