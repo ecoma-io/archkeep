@@ -825,6 +825,23 @@ var _ = adapter.Name
     expect(orderA).toEqual(orderB);
     expect(orderA).toEqual(["libs/domain/doc.go", "libs/domain/other.go"]);
   });
+
+  it("produces byte-identical JSON output across 10 identical runs — the repeated-run gate (#630)", async () => {
+    // #630: `check --format json` diverged byte-wise in 2 of ~14 runs during
+    // the Round-0 determinism audit, with no reproduced cause. All known
+    // non-determinism channels are now fixed (canonical serialization #636,
+    // provenance dirty-bit from tracked files only #683/#685), but the
+    // divergence was never reproduced on demand, so the remaining risk is a
+    // channel no-one has noticed. This gate runs N times over the same
+    // fixture and requires every byte to match, catching a cold-start,
+    // environment-leak, or ordering flake that a single-run test cannot see.
+    const N = 10;
+    const first = await check({ format: "json", config: null, paths: [] }, orderContextA);
+    for (let i = 1; i < N; i++) {
+      const next = await check({ format: "json", config: null, paths: [] }, orderContextA);
+      expect(next.report).toBe(first.report);
+    }
+  });
 });
 
 describe("honouring Module Federation remotes in the app-import ban", () => {
