@@ -40,13 +40,13 @@
  */
 
 import {
-  mkdirSync as defaultMkdir,
-  readdirSync as defaultReaddir,
-  readFileSync as defaultReadFile,
-  renameSync as defaultRename,
-  writeFileSync as defaultWriteFile,
-  lstatSync as defaultLstat,
-  realpathSync as defaultRealpath,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -205,13 +205,13 @@ function validateEventRecord(parsed, path) {
 export function writeEvent(dir, event, io = {}) {
   validateEventForWrite(event);
 
-  const readDir = io.readdirSync ?? defaultReaddir;
-  const readFile = io.readFileSync ?? defaultReadFile;
-  const writeFile = io.writeFileSync ?? defaultWriteFile;
-  const rename = io.renameSync ?? defaultRename;
-  const makeDir = io.mkdirSync ?? defaultMkdir;
-  const lstat = io.lstatSync ?? defaultLstat;
-  const realpath = io.realpathSync ?? defaultRealpath;
+  const readDir = io.readdirSync ?? defaultEvolutionIo.readdirSync;
+  const readFile = io.readFileSync ?? defaultEvolutionIo.readFileSync;
+  const writeFile = io.writeFileSync ?? defaultEvolutionIo.writeFileSync;
+  const rename = io.renameSync ?? defaultEvolutionIo.renameSync;
+  const makeDir = io.mkdirSync ?? defaultEvolutionIo.mkdirSync;
+  const lstat = io.lstatSync ?? defaultEvolutionIo.lstatSync;
+  const realpath = io.realpathSync ?? defaultEvolutionIo.realpathSync;
 
   // Resolved once: the identical string feeds the containment check and the
   // actual write (`../containment.mjs`, "One contract binds the WRITE call
@@ -316,8 +316,8 @@ export function writeEvent(dir, event, io = {}) {
  * @throws {Error} on the first unreadable or malformed event file.
  */
 export function readEvents(dir, io = {}) {
-  const readDir = io.readdirSync ?? defaultReaddir;
-  const readFile = io.readFileSync ?? defaultReadFile;
+  const readDir = io.readdirSync ?? defaultEvolutionIo.readdirSync;
+  const readFile = io.readFileSync ?? defaultEvolutionIo.readFileSync;
 
   const dirAbs = resolve(dir);
 
@@ -360,3 +360,20 @@ export function readEvents(dir, io = {}) {
   }
   return events;
 }
+
+/**
+ * The default io: the sync `node:fs` calls `writeEvent` and `readEvents` make.
+ * This is the only place in this module the filesystem is named directly —
+ * every store operation reads and writes through an injected `io` whose
+ * missing seams fall back here, so a test drives an in-memory store without
+ * mocking the fs module and the module body never touches the disk on its own.
+ */
+const defaultEvolutionIo = Object.freeze({
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  writeFileSync,
+});

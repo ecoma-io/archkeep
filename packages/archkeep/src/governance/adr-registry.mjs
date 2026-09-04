@@ -494,12 +494,17 @@ export function validateLineage(records) {
  * throws; the caller maps that to exit 3, never to an empty list.
  *
  * @param {string} root Absolute workspace root.
- * @param {{readdirSync?: (path: string) => string[], readFileSync?: (path: string, encoding: "utf8") => string,
+ * @param {{existsSync?: (path: string) => boolean, readdirSync?: (path: string) => string[],
+ *   readFileSync?: (path: string, encoding: "utf8") => string,
  *   lstatSync?: (path: string) => {isSymbolicLink: () => boolean}, realpathSync?: (path: string) => string,
  *   tracked?: string[]}} [io]
- *   Injectable filesystem seams, defaulting to the sync `node:fs` calls this
- *   module uses so the CLI stays event-loop-simple. Tests inject an in-memory
- *   tree. `tracked` is the `git ls-files` list (`../workspace.mjs`'s
+ *   Injectable filesystem seams, defaulting to `defaultAdrIo` (the sync
+ *   `node:fs` calls this module uses) so the CLI stays event-loop-simple.
+ *   Tests inject an in-memory tree.
+ *   `existsSync` gates the containment probe below: an in-memory root does not
+ *   exist on disk, and probing a nonexistent path's ancestry would walk up to
+ *   a real parent and misread it as an escape.
+ *   `tracked` is the `git ls-files` list (`../workspace.mjs`'s
  *   `listTrackedFiles`); when provided, a directory entry whose `docs/adr/<name>`
  *   path is not in it is excluded before it is ever validated — see this
  *   module's header for why, and `../architecture-intent/model.mjs`'s
@@ -512,10 +517,11 @@ export function validateLineage(records) {
  * @throws {Error} on an unreadable registry.
  */
 export function loadAdrRegistry(root, io = {}) {
-  const readDir = io.readdirSync ?? readdirSync;
-  const readFile = io.readFileSync ?? readFileSync;
-  const lstat = io.lstatSync ?? lstatSync;
-  const realpath = io.realpathSync ?? realpathSync;
+  const dirExists = io.existsSync ?? defaultAdrIo.existsSync;
+  const readDir = io.readdirSync ?? defaultAdrIo.readdirSync;
+  const readFile = io.readFileSync ?? defaultAdrIo.readFileSync;
+  const lstat = io.lstatSync ?? defaultAdrIo.lstatSync;
+  const realpath = io.realpathSync ?? defaultAdrIo.realpathSync;
   const dir = join(root, ADR_DIR);
 
   /** @type {string[]} */
@@ -581,7 +587,7 @@ export function loadAdrRegistry(root, io = {}) {
       // drives is keyed by a fixture path that does not exist on disk, and
       // probing a nonexistent root's ancestry would walk up to a real parent
       // directory and misread it as an escape. Real roots only.
-      existsSync(root) &&
+      dirExists(root) &&
       containmentViolation(root, filePath, { lstatSync: lstat, realpathSync: realpath }) !== null
     ) {
       continue;
@@ -774,3 +780,18 @@ export function unresolvedDecisionRefRows(rows, byId, knownFitness) {
   }
   return unresolved;
 }
+
+/**
+ * The default io: the sync `node:fs` calls `loadAdrRegistry` makes. This is
+ * the only place in this module the filesystem is named directly — every
+ * function reads through an injected `io` whose missing seams fall back here,
+ * so a test drives an in-memory tree without mocking the fs module and the
+ * module body never touches the disk on its own.
+ */
+const defaultAdrIo = Object.freeze({
+  existsSync,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+});

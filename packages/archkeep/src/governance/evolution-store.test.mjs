@@ -153,6 +153,38 @@ describe("writeEvent", () => {
     expect(() => writeEvent(eventsDir, makeEvent("a"), { root })).toThrow(/malformed/);
     expect(eventFiles(eventsDir)).toHaveLength(1);
   });
+
+  // Every store operation reads and writes through the injected io, so a
+  // stub set that records which seam ran proves no node:fs call escapes it —
+  // the whole append lands in the stub, not on the disk.
+  it("honors the injected io end to end — a counting stub set is the only fs the write touches", () => {
+    const written = [];
+    const event = makeEvent("a");
+    const result = writeEvent(eventsDir, event, {
+      root,
+      readdirSync: () => [],
+      readFileSync: () => {
+        throw new Error("readFileSync should not run on an empty store");
+      },
+      writeFileSync: (path, text) => {
+        written.push([path, text]);
+      },
+      renameSync: (from, to) => {
+        written.push(["rename", from, to]);
+      },
+      mkdirSync: () => {},
+      lstatSync: () => ({ isSymbolicLink: () => false }),
+      realpathSync: (p) => p,
+    });
+
+    expect(result).toEqual({ id: event.id, duplicate: false });
+    // The write landed through the stubs: one tmp write, one rename. The real
+    // directory is untouched — the store has no file on disk.
+    expect(written).toHaveLength(2);
+    expect(written[0][0]).toMatch(/\.json\.tmp$/);
+    expect(written[1][0]).toBe("rename");
+    expect(eventFiles(eventsDir)).toHaveLength(0);
+  });
 });
 
 describe("readEvents", () => {

@@ -384,6 +384,19 @@ describe("loadProfileRegistry", () => {
       ),
     ).toThrow(/is malformed/);
   });
+
+  it("honors the injected readFile seam — a counting stub proves the real fs is never reached", () => {
+    let calls = 0;
+    const io = {
+      readFile: (path) => {
+        calls++;
+        return path.endsWith("profiles.json") ? JSON.stringify(wellFormed()) : null;
+      },
+    };
+    const registry = loadProfileRegistry("/w/profiles.json", io);
+    expect(listNames(registry)).toEqual(["base-domain"]);
+    expect(calls).toBe(1);
+  });
 });
 
 describe("profilePolicy", () => {
