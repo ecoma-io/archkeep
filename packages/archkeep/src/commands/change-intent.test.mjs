@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { findChangeIntentReferenceViolations, parseChangeIntent } from "./change-intent.mjs";
+import {
+  edgePairKey,
+  findChangeIntentReferenceViolations,
+  parseChangeIntent,
+} from "./change-intent.mjs";
 
 /**
  * What the change-intent grammar guarantees: a manifest is strict JSON whose
@@ -159,6 +163,35 @@ describe("parseChangeIntent", () => {
     expect(() => parseChangeIntent(JSON.stringify(minimal({ summary: "" })), "m.json")).toThrow(
       /summary: must be a non-empty string/,
     );
+  });
+});
+
+describe("edgePairKey", () => {
+  const NUL = String.fromCharCode(0);
+
+  it("is the NUL-separated pair — the spelling the reconciliation matches declarations by", () => {
+    // One spelling, two consumers: this grammar's duplicate rule (below) and
+    // `./change.mjs`'s `reconcileMaterialDelta`. The exact bytes are pinned
+    // because the spelling IS the contract — a "simpler" separator drifting
+    // in at either consumer is the #613 silent direction.
+    expect(edgePairKey({ from: "api", to: "payments" })).toBe(`api${NUL}payments`);
+  });
+
+  it("keeps distinct pairs distinct that a weaker separator would collapse", () => {
+    // `("a:b", "c")` and `("a", "b:c")` declare two different edges. A
+    // separator a project name can carry — ":" here, or no separator at all —
+    // would key both rows to one string, and the grammar would then refuse a
+    // legal manifest as a duplicate of itself. Asserted through the parser's
+    // own duplicate rule, which keys rows by this function: a colliding
+    // spelling turns this acceptance into a load error, and this test red.
+    const first = { from: "a:b", to: "c" };
+    const second = { from: "a", to: "b:c" };
+    expect(edgePairKey(first)).not.toBe(edgePairKey(second));
+    const intent = parseChangeIntent(
+      JSON.stringify(minimal({ edges: { add: [first, second], remove: [] } })),
+      "m.json",
+    );
+    expect(intent.edges.add).toEqual([first, second]);
   });
 });
 

@@ -90,6 +90,7 @@ import { buildDependencies, buildProjects, computePolicyFingerprint } from "./gr
 import {
   CONSTRAINT_ORDER,
   CONSTRAINT_ROW_NAMES,
+  edgePairKey,
   findChangeIntentReferenceViolations,
   readChangeIntent,
 } from "./change-intent.mjs";
@@ -237,9 +238,13 @@ function observedFrom(structural, meta) {
 export function reconcileMaterialDelta(intent, delta) {
   const addedProjectNames = new Set(intent.projects.add);
   const removedProjectNames = new Set(intent.projects.remove);
-  const edgeKey = ({ from, to }) => `${from}\u0000${to}`;
-  const addEdgeKeys = new Set(intent.edges.add.map(edgeKey));
-  const removeEdgeKeys = new Set(intent.edges.remove.map(edgeKey));
+  // The declared row's identity is `./change-intent.mjs`'s `edgePairKey` — the
+  // ONE spelling, shared with the grammar's own duplicate detection. A local
+  // spelling here was the live defect (#613): it agreed byte-for-byte until a
+  // shape moved, and the reconciliation would then stop recognizing the
+  // declarations it was handed while every command-local test stayed green.
+  const addEdgeKeys = new Set(intent.edges.add.map(edgePairKey));
+  const removeEdgeKeys = new Set(intent.edges.remove.map(edgePairKey));
 
   /** @type {object[]} */
   const matched = [];
@@ -263,7 +268,7 @@ export function reconcileMaterialDelta(intent, delta) {
       to: edge.target,
       type: edge.type,
     });
-    if (addEdgeKeys.has(edgeKey({ from: edge.source, to: edge.target }))) matched.push(row);
+    if (addEdgeKeys.has(edgePairKey({ from: edge.source, to: edge.target }))) matched.push(row);
     else unexpected.push(row);
   }
   for (const edge of delta.removedEdges) {
@@ -273,7 +278,7 @@ export function reconcileMaterialDelta(intent, delta) {
       to: edge.target,
       type: edge.type,
     });
-    if (removeEdgeKeys.has(edgeKey({ from: edge.source, to: edge.target }))) matched.push(row);
+    if (removeEdgeKeys.has(edgePairKey({ from: edge.source, to: edge.target }))) matched.push(row);
     else unexpected.push(row);
   }
   // No declaration surface in this version: a metadata change to a project
@@ -292,10 +297,10 @@ export function reconcileMaterialDelta(intent, delta) {
   const observedAdded = new Set(delta.addedProjects.map((p) => p.name));
   const observedRemoved = new Set(delta.removedProjects.map((p) => p.name));
   const observedAddEdges = new Set(
-    delta.addedEdges.map((edge) => edgeKey({ from: edge.source, to: edge.target })),
+    delta.addedEdges.map((edge) => edgePairKey({ from: edge.source, to: edge.target })),
   );
   const observedRemoveEdges = new Set(
-    delta.removedEdges.map((edge) => edgeKey({ from: edge.source, to: edge.target })),
+    delta.removedEdges.map((edge) => edgePairKey({ from: edge.source, to: edge.target })),
   );
 
   // Declared but never observed — the unfulfilled half, kept apart from
@@ -313,12 +318,12 @@ export function reconcileMaterialDelta(intent, delta) {
     }
   }
   for (const edge of intent.edges.add) {
-    if (!observedAddEdges.has(edgeKey(edge))) {
+    if (!observedAddEdges.has(edgePairKey(edge))) {
       missingExpected.push(factRow({ kind: "edge-added", from: edge.from, to: edge.to }));
     }
   }
   for (const edge of intent.edges.remove) {
-    if (!observedRemoveEdges.has(edgeKey(edge))) {
+    if (!observedRemoveEdges.has(edgePairKey(edge))) {
       missingExpected.push(factRow({ kind: "edge-removed", from: edge.from, to: edge.to }));
     }
   }
