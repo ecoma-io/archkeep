@@ -508,9 +508,7 @@ export async function planContextCommand(
   // (#595, narrowed): a plan over it would present edges the run does not
   // hold, so it defeats completeness the way a whole-file failure does.
   const complete =
-    wholeTree.analyzed > 0 &&
-    notAnalyzed.length === 0 &&
-    unresolvableLiteralCount(failures) === 0;
+    wholeTree.analyzed > 0 && notAnalyzed.length === 0 && unresolvableLiteralCount(failures) === 0;
   const status = complete ? "ok" : "no-verdict";
   const exitCode = complete ? 0 : 3;
 
