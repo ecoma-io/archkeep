@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.22.1](https://github.com/ecoma-io/archkeep/compare/v0.22.0...v0.22.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* **archkeep:** a zero-analysis discover run is no-verdict ([#619](https://github.com/ecoma-io/archkeep/issues/619), [#620](https://github.com/ecoma-io/archkeep/issues/620)) ([#634](https://github.com/ecoma-io/archkeep/issues/634)) ([71b53c6](https://github.com/ecoma-io/archkeep/commit/71b53c6c5e736b90573537ce6e5ac9346c46f1b7))
+* **archkeep:** a zero-analysis discover run is no-verdict, and the refusal header tells the truth ([71b53c6](https://github.com/ecoma-io/archkeep/commit/71b53c6c5e736b90573537ce6e5ac9346c46f1b7)), closes [#619](https://github.com/ecoma-io/archkeep/issues/619) [#620](https://github.com/ecoma-io/archkeep/issues/620)
+* **archkeep:** a zero-analysis graph run is no-verdict, not a complete snapshot ([8a743cc](https://github.com/ecoma-io/archkeep/commit/8a743ccd83956906ec3ce428ae23ae160c7fa899))
+* **archkeep:** a zero-analysis graph run is no-verdict, not a complete snapshot ([#612](https://github.com/ecoma-io/archkeep/issues/612)) ([#617](https://github.com/ecoma-io/archkeep/issues/617)) ([8a743cc](https://github.com/ecoma-io/archkeep/commit/8a743ccd83956906ec3ce428ae23ae160c7fa899))
+* **archkeep:** accept real attestation invocations, ship the verifier, dedupe adopters ([#614](https://github.com/ecoma-io/archkeep/issues/614)) ([2d40206](https://github.com/ecoma-io/archkeep/commit/2d40206b438da480a1e1104e4d6a95e7e7753c66))
+* **archkeep:** canonical evidence snapshot bytes, frozen provenance loop, check byte gate ([#636](https://github.com/ecoma-io/archkeep/issues/636)) ([ed13bf2](https://github.com/ecoma-io/archkeep/commit/ed13bf2d2fc05d2ae417829d196e140f8810c066))
+* **archkeep:** classify unresolvable external coordinates in every analyzer, not only TypeScript ([#618](https://github.com/ecoma-io/archkeep/issues/618)) ([efc8c00](https://github.com/ecoma-io/archkeep/commit/efc8c00f6a51023f4a337e4e67e19f8acc3f8bf5))
+* **archkeep:** hostile names can no longer collide in edge identity or finding id ([#627](https://github.com/ecoma-io/archkeep/issues/627), [#628](https://github.com/ecoma-io/archkeep/issues/628)) ([ebdd892](https://github.com/ecoma-io/archkeep/commit/ebdd892c8151f21be2eaf4153e894690143a9c90))
+* **archkeep:** hostile names can no longer collide in edge identity or finding id ([#627](https://github.com/ecoma-io/archkeep/issues/627), [#628](https://github.com/ecoma-io/archkeep/issues/628)) ([#635](https://github.com/ecoma-io/archkeep/issues/635)) ([dc17019](https://github.com/ecoma-io/archkeep/commit/dc170191ed0a80973abfc947b1946a54173b9930))
+* **archkeep:** hostile names can no longer collide in identity strings ([#627](https://github.com/ecoma-io/archkeep/issues/627), [#628](https://github.com/ecoma-io/archkeep/issues/628)) ([#638](https://github.com/ecoma-io/archkeep/issues/638)) ([ebdd892](https://github.com/ecoma-io/archkeep/commit/ebdd892c8151f21be2eaf4153e894690143a9c90))
+* **archkeep:** mark Python's dynamic imports with the dynamic marker instead of withholding ([#623](https://github.com/ecoma-io/archkeep/issues/623)) ([#626](https://github.com/ecoma-io/archkeep/issues/626)) ([13ddfc5](https://github.com/ecoma-io/archkeep/commit/13ddfc573dca39826ae13e9b1550fddd3c976a92))
+
+
+### Documentation
+
+* close the narrowed roster and authority-verb sites ([#582](https://github.com/ecoma-io/archkeep/issues/582), [#591](https://github.com/ecoma-io/archkeep/issues/591)) ([#616](https://github.com/ecoma-io/archkeep/issues/616)) ([90a0142](https://github.com/ecoma-io/archkeep/commit/90a01428f227d193bf696f2bc9f686602e9cfa6c))
+* repair the fused impact table and the stale authority prose ([035ef3c](https://github.com/ecoma-io/archkeep/commit/035ef3c0efc6d6205cd56e014d7ff810b795a8e3))
+* repair the fused impact table and the stale authority prose ([#615](https://github.com/ecoma-io/archkeep/issues/615), [#621](https://github.com/ecoma-io/archkeep/issues/621)) ([#633](https://github.com/ecoma-io/archkeep/issues/633)) ([035ef3c](https://github.com/ecoma-io/archkeep/commit/035ef3c0efc6d6205cd56e014d7ff810b795a8e3))
+
 ## [0.22.0](https://github.com/ecoma-io/archkeep/compare/v0.21.0...v0.22.0) (2026-09-03)
 
 
