@@ -34,10 +34,13 @@
  *     claim the vocabulary makes and the hardest to disprove, so every other
  *     state exists to refuse it.
  *
- * The enforcer that makes the invariants executable lives in
- * `../report/evidence.mjs` (`buildDecision`) — this module owns the closed
- * vocabulary and its relation to the envelope's existing statuses, and the
- * report module owns the runtime check a command's counts go through.
+ * The enforcer that makes the invariants executable is `buildDecision`, in
+ * this file, beside the vocabulary it enforces — a vocabulary and the check
+ * that a verdict's evidence agrees with it are one subject, and splitting
+ * them across the report boundary had made the core verdict module
+ * (`../verdict.mjs`) depend on the presentation layer. `../report/evidence.mjs`
+ * re-exports `buildDecision` so the render-side callers keep their import
+ * path — a path, never a second implementation.
  */
 
 /** The four canonical verdict values. */
@@ -124,4 +127,165 @@ export function fitnessVerdict({ verdict, name, evidence, message, rows, notAppl
     ...(rows === undefined ? {} : { rows }),
     ...(notApplicableReason === undefined ? {} : { notApplicableReason }),
   };
+}
+
+/**
+ * The decision builder: turns a command's verdict counts into the `decision`
+ * the envelope optionally carries, enforcing the five invariants the module
+ * header states in code rather than leaving them to a docs page a later
+ * command author might not read.
+ *
+ * This function decides nothing about whether a finding IS one — the command
+ * that built the envelope owns that. What it decides is whether the verdict
+ * and its evidence AGREE, and it throws when they do not, the same posture
+ * `../report/json.mjs`'s `jsonEnvelope` takes for the three consistency rules
+ * it enforces: a mismatch here is a bug in the command, not a fact about the
+ * workspace.
+ *
+ * The shape it produces:
+ *
+ *   {
+ *     verdict: "pass" | "fail" | "unknown" | "not_applicable",
+ *     reason?: string,                // always present for unknown
+ *     notApplicableReason?: string,   // always present for not_applicable
+ *     sampleTime?: string             // opt-in, never on a deterministic envelope
+ *   }
+ *
+ * A caller may pass `reason` for `unknown` — it names WHICH could-not-look
+ * condition fired (coverage incomplete, an unresolved intent boundary, a
+ * thrown analysis). Without it, `buildDecision` states the generic one. The
+ * reason field itself is always present on an `unknown` decision (I3).
+ *
+ * ## Determinism is the default
+ *
+ * The envelope this decision rides on is byte-deterministic
+ * (`docs/reference/json-output.md`: no timestamp, no random identifier). So
+ * `sampleTime` is OPT-IN by construction: a command passes it explicitly when
+ * it is an age/count capability (waivers, debt, health — the features
+ * `./clock.mjs` serves), and a command whose verdict must stay reproducible
+ * over an unchanged tree emits a decision with no time at all. That is how
+ * the determinism↔time tension is resolved — the clock is injectable (a test
+ * drives the same code with a fixed time), never asserted from the wall
+ * clock.
+ *
+ * ## One refusal per invariant
+ *
+ * I1 refuses a `pass` over incomplete coverage — the same refusal
+ * `jsonEnvelope` makes for `status: "ok"` over incomplete coverage, at the
+ * verdict layer — and a `pass` carrying findings. I2 refuses a `fail` that
+ * names no finding. I3 keeps a reason on every `unknown`, defaulting the
+ * generic one when the caller supplies none. I4 refuses a `not_applicable`
+ * without its `notApplicableReason`. I5 is I1's first check plus every caller
+ * choosing `unknown` wherever the run did not reach a verdict.
+ *
+ * `not_applicable` has no envelope status, so `buildDecision` reaches it only
+ * through an explicit `verdict` — the route a Fitness or Waiver capability
+ * takes. Engine behavior today never passes it: `jsonEnvelope` refuses a
+ * `decision.verdict` that contradicts the envelope's `status`, and no status
+ * maps to `not_applicable`, so the state is locked out of every envelope this
+ * release builds.
+ *
+ * @param {{
+ *   verdict?: "pass"|"fail"|"unknown"|"not_applicable",
+ *   status?: "ok"|"findings"|"no-verdict",
+ *   coverageComplete: boolean,
+ *   findings: number,
+ *   reason?: string|null,
+ *   notApplicableReason?: string|null,
+ *   sampleTime?: string
+ * }} run
+ * @returns {{verdict: string, reason?: string, notApplicableReason?: string,
+ *   sampleTime?: string}}
+ * @throws {Error} on any invariant violation (I1–I4).
+ */
+export function buildDecision(run) {
+  if (run.verdict === undefined && run.status === undefined) {
+    // No status, no explicit verdict — a builder called with neither is a
+    // programming error, not a fact about the workspace.
+    throw new Error("archkeep: buildDecision needs either a status or an explicit verdict");
+  }
+  const verdict = run.verdict ?? verdictForStatus(run.status);
+  if (
+    run.verdict !== undefined &&
+    run.status !== undefined &&
+    run.verdict !== verdictForStatus(run.status)
+  ) {
+    throw new Error(
+      `archkeep: refusing to build a decision where verdict "${run.verdict}" contradicts status ` +
+        `"${run.status}" — status implies ${verdictForStatus(run.status)}, and a decision that ` +
+        `disagrees with its own status would make one of the two a lie. ` +
+        `This is a bug in the command that built the decision.`,
+    );
+  }
+
+  // The `findings` count is the cardinal evidence number — a non-negative
+  // integer that the I1–I5 invariants all rely on. A missing, non-numeric, or
+  // negative value would silently falsify every comparison (`undefined > 0` is
+  // `false`), producing a clean verdict over a run whose counts were never set
+  // or are logically impossible — the exact silent direction this module exists
+  // to refuse.
+  if (typeof run.findings !== "number" || !Number.isFinite(run.findings) || run.findings < 0) {
+    throw new Error(
+      `archkeep: refusing to build a decision where findings is ${JSON.stringify(run.findings)} ` +
+        `— findings must be a non-negative number, or the verdict invariants cannot be enforced. ` +
+        `This is a bug in the command that built the decision.`,
+    );
+  }
+  if (verdict === "pass") {
+    if (run.coverageComplete !== true) {
+      throw new Error(
+        `archkeep: refusing to emit a "pass" decision over incomplete coverage ` +
+          `(coverage.complete: ${run.coverageComplete}) — a run that could not fully read the ` +
+          `tree can never pass. This is a bug in the command that built the decision.`,
+      );
+    }
+    if (run.findings > 0) {
+      throw new Error(
+        `archkeep: refusing to emit a "pass" decision with ${run.findings} finding(s) — ` +
+          `"pass" and "fail" cannot both be true of the same run. This is a bug in the command.`,
+      );
+    }
+    return withSampleTime({ verdict }, run.sampleTime);
+  }
+
+  if (verdict === "fail") {
+    if (run.findings < 1) {
+      throw new Error(
+        `archkeep: refusing to emit a "fail" decision with no findings — a failing verdict ` +
+          `must name what failed. This is a bug in the command that built the decision.`,
+      );
+    }
+    return withSampleTime({ verdict }, run.sampleTime);
+  }
+
+  if (verdict === "unknown") {
+    const reason =
+      run.reason ??
+      (run.coverageComplete === true ? "no verdict was reached" : "coverage was incomplete");
+    return withSampleTime({ verdict, reason }, run.sampleTime);
+  }
+
+  // verdict === "not_applicable" (I4).
+  if (!run.notApplicableReason) {
+    throw new Error(
+      `archkeep: refusing to emit a "not_applicable" decision without notApplicableReason — ` +
+        `"did not apply" and "did not run" must never be indistinguishable. ` +
+        `This is a bug in the command that built the decision.`,
+    );
+  }
+  return withSampleTime({ verdict, notApplicableReason: run.notApplicableReason }, run.sampleTime);
+}
+
+/**
+ * Adds `sampleTime` to the decision only when the caller opted into time —
+ * the determinism rule in `buildDecision`'s header. Absent `sampleTime`, the
+ * decision object carries exactly the invariant-bearing fields and nothing
+ * more.
+ *
+ * @param {object} decision
+ * @param {string|undefined} sampleTime
+ * @returns {object}
+ */
+function withSampleTime(decision, sampleTime) {
+  return sampleTime === undefined ? decision : { ...decision, sampleTime };
 }

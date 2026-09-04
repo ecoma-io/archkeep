@@ -12,7 +12,7 @@
  * ## Descriptive by contract (Wave 2 scope)
  *
  * This module NEVER gates. It decides nothing about whether a finding IS one
- * (the rule that produced it owns that, `../report/evidence.mjs`'), never
+ * (the rule that produced it owns that, `./verdict.mjs`), never
  * changes `check`'s exit code, and never turns green or red on its own. It
  * reports the graph the registry and the caller's row/finding facts describe
  * — or, where a reference cannot resolve, names the gap. The `adr`/`report`
