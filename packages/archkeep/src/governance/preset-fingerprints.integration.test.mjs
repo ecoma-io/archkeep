@@ -64,6 +64,10 @@ const FINGERPRINTED_FIELDS = [
   "suppressions",
   "fitness",
   "customRules",
+  // The acceptance channel (`../config.mjs`'s `findCoverageViolations` owns
+  // the shape): a `coverage.unowned` row withdraws an unclaimed file's
+  // whole-file failure, so a pack recording one ships a different law.
+  "coverage",
   // The selection a pack was resolved by (`profilePolicy` sets it on every
   // policy this file pins), not just the rows it resolves to — two packs that
   // ship converging blocks are two different named laws.
