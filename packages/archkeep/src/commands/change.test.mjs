@@ -478,6 +478,62 @@ describe("the base identity", () => {
     expect(result.changeIntent.reconciliation.verdict).toBe("unproven");
     expect(result.changeIntent.reconciliation.reasons[0]).toMatch(/carries no provenance/);
   });
+
+  it("answers unproven when the baseline was captured in another repository, naming both remotes", async () => {
+    // The third stale-baseline refusal, beside the commit pin and the missing
+    // provenance above: a baseline whose remote differs from this tree's may
+    // be evidence about a DIFFERENT repository, and a matched verdict over it
+    // would compare the author's declaration against bytes their repo never
+    // held. Both remotes are named, so the misplacement is findable.
+    const baseline = baselineOf({
+      provenance: {
+        commit: provenanceCommit(),
+        remote: "https://other.example/elsewhere.git",
+        dirty: false,
+      },
+    });
+    const url = "https://acme.example/invented.git";
+    expect(git("remote", "add", "origin", url)).toBe(0);
+    try {
+      const result = await run({
+        ctx: contextOf({ graph: declaredHeadGraph() }),
+        baseline,
+        intent: manifest(),
+      });
+      expect(result.status).toBe("no-verdict");
+      expect(result.changeIntent.reconciliation.verdict).toBe("unproven");
+      expect(result.changeIntent.reconciliation.reasons[0]).toContain("other.example");
+      expect(result.changeIntent.reconciliation.reasons[0]).toContain("acme.example");
+      // Constraints are left unevaluated over a base the run cannot vouch
+      // for — the same F-CHG invariant the commit-mismatch refusal pins.
+      expect(result.changeIntent.constraints).toEqual([]);
+    } finally {
+      expect(git("remote", "remove", "origin")).toBe(0);
+    }
+  });
+
+  it("accepts a fresh baseline whose remote matches this tree — the gate is the mismatch, not the remote", async () => {
+    // The silent-direction inverse: with both sides naming the SAME
+    // repository and the pinned commit, the run proceeds to matched. Without
+    // it, the cross-repo refusal above could not be told apart from a gate
+    // that refuses any baseline carrying a remote at all.
+    const url = "https://acme.example/invented.git";
+    expect(git("remote", "add", "origin", url)).toBe(0);
+    try {
+      const baseline = baselineOf({
+        provenance: { commit: provenanceCommit(), remote: url, dirty: false },
+      });
+      const result = await run({
+        ctx: contextOf({ graph: declaredHeadGraph() }),
+        baseline,
+        intent: manifest(),
+      });
+      expect(result.status).toBe("ok");
+      expect(result.changeIntent.reconciliation.verdict).toBe("matched");
+    } finally {
+      expect(git("remote", "remove", "origin")).toBe(0);
+    }
+  });
 });
 
 describe("refusals — every could-not-look path says so", () => {
