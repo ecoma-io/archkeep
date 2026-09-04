@@ -27,7 +27,7 @@ import { resolveCommandContext, unownedGapWithoutRunConfiguration } from "./cont
 import { partitionUnownedCoverage } from "./coverage-acceptance.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
-import { declaredEdgeViolationsForCheck } from "./edge-constraints.mjs";
+import { declaredEdgeViolationsForCheck } from "../rules/edge-constraints.mjs";
 import { customRulesForCheck, declaresCustomRules } from "./custom-rules.mjs";
 import { driftForCheck } from "./drift.mjs";
 import { fitnessForCheck } from "./fitness.mjs";

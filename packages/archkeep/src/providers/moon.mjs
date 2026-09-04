@@ -249,7 +249,7 @@ function resolveMoonEnv(workspaceRoot, { env = process.env, platform = process.p
  * - **Archkeep** (from Nx's `implicitDependencies`, and `archkeep.json`'s own
  *   row of that name): `type: "implicit"` means *a human declared this edge
  *   and there is no import behind it*. That is precisely why
- *   `../commands/edge-constraints.mjs`'s `declaredEdgeViolationsForCheck`
+ *   `../rules/edge-constraints.mjs`'s `declaredEdgeViolationsForCheck`
  *   exists — such an edge never becomes an `importSites` record, so
  *   `evaluate()` structurally cannot reach it and `check` judges it as an edge
  *   instead. `../commands/drift.mjs` and `../commands/discover.mjs` exclude

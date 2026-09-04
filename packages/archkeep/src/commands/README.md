@@ -377,14 +377,6 @@ the resolution order.
   `check` folds into the fitness exit lanes plus the finding catalogue SARIF's
   descriptors are built from; it prints nothing and decides no exit code.
 
-- **`edge-constraints.mjs`** — edge-constraint analysis shared by `diff` and
-  `impact`. Judges a single graph edge against the `depConstraints` table,
-  producing violations with their constraint rows. Checks only tag-based rules
-  (`onlyDependOnLibsWithTags`, `notDependOnLibsWithTags`,
-  `projectWithoutTagsCannotHaveDependencies`); npm/circular/lazy-load rules
-  need import-site details that graph edges do not carry. A consumer who needs
-  the complete verdict should run `check`.
-
 - **`impact-reachability.mjs`** — reverse reachability (`computeImpact`: a
   project's direct and transitive dependents) shared by the `impact`,
   `scenario` and `context --plan` commands and the canonical evaluator
@@ -395,3 +387,9 @@ the resolution order.
   the engine's only import cycle (#644). `./impact.mjs` re-exports
   `computeImpact`, so its existing importers keep resolving; new code imports
   this module.
+
+The edge-constraint analysis `diff`, `impact` and `check` share is not one of
+these modules: it judges graph edges, so it lives in the rules layer whose
+constraint table and tag matching it reads (`../rules/edge-constraints.mjs`) —
+which is also what lets `../lsp/diagnose.mjs` share it without importing from
+this application layer (#649).

@@ -54,6 +54,7 @@ import {
 } from "../providers/moon.mjs";
 import { nativeProvider } from "../providers/native/index.mjs";
 import { mergeDeclaredEdges } from "../providers/native/graph.mjs";
+import { requireSingleProjectModel } from "../providers/model-gate.mjs";
 import {
   resolveDeclaredManifestEdges,
   resolveDeclaredManifestFailures,
@@ -119,7 +120,8 @@ function readFileAbsolute(path) {
 
 /**
  * Which Moon directory marks `root` — or none. Presence facts only; see
- * `requireSingleProjectModel` below for the one-decision gate.
+ * `requireSingleProjectModel` (`../providers/model-gate.mjs`) for the
+ * one-decision gate.
  *
  * @param {string} root
  * @returns {{hasNx: boolean, hasNative: boolean, hasMoon: boolean}}
@@ -130,48 +132,6 @@ export function markersAt(root) {
     hasNative: existsSync(join(root, ARCHKEEP_MODEL_FILE)),
     hasMoon: moonMarkerAt(root) !== null,
   };
-}
-
-/**
- * The one gate deciding whether `root` may be judged at all: more than ONE
- * project-model marker present is refused, naming what conflicts.
- *
- * Every entry point that picks a provider must answer this identically —
- * `resolveCommandContext` below reads it before any command runs, and
- * `../lsp/workspace-index.mjs`'s index build reads it before choosing a
- * branch. A second copy of the condition was exactly how the faces drifted
- * apart once: the CLI refused a tree carrying a Moon directory beside
- * `nx.json`/`archkeep.json` while the editor indexed it anyway — a clean
- * diagnostic list over a tree nobody agreed could be judged (#223's silent
- * shape, one level up). Moon-versus-Moon coexistence (`.moon/` AND
- * `.config/moon/`) is refused inside `../providers/moon.mjs`'s
- * `moonMarkerAt`, which this gate calls first; the cross-family pairs are
- * refused here, all in the same terms: which model to judge against is a
- * decision nobody made, not one this tool can make for them.
- *
- * @param {string} root
- * @param {{exists?: (path: string) => boolean}} [io] Injectable existence
- *   test (absolute paths), so a test drives this without a filesystem.
- * @returns {{hasNx: boolean, hasNative: boolean, moonMarker: string|null}}
- *   The facts a provider choice needs; `moonMarker` names whichever Moon
- *   directory is present, `null` when neither spelling is.
- * @throws {Error} when more than one marker is present.
- */
-export function requireSingleProjectModel(root, { exists = existsSync } = {}) {
-  const moonMarker = moonMarkerAt(root, { exists });
-  const hasNx = exists(join(root, NX_CONFIG_FILE));
-  const hasNative = exists(join(root, ARCHKEEP_MODEL_FILE));
-  const refusal = (a, b) =>
-    new Error(
-      `archkeep: ${root} declares both ${a} and ${b} — this tool judges a workspace ` +
-        `against exactly one project model, and a tree carrying both is a decision nobody made ` +
-        `rather than one this tool can make for them. Remove whichever one is not the ` +
-        `workspace's real source of truth for projects and tags.`,
-    );
-  if (moonMarker !== null && hasNx) throw refusal(moonMarker, NX_CONFIG_FILE);
-  if (moonMarker !== null && hasNative) throw refusal(moonMarker, ARCHKEEP_MODEL_FILE);
-  if (hasNx && hasNative) throw refusal(NX_CONFIG_FILE, ARCHKEEP_MODEL_FILE);
-  return { hasNx, hasNative, moonMarker };
 }
 
 /**
@@ -191,7 +151,8 @@ export function requireSingleProjectModel(root, { exists = existsSync } = {}) {
  * selected the user's home directory as a workspace through `~/.moon`,
  * moonrepo's user-level state directory (#339). A bare `.moon` beside an
  * `nx.json` at a root already chosen is a different question, and stays with
- * `requireSingleProjectModel`'s directory-presence gate below.
+ * `requireSingleProjectModel`'s directory-presence gate
+ * (`../providers/model-gate.mjs`).
  *
  * @type {string[]}
  */
@@ -531,8 +492,9 @@ export function resolveCommandContext(
     );
   }
   // Which provider may judge at all — the one gate
-  // (`requireSingleProjectModel` above) every entry point shares, CLI and
-  // language server alike. Moon-versus-Moon rides it through `moonMarkerAt`.
+  // (`requireSingleProjectModel`, `../providers/model-gate.mjs`) every entry
+  // point shares, CLI and language server alike. Moon-versus-Moon rides it
+  // through `moonMarkerAt`.
   const { hasNative, moonMarker } = requireSingleProjectModel(root);
   const hasMoon = moonMarker !== null;
 

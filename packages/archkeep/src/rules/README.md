@@ -36,15 +36,24 @@ weaker analyzer. That purity is what lets the CLI and the language server share
 one verdict, and what lets all fifteen rules be driven from fixtures with no
 workspace at all.
 
-| module             | what it owns                                                                                                            |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| `index.mjs`        | the pipeline, in upstream's order; `allow`; the `Violation` record                                                      |
-| `tags.mjs`         | only / not / empty-only, and which constraints a source is held to                                                      |
-| `topology.mjs`     | circular, self-circular, apps, e2e, buildable, lazy, transitive                                                         |
-| `specifiers.mjs`   | relative-across, relative-externals, banned and nested-banned externals                                                 |
-| `messages.mjs`     | the fifteen message templates, copied verbatim from upstream                                                            |
-| `match.mjs`        | Nx's three pattern dialects (none of them minimatch), plus the brace-expansion cap in front of `path.posix.matchesGlob` |
-| `reachability.mjs` | who reaches whom: the cycle check and the transitive tag check share it                                                 |
+`edge-constraints.mjs` is this layer's second judgment surface, and deliberately
+not a rule: it judges GRAPH EDGES against the `depConstraints` table — the
+`implicit`-typed declarations `evaluate()` structurally cannot reach, because
+they have no import site behind them — reusing this directory's tag matching and
+reachability rather than re-deriving them. It reads records and nothing else,
+like everything here; `src/commands/` and `src/lsp/diagnose.mjs` both reach it
+as a downward import.
+
+| module                 | what it owns                                                                                                                     |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `index.mjs`            | the pipeline, in upstream's order; `allow`; the `Violation` record                                                               |
+| `tags.mjs`             | only / not / empty-only, and which constraints a source is held to                                                               |
+| `topology.mjs`         | circular, self-circular, apps, e2e, buildable, lazy, transitive                                                                  |
+| `specifiers.mjs`       | relative-across, relative-externals, banned and nested-banned externals                                                          |
+| `messages.mjs`         | the fifteen message templates, copied verbatim from upstream                                                                     |
+| `match.mjs`            | Nx's three pattern dialects (none of them minimatch), plus the brace-expansion cap in front of `path.posix.matchesGlob`          |
+| `reachability.mjs`     | who reaches whom: the cycle check and the transitive tag check share it                                                          |
+| `edge-constraints.mjs` | graph-edge judgment: `judgeEdge` against the constraint table, the `implicit`-edge pass `check` shares, and the diff/impact fold |
 
 ## Read these before changing anything here
 

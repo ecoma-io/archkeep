@@ -502,7 +502,7 @@ describe("a native archkeep.json workspace, driven through the real provider", (
     // A-F07: an `implicitDependencies` edge has no import site behind it, so
     // `evaluate()` over this document's import sites can never see it — and
     // `../../cli.mjs`'s `check` still exits 1 on it
-    // (`../commands/edge-constraints.mjs`'s `declaredEdgeViolationsForCheck`).
+    // (`../rules/edge-constraints.mjs`'s `declaredEdgeViolationsForCheck`).
     // The LSP used to paint the declaring project clean. A separate root, so
     // the graph here carries only the declared edge: `inner` declares a
     // dependency on `outer` and both are declared projects in `archkeep.json`,

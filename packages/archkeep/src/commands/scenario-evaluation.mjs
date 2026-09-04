@@ -32,7 +32,7 @@
  * @module
  */
 import { computeImpact } from "./impact.mjs";
-import { computeImpactConstraints } from "./edge-constraints.mjs";
+import { computeImpactConstraints } from "../rules/edge-constraints.mjs";
 import {
   buildDecisionImpact,
   buildEvolutionAlignment,

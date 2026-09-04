@@ -590,7 +590,7 @@ export function findNativeModelViolations(raw) {
       // `coverage.exempt` is where a native tree records an unowned-file
       // acceptance, and two channels for one decision on one tree is how
       // copies drift (the same posture as the `.moon`-beside-`archkeep.json`
-      // refusal in `../../commands/context.mjs`'s `requireSingleProjectModel`).
+      // refusal in `../model-gate.mjs`'s `requireSingleProjectModel`).
       // The file-dialect spelling of the same mistake — a native tree whose
       // boundaryConfig FILE declares `coverage` — is refused by
       // `../../commands/policy.mjs`'s `resolvePolicy`, which is the first

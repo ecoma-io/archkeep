@@ -134,7 +134,7 @@ import {
 import { nodeTypeOf, PROJECT_CONFIG_FILE } from "../providers/native/discover.mjs";
 import { ARCHKEEP_MODEL_FILE } from "../providers/native/model.mjs";
 import { nativeProvider } from "../providers/native/index.mjs";
-import { requireSingleProjectModel } from "../commands/context.mjs";
+import { requireSingleProjectModel } from "../providers/model-gate.mjs";
 import { mergeImportEdges, moonProvider } from "../providers/moon.mjs";
 
 export { PROJECT_CONFIG_FILE, nodeTypeOf, buildDependencies };
@@ -337,7 +337,7 @@ export function buildNodes(projects) {
  *   no project has no boundary to cross — a clean report, produced by not
  *   looking. Also when the root carries more than one project-model marker —
  *   a Moon directory beside `nx.json`/`archkeep.json`, both Moon spellings at
- *   once, or `nx.json` beside `archkeep.json` (`../commands/context.mjs`'s
+ *   once, or `nx.json` beside `archkeep.json` (`../providers/model-gate.mjs`'s
  *   `requireSingleProjectModel`, the same refusal `check` makes) — which
  *   config governs at all is a decision nobody made, refused the same way an
  *   unreadable `nx.json` is, through this function's caller in `./server.mjs`.
@@ -354,7 +354,7 @@ export function buildWorkspaceIndex({
   const files = listFiles(root);
   const readFile = (path) => readFileAt(root, path);
   // Which provider may judge this root at all — the SAME gate
-  // (`../commands/context.mjs`'s `requireSingleProjectModel`) the CLI reads
+  // (`../providers/model-gate.mjs`'s `requireSingleProjectModel`) the CLI reads
   // before any command runs, so a tree carrying a Moon directory beside
   // `nx.json`/`archkeep.json` is refused here exactly as `check` refuses it,
   // in the same words, from the one copy of the rule. Before the shared

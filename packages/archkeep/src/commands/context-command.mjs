@@ -38,7 +38,7 @@ import {
   unresolvableLiteralCount,
 } from "../analysis/source-util.mjs";
 import { UsageError } from "../errors.mjs";
-import { judgeEdge } from "./edge-constraints.mjs";
+import { judgeEdge } from "../rules/edge-constraints.mjs";
 import { findConstraintsFor } from "../rules/tags.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatContextReport } from "../report/context-text.mjs";

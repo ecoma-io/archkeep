@@ -826,7 +826,7 @@ describe("the Moon branch buildWorkspaceIndex takes for a .moon root", () => {
 });
 
 describe("marker conflicts buildWorkspaceIndex refuses exactly like check does", () => {
-  // One gate (`../commands/context.mjs`'s `requireSingleProjectModel`) serves
+  // One gate (`../providers/model-gate.mjs`'s `requireSingleProjectModel`) serves
   // both faces; these drive it through the index build over a root whose
   // markers disagree, with every existence answer injected.
   const withMarkers = (...names) => {
@@ -1047,7 +1047,7 @@ describe("the Nx-shaped branch on an nx.json root that declares no project.json"
   // paints clean is the disagreement this gap closes.
   //
   // `pathExists` is injected because the marker read is a real-filesystem one
-  // (`../commands/context.mjs`'s `requireSingleProjectModel`), the same seam
+  // (`../providers/model-gate.mjs`'s `requireSingleProjectModel`), the same seam
   // the Moon suite above uses; `readLayout` is injected for the reason that
   // suite's own header gives.
   const files = {

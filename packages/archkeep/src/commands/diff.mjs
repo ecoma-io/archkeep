@@ -41,7 +41,7 @@
 import { readFileSync } from "node:fs";
 
 import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
-import { computeRuleImpact } from "./edge-constraints.mjs";
+import { computeRuleImpact } from "../rules/edge-constraints.mjs";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { SCHEMA_VERSION } from "../report/json.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";

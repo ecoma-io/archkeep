@@ -30,7 +30,7 @@ import {
 // this one, so importing the walk from there closed the engine's only import
 // cycle (#644).
 import { computeImpact } from "./impact-reachability.mjs";
-import { computeImpactConstraints } from "./edge-constraints.mjs";
+import { computeImpactConstraints } from "../rules/edge-constraints.mjs";
 // ---------------------------------------------------------------------------
 // Decision resolution
 // ---------------------------------------------------------------------------

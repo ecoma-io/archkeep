@@ -2,12 +2,13 @@
  * Edge-constraint analysis: which boundary-rule violations an edge introduces
  * or removes, and which constraint rows govern a given edge.
  *
- * This is the bridge between the structural commands (`diff`, `impact`) and the
- * boundary rules. Both commands operate on graph edges — not on import sites —
- * so they cannot call `evaluate` directly. Instead, this module provides a
- * narrower function that judges a single edge against the `depConstraints`
- * table, which is the part of the boundary rules that depends only on project
- * tags (not on npm imports, circular dependencies, lazy loading, etc.).
+ * The rules layer's counterpart to `./index.mjs`'s import-site judgment:
+ * `evaluate` judges import sites, and the structural commands (`diff`,
+ * `impact`) operate on graph edges — not on import sites — so they cannot call
+ * `evaluate` directly. Instead, this module provides a narrower function that
+ * judges a single edge against the `depConstraints` table, which is the part
+ * of the boundary rules that depends only on project tags (not on npm imports,
+ * circular dependencies, lazy loading, etc.).
  *
  * `check` is a third caller, through `declaredEdgeViolationsForCheck` below —
  * not for every edge, only the ones `evaluate()` structurally cannot reach: an
@@ -16,7 +17,9 @@
  * `evaluate()` to iterate. Without this, `check` could report a clean tree
  * while `context`/`impact` showed the exact same edge as a tag violation — the
  * "empty result is a claim, not a shrug" invariant (`../../../AGENTS.md`)
- * broken by omission rather than by a wrong answer.
+ * broken by omission rather than by a wrong answer. The language server rides
+ * the same function (`../lsp/diagnose.mjs`), so an editor paints the same
+ * declared-edge verdict `check` exits 1 over.
  *
  * ## What it checks and what it does not
  *
@@ -34,23 +37,26 @@
  * edge with no import site cannot gain one by being judged from `check` rather
  * than `impact`. A consumer who needs the full verdict should run `check`.
  *
- * ## Why this lives here and not in `src/rules/`
+ * ## Why a separate module, and not part of `./tags.mjs` or `./index.mjs`
  *
  * `src/rules/` judges import sites; this module judges graph edges. They share
  * the tag-matching functions (`findConstraintsFor`, `onlyTagsViolation`,
  * `notTagsViolation`, `emptyOnlyTagsViolation`) but the input is different
- * enough that merging them would blur the layer boundary the AGENTS.md guards.
+ * enough that merging them would put two input contracts in one module — the
+ * boundary this file exists to keep legible. A sibling module in the same
+ * layer, reached by `commands/` and `lsp/` as a downward import, keeps the
+ * shared tag matching in one place without blurring the two judgments.
  */
 
 import { edgeEvolutionIdentity } from "../governance/evolution-event.mjs";
-import { renderMessage } from "../rules/messages.mjs";
-import { buildReachability } from "../rules/reachability.mjs";
+import { renderMessage } from "./messages.mjs";
+import { buildReachability } from "./reachability.mjs";
 import {
   emptyOnlyTagsViolation,
   findConstraintsFor,
   notTagsViolation,
   onlyTagsViolation,
-} from "../rules/tags.mjs";
+} from "./tags.mjs";
 
 /**
  * Judges a single edge against the `depConstraints` table.

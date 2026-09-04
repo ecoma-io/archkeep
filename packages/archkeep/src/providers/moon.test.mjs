@@ -721,7 +721,7 @@ describe("transformMoonGraph — edge type from scope", () => {
 // Archkeep's `"implicit"` means the opposite fact — Nx's `implicitDependencies`
 // and `archkeep.json`'s row of the same name: DECLARED by a human, with no
 // import behind it. That is the entire criterion
-// `../commands/edge-constraints.mjs`'s `declaredEdgeViolationsForCheck` selects
+// `../rules/edge-constraints.mjs`'s `declaredEdgeViolationsForCheck` selects
 // on (`if (edge.type !== "implicit") continue`), and the one
 // `../commands/drift.mjs`/`../commands/discover.mjs` exclude on.
 //

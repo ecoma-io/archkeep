@@ -35,7 +35,7 @@
  * under project roots, `impact` refuses loudly rather than returning a result
  * whose dependents silently under-represent the real architecture.
  */
-import { computeImpactConstraints } from "./edge-constraints.mjs";
+import { computeImpactConstraints } from "../rules/edge-constraints.mjs";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatImpactReport } from "../report/impact-text.mjs";

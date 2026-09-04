@@ -393,7 +393,7 @@ export function readWorkspaceOptions(root) {
   // A Moon root, checked only once neither marker file is there: a `.moon`
   // beside `nx.json` keeps falling to `readPluginOptions` below exactly as it
   // did, and `./workspace-index.mjs`'s `buildWorkspaceIndex` refuses the pair
-  // loudly through the one shared gate (`../commands/context.mjs`'s
+  // loudly through the one shared gate (`../providers/model-gate.mjs`'s
   // `requireSingleProjectModel`) rather than this function growing a second
   // copy of that refusal. `moonMarkerAt` is the same dispatcher the index and
   // the CLI read, so all three agree about which directory marks the tree —

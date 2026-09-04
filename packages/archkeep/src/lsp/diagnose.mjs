@@ -43,7 +43,7 @@
  */
 import { analyzeFile } from "../analysis/analyze.mjs";
 import { isExternalSiteFailure, projectOwning } from "../analysis/source-util.mjs";
-import { declaredEdgeViolationsForCheck } from "../commands/edge-constraints.mjs";
+import { declaredEdgeViolationsForCheck } from "../rules/edge-constraints.mjs";
 import { evaluate } from "../rules/index.mjs";
 
 import {
@@ -170,7 +170,7 @@ export function diagnoseDocument({ sourceFile, text, index, config }) {
   // Nx/`archkeep.json` `implicitDependencies` declaration — has no import site
   // behind it, so it never becomes an `importSites` record for the rule engine
   // to iterate. The CLI judges exactly those edges itself
-  // (`../commands/edge-constraints.mjs`'s `declaredEdgeViolationsForCheck`,
+  // (`../rules/edge-constraints.mjs`'s `declaredEdgeViolationsForCheck`,
   // `cli.mjs check`), and without the same fold here the editor would paint a
   // file clean while `check` exits 1 over the same declared edge — the
   // boundary rule that never runs, dressed as a clean tree. Only the violations
