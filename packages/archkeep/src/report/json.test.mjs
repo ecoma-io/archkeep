@@ -325,6 +325,25 @@ describe("jsonEnvelope", () => {
       }),
     ).toThrow(/an "unknown" decision has no reason/);
   });
+
+  it("refuses an unknown decision whose reason is empty or whitespace — a byte-present, semantically absent reason is no reason", () => {
+    // The constructor (buildDecision) now refuses these; this boundary keeps
+    // the same law against a HAND-BUILT decision, which is the only kind
+    // that can still arrive carrying "" — the engine path never produces it.
+    for (const reason of ["", "   "]) {
+      expect(() =>
+        jsonEnvelope({
+          command: "check",
+          context,
+          status: "no-verdict",
+          exitCode: 3,
+          coverage: cleanCoverage(),
+          result: {},
+          decision: { verdict: "unknown", reason },
+        }),
+      ).toThrow(/an "unknown" decision has no reason/);
+    }
+  });
 });
 
 describe("renderJson", () => {
