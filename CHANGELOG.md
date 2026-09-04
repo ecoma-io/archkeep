@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.24.0](https://github.com/ecoma-io/archkeep/compare/v0.23.0...v0.24.0) (2026-09-04)
+
+
+### Features
+
+* **archkeep:** add analyzed&gt;0 axis to plan-context and health completeness ([#694](https://github.com/ecoma-io/archkeep/issues/694)) ([#696](https://github.com/ecoma-io/archkeep/issues/696)) ([fbf8787](https://github.com/ecoma-io/archkeep/commit/fbf878737ba7bd80b0f10f8036de09a75b8d143b))
+* **archkeep:** derive the provenance dirty bit from tracked files only ([#685](https://github.com/ecoma-io/archkeep/issues/685)) ([cdfd966](https://github.com/ecoma-io/archkeep/commit/cdfd966ee2fd504ab8026c09957ab2eda5ebe0f0))
+* **archkeep:** read the markdown document track into the graph ([#687](https://github.com/ecoma-io/archkeep/issues/687)) ([a42f9ff](https://github.com/ecoma-io/archkeep/commit/a42f9fffdef317bfdf46fb3a761e4d7064a38d90))
+
+
+### Bug Fixes
+
+* **ci:** back the coverage lane's reds with a durable issue trail ([#693](https://github.com/ecoma-io/archkeep/issues/693)) ([e01f9ff](https://github.com/ecoma-io/archkeep/commit/e01f9ff79f2abda587551ae6c61b87d8c9789d8c))
+* **ci:** split disclosed-external from unreadable in the coverage lane ([#690](https://github.com/ecoma-io/archkeep/issues/690)) ([#695](https://github.com/ecoma-io/archkeep/issues/695)) ([9627809](https://github.com/ecoma-io/archkeep/commit/9627809dff07f529c517c86367e204832a0bead8))
+
 ## [0.23.0](https://github.com/ecoma-io/archkeep/compare/v0.22.2...v0.23.0) (2026-09-04)
 
 
