@@ -114,8 +114,14 @@ export function resolveProvenance(root) {
 
   // Dirty: any uncommitted change to tracked files means the working tree
   // does not match the commit. A baseline from a dirty tree is not a
-  // reproducible claim about that commit.
-  const status = runProcess("git", ["status", "--porcelain"], root).trim();
+  // reproducible claim about that commit. `--untracked-files=no` is what
+  // makes the code agree with that sentence: bare `--porcelain` includes
+  // untracked paths, and an untracked file is not an uncommitted change to a
+  // tracked file — the analysis reads `git ls-files`-tracked files only, so a
+  // tree whose only dirt is an editor swap, a scratch file, or an unignored
+  // build output has an unchanged analyzed input and must produce an
+  // unchanged envelope (#683).
+  const status = runProcess("git", ["status", "--porcelain", "--untracked-files=no"], root).trim();
   const dirty = status.length > 0;
 
   return { commit, remote, dirty };

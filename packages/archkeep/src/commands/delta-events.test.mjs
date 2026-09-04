@@ -698,10 +698,16 @@ describe("deltaCommand event output", () => {
     const law = config();
     // Captured clean, before the tree is dirtied.
     const baseline = baselineOf({ law, root: gitRoot });
-    writeFileSync(join(gitRoot, "DIRTY.md"), "uncommitted\n");
+    // The dirt is a TRACKED-file edit, the state the gate exists for: a dirty
+    // head names a commit its evidence does not back — two distinct
+    // uncommitted states would collide on one event id. Untracked files are
+    // not dirt (#683): the analysis reads `git ls-files`-tracked files only,
+    // so a tree whose only change is untracked analyzed the same bytes and its
+    // evidence still backs the commit it names.
+    const readme = join(gitRoot, "README.md");
+    const committed = readFileSync(readme, "utf8");
+    writeFileSync(readme, `${committed}uncommitted\n`);
     try {
-      // A dirty head names the commit its evidence does not back — two
-      // distinct uncommitted states would collide on one event id.
       await expect(
         deltaCommand(
           "/invented/base.json",
@@ -715,7 +721,36 @@ describe("deltaCommand event output", () => {
         ),
       ).rejects.toThrow(/dirty working tree/u);
     } finally {
-      rmSync(join(gitRoot, "DIRTY.md"), { force: true });
+      writeFileSync(readme, committed);
+    }
+  });
+
+  it("writes the event when the only dirt is an untracked file — the gate is tracked-file dirt (#683)", async () => {
+    const law = config();
+    const baseline = baselineOf({ law, root: gitRoot });
+    // The narrowed side of the gate above: an untracked scratch file cannot
+    // unback the evidence — the analysis reads `git ls-files`-tracked files
+    // only, so the analyzed bytes still are the commit's — and it must not
+    // trip the refusal. The positive control goes red if the dirty bit ever
+    // re-widens to bare `git status --porcelain`, which would block event
+    // writes in any tree carrying editor swaps or scratch files.
+    const probe = join(gitRoot, "untracked-probe.md");
+    writeFileSync(probe, "scratch\n");
+    try {
+      const dir = join(eventsDir, "untracked-only");
+      const result = await deltaCommand(
+        "/invented/base.json",
+        contextOf({ records: [crossingRecord()], root: gitRoot }),
+        {
+          config: law,
+          readBaseline: baseline.readBaseline,
+          now: NOW,
+          eventOut: dir,
+        },
+      );
+      expect(result.eventWrite).toEqual({ id: expect.any(String), duplicate: false });
+    } finally {
+      rmSync(probe, { force: true });
     }
   });
 

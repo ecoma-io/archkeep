@@ -144,11 +144,54 @@ describe("resolveProvenance", () => {
   it("reports dirty=true when working tree has changes", () => {
     // This test is probabilistic (the working tree may or may not be dirty), so
     // verify the field exists and matches what git status actually reports.
+    // The comparator asks the same question the bit asks — tracked files only
+    // (#683) — so an untracked scratch file in whichever checkout runs the
+    // suite does not read as a disagreement.
     const provenance = resolveProvenance(process.cwd());
     expect(provenance).not.toBeNull();
-    const status = execFileSync("git", ["status", "--porcelain"], { encoding: "utf-8" }).trim();
+    const status = execFileSync("git", ["status", "--porcelain", "--untracked-files=no"], {
+      encoding: "utf-8",
+    }).trim();
     const expectedDirty = status.length > 0;
     expect(provenance.dirty).toBe(expectedDirty);
+  });
+
+  it("does NOT flip dirty for an untracked file the analysis never reads (#683)", () => {
+    // The bit's own comment says it tracks "any uncommitted change to tracked
+    // files", and the analysis reads `git ls-files`-tracked files only — an
+    // editor swap file, a scratch file, an unignored build output is none of
+    // those. Bare `git status --porcelain` includes untracked paths anyway,
+    // which made the envelope's `provenance.dirty` (and with it the whole
+    // envelope hash) flip on trees whose analyzed inputs never changed. The
+    // fixture is a frozen committed tree (#631's reasoning), so the only
+    // variable between the two calls is the probe file itself.
+    const repo = makeFrozenRepoWithTrackedFile();
+    try {
+      expect(resolveProvenance(repo).dirty).toBe(false);
+      writeFileSync(join(repo, "untracked-probe.txt"), "scratch\n");
+      expect(resolveProvenance(repo).dirty).toBe(false);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
+  });
+
+  it("still flips dirty on a tracked-file modification — the bit must not go blind", () => {
+    // The too-broad reading of #683: if the fix above is ever "simplified" by
+    // ignoring the worktree entirely, a real uncommitted edit to a tracked
+    // file would report dirty=false — byte-identical to a clean tree, the
+    // silent direction this repository refuses. A tracked edit MUST flip the
+    // bit, and restoring the file must flip it back (the bit is the tracked
+    // diff, not a latch).
+    const repo = makeFrozenRepoWithTrackedFile();
+    try {
+      expect(resolveProvenance(repo).dirty).toBe(false);
+      writeFileSync(join(repo, "src/alpha.txt"), "changed\n");
+      expect(resolveProvenance(repo).dirty).toBe(true);
+      execFileSync("git", ["checkout", "-q", "--", "."], { cwd: repo });
+      expect(resolveProvenance(repo).dirty).toBe(false);
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
+    }
   });
 
   it("reports commit matching git rev-parse HEAD", () => {
@@ -243,6 +286,45 @@ function makeFrozenRepo() {
         "base",
       ],
       { cwd: repo, env: { ...process.env, GIT_DIR: undefined, GIT_WORK_TREE: undefined } },
+    );
+    return repo;
+  } catch (err) {
+    rmSync(repo, { recursive: true, force: true });
+    throw err;
+  }
+}
+
+/**
+ * Creates a temp git repo with one committed file and a clean tree — the
+ * frozen input the #683 dirty-bit tests need: a tree that HAS a tracked file,
+ * so the too-broad direction (the bit going blind to all worktree state) has
+ * something real to flip on.
+ */
+function makeFrozenRepoWithTrackedFile() {
+  const repo = mkdtempSync(join(tmpdir(), "archkeep-provenance-tracked-"));
+  const stripEnv = () => ({
+    cwd: repo,
+    env: { ...process.env, GIT_DIR: undefined, GIT_WORK_TREE: undefined },
+  });
+  try {
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
+    mkdirSync(join(repo, "src"), { recursive: true });
+    writeFileSync(join(repo, "src/alpha.txt"), "committed\n");
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "add", "."], stripEnv());
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-m",
+        "base",
+      ],
+      stripEnv(),
     );
     return repo;
   } catch (err) {
