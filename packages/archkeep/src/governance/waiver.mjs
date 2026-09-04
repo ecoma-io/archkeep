@@ -55,6 +55,7 @@ export function isWaiver(row) {
  * @returns {number}
  */
 export function expiresAtMs(row) {
+  // used by its own test
   return Date.parse(String(row.expiresAt));
 }
 

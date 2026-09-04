@@ -382,6 +382,7 @@ export function forwardDecision(decisionId, ctx) {
  * @returns {GraphWalk}
  */
 export function reverseRow(rowRef, ctx) {
+  // used by its own test
   const g = newWalk();
 
   const row = ctx.rows.find((candidate) => candidate.id === rowRef);

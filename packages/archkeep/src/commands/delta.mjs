@@ -162,6 +162,7 @@ export function refusePluginGapHead(commandContext, activity) {
  * @throws {Error} on either condition.
  */
 export function refuseUnjudgeableHead(commandContext, activity) {
+  // used by its own test
   refusePluginGapHead(commandContext, activity);
   const notAnalyzed = commandContext.analysis.failures.filter(isWholeFileFailure);
 
@@ -374,6 +375,7 @@ export function sourceProjectAttributor(headGraph, baselineProjects) {
  * @returns {"accepted"|"rejected"|"no-verdict"}
  */
 export function deltaDisposition({ status }) {
+  // used by its own test
   if (status === "no-verdict") return "no-verdict";
   if (status === "findings") return "rejected";
   return "accepted";

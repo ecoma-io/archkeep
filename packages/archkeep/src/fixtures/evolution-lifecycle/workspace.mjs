@@ -36,6 +36,7 @@ const IDENTITY = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpg
  * than blocking the worker thread forever.
  */
 export function git(cwd, ...args) {
+  // used by its own test
   return execFileSync("git", args, {
     cwd,
     env: environmentForTree(),
@@ -47,12 +48,14 @@ export function git(cwd, ...args) {
 
 /** Writes `text` to `root/relativePath`, creating parent directories. */
 export function writeIn(root, relativePath, text) {
+  // used by its own test
   mkdirSync(join(root, relativePath, ".."), { recursive: true });
   writeFileSync(join(root, relativePath), text);
 }
 
 /** Stages every change and commits with the fixture identity; returns the SHA. */
 export function commit(root, message) {
+  // used by its own test
   git(root, ...IDENTITY, "add", "-A");
   git(root, ...IDENTITY, "commit", "-q", "-m", message);
   return git(root, "rev-parse", "HEAD").trim();
@@ -109,12 +112,12 @@ const OPTIONS = `export const moduleBoundaryOptions = {
 };
 `;
 
-export const ALPHA_CLEAN = `package alpha
+export const ALPHA_CLEAN = `package alpha // used by its own test
 
 func Name() string { return "alpha" }
 `;
 
-export const ALPHA_REACHING = `package alpha
+export const ALPHA_REACHING = `package alpha // used by its own test
 
 import (
 	"example.com/beta"
@@ -123,7 +126,7 @@ import (
 func Name() string { return "alpha" + beta.Suffix() }
 `;
 
-export const BETA = `package beta
+export const BETA = `package beta // used by its own test
 
 func Suffix() string { return "-beta" }
 `;
@@ -136,6 +139,7 @@ func Suffix() string { return "-beta" }
  * @param {{rows?: string, fitness?: string}} [law]
  */
 export function writeLaw(root, { rows = "", fitness } = {}) {
+  // used by its own test
   writeIn(
     root,
     "module-boundaries.config.mjs",
@@ -149,7 +153,7 @@ export function writeLaw(root, { rows = "", fitness } = {}) {
  * evolution CLI integration fixtures use, so an allowed alpha→beta edge never
  * trips a boundary rule.
  */
-export const ALLOW_A_TO_B = `  { sourceTag: "layer:a", onlyDependOnLibsWithTags: ["layer:b"] },`;
+export const ALLOW_A_TO_B = `  { sourceTag: "layer:a", onlyDependOnLibsWithTags: ["layer:b"] },`; // used by its own test
 
 /**
  * Writes `architecture-intent.json` at `root`. `sections` carries the top-level
@@ -157,6 +161,7 @@ export const ALLOW_A_TO_B = `  { sourceTag: "layer:a", onlyDependOnLibsWithTags:
  * `dependencies`, …); `version` defaults to "1".
  */
 export function writeIntent(root, sections) {
+  // used by its own test
   writeIn(root, "architecture-intent.json", `${JSON.stringify(sections, null, 2)}\n`);
 }
 
@@ -165,6 +170,7 @@ export function writeIntent(root, sections) {
  * `record` is the frontmatter map (`{id, status, supersedes?, bindings?}`).
  */
 export function writeAdr(root, filename, record) {
+  // used by its own test
   const lines = ["---", `id: ${record.id}`, `status: ${record.status}`];
   if (record.supersedes?.length) {
     lines.push("supersedes:");
@@ -184,6 +190,7 @@ export function writeAdr(root, filename, record) {
  * (`../cli.mjs`), never a shell-out to a binary named `archkeep`.
  */
 export async function runEvolution(cwd, argv) {
+  // used by its own test
   const out = [];
   const err = [];
   const exitCode = await runCli(argv, {
@@ -201,6 +208,7 @@ export async function runEvolution(cwd, argv) {
  * @param {{head?: string, eventOut?: string, format?: string}} [options]
  */
 export function evolutionArgs(base, { head, eventOut, format = "json" } = {}) {
+  // used by its own test
   const args = ["evolution", "--base", base];
   if (head) args.push("--head", head);
   if (eventOut) args.push("--event-out", eventOut);
@@ -212,6 +220,7 @@ export function evolutionArgs(base, { head, eventOut, format = "json" } = {}) {
  * Parses the `--format json` envelope out of a successful evolution run.
  */
 export function parseEnvelope(run) {
+  // used by its own test
   if (run.exitCode !== EXIT.ok) throw new Error(`evolution exited ${run.exitCode}: ${run.err}`);
   return JSON.parse(run.out);
 }
@@ -226,6 +235,7 @@ export function readEvents(dir) {
 
 /** The event store's file names in `dir`, in filename order. */
 export function eventFiles(dir) {
+  // used by its own test
   return readdirSync(dir)
     .filter((name) => name.endsWith(".json") && !name.endsWith(".json.tmp"))
     .sort();
@@ -233,5 +243,6 @@ export function eventFiles(dir) {
 
 /** Removes a throwaway workspace. */
 export function dispose(root) {
+  // used by its own test
   rmSync(root, { recursive: true, force: true });
 }

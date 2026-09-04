@@ -30,7 +30,7 @@
  */
 
 /** The three selector labels. `unlabeled` is a bare project name (equals `name:`). */
-export const SELECTOR_LABELS = Object.freeze(["name", "tag", "directory"]);
+const SELECTOR_LABELS = Object.freeze(["name", "tag", "directory"]);
 
 /**
  * Split a selector into `{exclude, label, value}` — `!` prefix removed, `*`
@@ -71,6 +71,7 @@ export function isValidSelector(value) {
  * @returns {string[]}
  */
 export function selectProjects(selector, nodes) {
+  // used by its own test
   const { label, value } = splitSelector(selector);
 
   let found;

@@ -40,10 +40,10 @@ export const EVALUATION_STATUS = Object.freeze({
   REFUSED: "refused",
 });
 export const EVALUATED = EVALUATION_STATUS.EVALUATED;
-export const PARTIAL = EVALUATION_STATUS.PARTIAL;
+export const PARTIAL = EVALUATION_STATUS.PARTIAL; // used by its own test
 export const NOT_EVALUATED = EVALUATION_STATUS.NOT_EVALUATED;
-export const UNSUPPORTED = EVALUATION_STATUS.UNSUPPORTED;
-export const REFUSED = EVALUATION_STATUS.REFUSED;
+export const UNSUPPORTED = EVALUATION_STATUS.UNSUPPORTED; // used by its own test
+export const REFUSED = EVALUATION_STATUS.REFUSED; // used by its own test
 
 // ---------------------------------------------------------------------------
 // Evaluation contract types — which gates are required per evaluation type
@@ -71,7 +71,7 @@ export const EVALUATION_CONTRACT_TYPES = Object.freeze({
  *
  * @type {Readonly<Object<string, ReadonlySet<string>>>}
  */
-export const REQUIRED_GATES_FOR_CONTRACT = Object.freeze({
+const REQUIRED_GATES_FOR_CONTRACT = Object.freeze({
   [EVALUATION_CONTRACT_TYPES.CANONICAL]: Object.freeze(
     new Set([
       "domainCoverage",
@@ -107,7 +107,7 @@ export const REQUIRED_GATES_FOR_CONTRACT = Object.freeze({
  *   Defaults to SCENARIO (most restrictive).
  * @returns {boolean}
  */
-export function isGateRequired(gateKey, contractType = EVALUATION_CONTRACT_TYPES.SCENARIO) {
+function isGateRequired(gateKey, contractType = EVALUATION_CONTRACT_TYPES.SCENARIO) {
   const required = REQUIRED_GATES_FOR_CONTRACT[contractType];
   return required ? required.has(gateKey) : true;
 }
@@ -121,6 +121,7 @@ export function isGateRequired(gateKey, contractType = EVALUATION_CONTRACT_TYPES
  * @type {Readonly<{key: string, label: string, type: string}[]>}
  */
 export const EVIDENCE_COMPLETE_GATES = Object.freeze([
+  // used by its own test
   { key: "domainCoverage", label: "Domain coverage", type: "ratio" },
   { key: "claimEvidenceCoverage", label: "Claim evidence coverage", type: "ratio" },
   { key: "causalCoverage", label: "Causal coverage", type: "ratio" },
@@ -265,7 +266,7 @@ export const REQUIRED_DOMAINS = Object.freeze([
  * @param {string} status EVALUATION_STATUS value
  * @returns {boolean}
  */
-export function isDomainEvaluated(status) {
+function isDomainEvaluated(status) {
   return status === EVALUATION_STATUS.EVALUATED;
 }
 

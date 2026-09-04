@@ -94,6 +94,7 @@ function formatEdge(violation) {
  * @returns {string}
  */
 export function formatViolation(violation, unresolvedDecisionRefs) {
+  // used by its own test
   const message = violation.message
     .split("\n")
     .map((line) => (line === "" ? "" : `${CONTINUED}${line}`))
@@ -159,6 +160,7 @@ const formatFailure = (failure) =>
  * @returns {string}
  */
 export function formatFailures(failures) {
+  // used by its own test
   if (failures.length === 0) return "";
   const unchecked = failures.filter(isWholeFileFailure);
   const blind = failures.filter((failure) => !isWholeFileFailure(failure));
@@ -236,6 +238,7 @@ export function formatFailures(failures) {
  * @returns {string} Empty exactly when there is no go.work verdict to render.
  */
 export function formatGoWork(goWork) {
+  // used by its own test
   if (goWork == null) return "";
   const { findings, moduleProjects } = goWork;
   const modules = `${moduleProjects} Go module project${moduleProjects === 1 ? "" : "s"}`;
@@ -291,6 +294,7 @@ export function formatGoWork(goWork) {
  * @returns {string} Empty exactly when there is no declared-edge verdict to render.
  */
 export function formatDeclaredEdges(declaredEdges, unresolvedDecisionRefs) {
+  // used by its own test
   if (declaredEdges == null) return "";
   const { findings, judged, declaration = "implicitDependencies" } = declaredEdges;
   const label = `${judged} implicit edge${judged === 1 ? "" : "s"} judged`;
@@ -345,6 +349,7 @@ export function formatDeclaredEdges(declaredEdges, unresolvedDecisionRefs) {
  * @returns {string} Empty exactly when there is no paths verdict to render.
  */
 export function formatTsconfigPaths(tsconfigPaths) {
+  // used by its own test
   if (tsconfigPaths == null) return "";
   const { tsConfig, findings, aliases, unjudged } = tsconfigPaths;
   const judged =
@@ -393,7 +398,7 @@ export function formatTsconfigPaths(tsconfigPaths) {
  *   unresolvedDecisionRefs?: {kind: string, decisionRef: string}[]}|null|undefined} intent
  * @returns {string} Empty exactly when there is no intent verdict to render.
  */
-export function formatIntentSection(intent) {
+function formatIntentSection(intent) {
   if (intent == null) return "";
   const { verdict, findings, unresolved, boundaries, unresolvedDecisionRefs = [] } = intent;
   const count = boundaries.length;
@@ -542,6 +547,7 @@ function customFindingSite(finding) {
  * @returns {string} Empty exactly when the policy declared no custom rules.
  */
 export function formatCustomRulesSection(customRules) {
+  // used by its own test
   if (customRules == null || customRules.decisions.length === 0) return "";
   const { decisions, overall } = customRules;
   const entries = decisions.map((decision) => {
@@ -596,6 +602,7 @@ export function formatCustomRulesSection(customRules) {
  * @returns {string} Empty exactly when there is no coverage gap to render.
  */
 export function formatCoverageGaps(coverageGaps) {
+  // used by its own test
   if (coverageGaps.length === 0) return "";
   return coverageGaps.map(formatCoverageGap).join("\n");
 }
@@ -792,6 +799,7 @@ function formatUntrackedFilesGap(gap) {
  * @returns {string} Empty exactly when no policy identity was supplied.
  */
 export function formatPolicy(policy) {
+  // used by its own test
   if (policy == null) return "";
   const { profile, source, fingerprint } = policy;
   const law = profile === null ? source : `profile "${profile}" from ${source}`;
@@ -812,7 +820,7 @@ export function formatPolicy(policy) {
  * @param {Set<string>} [unresolvedDecisionRefs] Forwarded to `formatViolation`.
  * @returns {string}
  */
-export function formatAcceptedViolations(waived, unresolvedDecisionRefs) {
+function formatAcceptedViolations(waived, unresolvedDecisionRefs) {
   const rows = waived.map((violation) => {
     const waiver = violation.waivedBy;
     return [

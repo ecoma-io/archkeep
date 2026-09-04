@@ -69,6 +69,7 @@ import {
  * @returns {{ specifier: string, importableName: string, offset: number }[]}
  */
 export function parseJavaImportSites(javaText) {
+  // used by its own test
   const source = maskJavaComments(javaText);
   // Anchored to a line head — through a leading UTF-8 BOM, matched rather than
   // stripped so offsets keep indexing the bytes on disk, the same anchor
@@ -132,6 +133,7 @@ export function parseJavaImportSites(javaText) {
  *   read fully.
  */
 export function javaImportMalformations(javaText) {
+  // used by its own test
   const source = maskJavaComments(javaText);
   const JAVA_IMPORT_HEAD = /(?:^\uFEFF?|[\n;])[ \t]*(?:import[ \t]+)/gu;
   /** @type {string[]} */

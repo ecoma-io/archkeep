@@ -156,7 +156,7 @@ export { PROJECT_CONFIG_FILE, nodeTypeOf, buildDependencies };
  * @returns {object} Whatever the JSON describes.
  * @throws {Error} when neither parser can read it.
  */
-export const parseProjectJson = parseNxJson;
+const parseProjectJson = parseNxJson;
 
 /**
  * Every file git considers part of the working tree, workspace-relative and
@@ -205,6 +205,7 @@ const directoryOf = (file) => {
  * @returns {{projects: {name: string, root: string, config: object}[], skipped: {file: string, reason: string}[]}}
  */
 export function discoverProjects({ files, readFile }) {
+  // used by its own test
   const projects = [];
   const skipped = [];
   for (const file of files) {
@@ -263,6 +264,7 @@ export function discoverProjects({ files, readFile }) {
  *   publishes the collision through `indexGaps`.
  */
 export function buildNodes(projects) {
+  // used by its own test
   // Null-prototype for the same reason `../providers/native/graph.mjs` and
   // `../providers/moon.mjs` use them: every key here is a project NAME, and
   // project names come from a `project.json`'s own `name` field —

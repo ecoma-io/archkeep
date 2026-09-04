@@ -111,6 +111,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
  * @throws {UsageError} when the site string is malformed.
  */
 export function parseSite(site) {
+  // used by its own test
   const lastColon = site.lastIndexOf(":");
   if (lastColon === -1 || lastColon === 0) {
     throw new UsageError(
@@ -157,6 +158,7 @@ export function parseSite(site) {
  * @returns {object|null} The matching record, or `null`.
  */
 export function findSite(parsed, imports) {
+  // used by its own test
   return (
     imports.find(
       (site) =>

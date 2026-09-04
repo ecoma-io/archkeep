@@ -89,6 +89,7 @@ function typeName(value) {
  *   JSON document can carry.
  */
 export function envelopeFieldPaths(envelope) {
+  // used by its own test
   if (envelope === null || typeof envelope !== "object" || Array.isArray(envelope)) {
     throw new Error(
       `archkeep: refusing to build an envelope roster over ${envelope === null ? "null" : `a ${Array.isArray(envelope) ? "array" : typeof envelope}`} ` +
@@ -152,6 +153,7 @@ function walk(value, path, byPath) {
  * @returns {{added: string[], removed: string[]}}
  */
 export function compareFieldPaths(recorded, observed) {
+  // used by its own test
   const recordedSet = new Set(recorded);
   const observedSet = new Set(observed);
   return {

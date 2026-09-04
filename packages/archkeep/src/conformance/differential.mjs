@@ -68,6 +68,7 @@ const siteOf = (file, line, column) => `${file}:${line}:${column}`;
  * @returns {{agree: object[], stricter: object[], weaker: object[]}}
  */
 export function compareFile(file, upstream, tool) {
+  // used by its own test
   const remaining = [...tool];
   const agree = [];
   const weaker = [];
@@ -132,6 +133,7 @@ export function compareFile(file, upstream, tool) {
  *   case behaved as declared; each entry names exactly what did not.
  */
 export function compareCase(materialized, upstreamByFile, toolViolations) {
+  // used by its own test
   const { spec } = materialized;
   const rows = [];
   const breaches = [];
@@ -225,6 +227,7 @@ export function compareCase(materialized, upstreamByFile, toolViolations) {
 
 /** The probes of each `caseId / spelling` group, keyed by that pair. */
 export function spellingGroups(rows) {
+  // used by its own test
   const groups = new Map();
   for (const row of rows) {
     if (!row.spelling) continue;
@@ -251,6 +254,7 @@ const verdictText = (row) =>
  * @returns {string[]} One line per group that failed, empty when all agree.
  */
 export function spellingDisagreements(rows) {
+  // used by its own test
   const lines = [];
   for (const [key, members] of spellingGroups(rows)) {
     if (members.length < 2) {
@@ -282,6 +286,7 @@ export function spellingDisagreements(rows) {
  * @param {object[]} rows From `compareCase`.
  */
 export function measuredScope(rows) {
+  // used by its own test
   const extensionOf = (file) => file.slice(file.lastIndexOf("."));
   const comparableExtensions = new Set();
   const incomparableExtensions = new Set();
@@ -358,6 +363,7 @@ function tallyFor(rows, messageId) {
  * @param {readonly string[]} toolMessageIds Every id this engine can produce.
  */
 export function summarize(rows, upstreamMessageIds, toolMessageIds) {
+  // used by its own test
   const implemented = new Set(toolMessageIds);
   return upstreamMessageIds.map((messageId) => {
     const tally = tallyFor(rows, messageId);
@@ -382,6 +388,7 @@ export function summarize(rows, upstreamMessageIds, toolMessageIds) {
  * a measurement only where the number to its left is not also 0.
  */
 export function renderTable(summary) {
+  // used by its own test
   const header = ["messageId", "agree", "stricter", "weaker", "comparable", "verdict"];
   const body = summary.map((row) => [
     row.messageId,
@@ -410,6 +417,7 @@ export function renderTable(summary) {
  * than maintained beside it.
  */
 export function renderDivergences(rows) {
+  // used by its own test
   const lines = [];
   for (const row of rows) {
     for (const hit of row.weaker) {
@@ -429,6 +437,7 @@ export function renderDivergences(rows) {
 
 /** Pairs whose rendered message text differs, which is a report-quality note rather than a verdict. */
 export function renderTextDifferences(rows) {
+  // used by its own test
   return rows
     .flatMap((row) =>
       row.agree.filter((hit) => !hit.sameText).map((hit) => `${hit.messageId}  ${hit.site}`),
@@ -438,6 +447,7 @@ export function renderTextDifferences(rows) {
 
 /** One word for a row, so a reader does not have to do the arithmetic. */
 export function verdictOf(row) {
+  // used by its own test
   if (!row.implemented) return "UNIMPLEMENTED";
   if (!row.exercised) return "NOT EXERCISED";
   if (row.weaker > 0) return "WEAKER — DEFECT";

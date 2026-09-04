@@ -259,6 +259,7 @@ export function foldMarkdownTrack({ tracked, owned, readFile, workspace, markdow
  * @returns {string[]}
  */
 export function markdownIncludedFiles({ include, tracked }) {
+  // used by its own test
   return tracked.filter(
     (file) =>
       file.endsWith(MARKDOWN_EXTENSION) && include.some((pattern) => matchesInclude(file, pattern)),

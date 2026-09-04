@@ -140,6 +140,7 @@ export function declaresCustomRules(config) {
  * @returns {(artifact: string) => Uint8Array|null}
  */
 export function readArtifactBytes(root) {
+  // used by its own test
   return (artifact) => {
     const abs = join(root, artifact);
     if (containmentViolation(root, abs) !== null) return null;

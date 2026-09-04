@@ -77,6 +77,7 @@ function write(root, relative, text) {
  * @returns {string} the absolute, symlink-resolved root.
  */
 export function createFixtureRoot() {
+  // used by its own test
   const root = mkdtempSync(join(realpathSync(tmpdir()), "polyglot-conformance-"));
   process.env[NX_ROOT_ENV] = root;
   return root;
@@ -84,6 +85,7 @@ export function createFixtureRoot() {
 
 /** Removes a fixture root and everything under it. */
 export function removeFixtureRoot(root) {
+  // used by its own test
   rmSync(root, { recursive: true, force: true });
 }
 
@@ -99,6 +101,7 @@ export function removeFixtureRoot(root) {
  * @param {string} nxWorkspaceRoot What `@nx/devkit` resolved.
  */
 export function assertNxRootIsFixture(root, nxWorkspaceRoot) {
+  // used by its own test
   if (nxWorkspaceRoot === root) return;
   throw new Error(
     `archkeep conformance: nx resolved its workspace root to ${nxWorkspaceRoot}, ` +
@@ -333,6 +336,7 @@ function writeCase(root, spec) {
  * @returns {Map<string, object>} case id → everything both engines need.
  */
 export function materialize(root, cases, defaultOptions) {
+  // used by its own test
   writeSharedRoot(root, cases);
   const materialized = new Map();
   for (const spec of cases) {

@@ -71,6 +71,7 @@ const packageFiles = {
 };
 
 export const CONFORMANCE_CASES = [
+  // used by its own test
   // ---------------------------------------------------------------- specifiers
   {
     id: "relative-and-absolute-imports-across-projects",

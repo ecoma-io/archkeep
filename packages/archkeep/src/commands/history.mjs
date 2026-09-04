@@ -229,6 +229,7 @@ export function readSnapshots(dir, root) {
  * @returns {string} First 8 hex characters.
  */
 export function shortId(id) {
+  // used by its own test
   return id.slice(0, 8);
 }
 
@@ -248,6 +249,7 @@ export function shortId(id) {
  * @returns {string} Zero-padded sequence, at least four digits.
  */
 export function nextSequence(read) {
+  // used by its own test
   let max = 0;
   for (const file of read.files) {
     const match = /^(\d+)-/.exec(file.name);

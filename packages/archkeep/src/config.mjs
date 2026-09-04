@@ -650,7 +650,7 @@ function findCoverageViolations(value) {
  *
  * @type {Readonly<string[]>}
  */
-export const MARKDOWN_EDGE_KINDS = Object.freeze(["resolvedExportOwner"]);
+const MARKDOWN_EDGE_KINDS = Object.freeze(["resolvedExportOwner"]);
 
 /**
  * One markdown marker row's problems, prefixed with its index.

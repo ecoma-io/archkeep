@@ -195,7 +195,7 @@ export function buildDecisionImpact(root, constraintImpact, config) {
  *   not available.
  * @returns {{evaluated: boolean, findings: object[], count: number}}
  */
-export function evaluateFindingsImpact(affectedProjects, availableFindings) {
+function evaluateFindingsImpact(affectedProjects, availableFindings) {
   if (!availableFindings || availableFindings.length === 0) {
     return { evaluated: false, findings: [], count: 0 };
   }
@@ -221,7 +221,7 @@ export function evaluateFindingsImpact(affectedProjects, availableFindings) {
  *   entry's associated project.
  * @returns {{evaluated: boolean, debt: object[], count: number}}
  */
-export function evaluateDebtImpact(affectedProjects, availableDebt, resolveProject = null) {
+function evaluateDebtImpact(affectedProjects, availableDebt, resolveProject = null) {
   if (!availableDebt || availableDebt.length === 0) {
     return { evaluated: false, debt: [], count: 0 };
   }
@@ -247,7 +247,7 @@ export function evaluateDebtImpact(affectedProjects, availableDebt, resolveProje
  * @param {string} targetProject The target of the impact analysis.
  * @returns {{boundaries: object[], evaluated: boolean}}
  */
-export function evaluateBoundaryImpact(graph, constraintImpact, targetProject) {
+function evaluateBoundaryImpact(graph, constraintImpact, targetProject) {
   if (!constraintImpact || constraintImpact.length === 0) {
     return { boundaries: [], evaluated: false };
   }
@@ -339,7 +339,7 @@ export function decisionProvenanceCoverage(decisions) {
  * @param {object} evaluation.evolutionAlignment Evolution alignment.
  * @returns {object} Evidence gate values for buildEvidenceComplete.
  */
-export function deriveEvidenceGates(evaluation) {
+function deriveEvidenceGates(evaluation) {
   const { completeness, constraintImpact, decisionImpact } = evaluation;
 
   // domainCoverage: ratio of evaluated required domains

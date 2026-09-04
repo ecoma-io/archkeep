@@ -85,7 +85,7 @@ import { posix } from "node:path";
  * costs is bounded at the other end, by `MAX_SPECIFIER_LENGTH` below, because
  * a degree-2 pattern is still quadratic in a subject nothing else limits.
  */
-export const MAX_RESPLIT_REPETITIONS = 2;
+const MAX_RESPLIT_REPETITIONS = 2;
 
 /**
  * The most repetitions a SINGLE-DELIMITER chain may carry — the one shape
@@ -114,7 +114,7 @@ export const MAX_RESPLIT_REPETITIONS = 2;
  * path pattern naming every segment of `libs/<area>/<name>/<entry>` needs
  * four.
  */
-export const MAX_DELIMITED_SEGMENTS = 8;
+export const MAX_DELIMITED_SEGMENTS = 8; // used by its own test
 
 /**
  * The longest import specifier this engine will match a consumer-written
@@ -148,7 +148,7 @@ export const MAX_DELIMITED_SEGMENTS = 8;
  * 1024 `b`s. That is the number to compare a change here against; before this
  * bound and the refusals above, the same sweep found 59 SECONDS.
  */
-export const MAX_SPECIFIER_LENGTH = 1024;
+export const MAX_SPECIFIER_LENGTH = 1024; // used by its own test
 
 /**
  * The deepest group nesting this model reads. Past it a pattern is refused
@@ -1123,6 +1123,7 @@ function tradesWithNeighbour(elements, index, last) {
  * @returns {string|null}
  */
 export function regexComplexityError(source) {
+  // used by its own test
   const { root, tooDeep } = parsePattern(source);
   if (tooDeep) {
     return (
@@ -1174,7 +1175,7 @@ function resplitReason(degree) {
  * @param {string} specifier
  * @returns {string|null}
  */
-export function specifierLengthError(specifier) {
+function specifierLengthError(specifier) {
   if (specifier.length <= MAX_SPECIFIER_LENGTH) return null;
   return (
     `is ${specifier.length} characters, past the ${MAX_SPECIFIER_LENGTH} this engine will match ` +
@@ -1538,7 +1539,7 @@ export function findMatchingProjects(patterns, nodes) {
  * anything a real suppression, exemption or project rule plausibly needs to
  * name from ONE glob string.
  */
-export const MAX_GLOB_EXPANSIONS = 512;
+export const MAX_GLOB_EXPANSIONS = 512; // used by its own test
 
 /**
  * A brace group's content matches one of these two shapes instead of a
@@ -1620,6 +1621,7 @@ function rangeCardinality(content) {
  *   certain to exceed `cap`.
  */
 export function braceExpansionCount(pattern, cap) {
+  // used by its own test
   const limit = cap + 1;
   /** @type {{alternatives: number, branchProduct: number, start: number}[]} */
   const frames = [{ alternatives: 0, branchProduct: 1, start: 0 }];

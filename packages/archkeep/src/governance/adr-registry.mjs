@@ -124,7 +124,7 @@ export function hasAuthority(status) {
  * format outgrows 999 records without breaking; the slug is dash-separated
  * lowercase words.
  */
-export const ADR_FILE_PATTERN = /^(\d{3,})-([a-z0-9]+(?:-[a-z0-9]+)*)\.md$/u;
+const ADR_FILE_PATTERN = /^(\d{3,})-([a-z0-9]+(?:-[a-z0-9]+)*)\.md$/u;
 
 /** An ADR id — `NNN-slug` — must match the filename it lives in. */
 export const ADR_ID_PATTERN = /^\d{3,}-[a-z0-9]+(?:-[a-z0-9]+)*$/u;
@@ -236,6 +236,7 @@ function parseProseFields(body) {
  *   that already appears earlier in the same block.
  */
 export function parseFrontmatterFields(text, at) {
+  // used by its own test
   /** @type {Record<string, string|string[]|undefined>} */
   const fields = {};
   let currentList = null;
@@ -307,6 +308,7 @@ function toList(value) {
  * @throws {Error} naming every violation at once.
  */
 export function validateRecord({ id, frontmatter, body = "" }) {
+  // used by its own test
   const fields = frontmatter === null ? {} : parseFrontmatterFields(frontmatter, id);
   const violations = [];
 
@@ -400,6 +402,7 @@ export function validateRecord({ id, frontmatter, body = "" }) {
  * @throws {Error} naming every lineage violation at once.
  */
 export function validateLineage(records) {
+  // used by its own test
   const byId = new Map(records.map((record) => [record.id, record]));
   /** @type {Map<string, string[]>} */
   const supersededBy = new Map(records.map((record) => [record.id, []]));

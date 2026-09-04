@@ -45,7 +45,7 @@ import { readFileSync } from "node:fs";
  * committed bytes is what this suite does, and importing its code would make
  * the engine depend on it.
  */
-export const RULES_PACKAGE = "../../../archkeep-rules";
+export const RULES_PACKAGE = "../../../archkeep-rules"; // used by its own test
 
 /**
  * Every fixture, grouped by rule, with the verdict that rule's artifact must
@@ -64,6 +64,7 @@ export const RULES_PACKAGE = "../../../archkeep-rules";
  * @type {Readonly<Record<string, Readonly<Record<string, "pass"|"fail"|"unknown"|"not_applicable">>>>}
  */
 export const EXPECTED_VERDICTS = Object.freeze({
+  // used by its own test
   "tag-cardinality": Object.freeze({
     "below-minimum": "fail",
     "above-maximum": "fail",
@@ -110,6 +111,7 @@ export const EXPECTED_VERDICTS = Object.freeze({
  * @returns {Array<Record<string, unknown>>}
  */
 export function officialRules() {
+  // used by its own test
   return readCatalog().rules;
 }
 

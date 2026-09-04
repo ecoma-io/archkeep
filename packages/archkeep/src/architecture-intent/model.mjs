@@ -51,7 +51,7 @@ import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "../governance/row-sche
 export const INTENT_FILE = "architecture-intent.json";
 
 /** The one supported `version`. A different value is a load error. */
-export const INTENT_VERSION = "1";
+export const INTENT_VERSION = "1"; // used by its own test
 
 /**
  * The only keys a valid intent file may carry at the top level.
@@ -66,6 +66,7 @@ export const INTENT_VERSION = "1";
  * engine judges them.
  */
 export const TOP_LEVEL_KEYS = Object.freeze([
+  // used by its own test
   "version",
   "boundaries",
   "allowed",
@@ -76,17 +77,17 @@ export const TOP_LEVEL_KEYS = Object.freeze([
 ]);
 
 /** The sub-keys a `projects` section may carry. */
-export const PROJECT_SECTION_KEYS = Object.freeze(["required", "forbidden"]);
+const PROJECT_SECTION_KEYS = Object.freeze(["required", "forbidden"]);
 /** The sub-keys a `dependencies` section may carry. */
-export const DEPENDENCY_SECTION_KEYS = Object.freeze(["allowed", "forbidden"]);
+const DEPENDENCY_SECTION_KEYS = Object.freeze(["allowed", "forbidden"]);
 /** The keys a `projects.required[]` row may carry. */
-export const REQUIRED_PROJECT_KEYS = Object.freeze(["name", "tags", "decisionRef"]);
+const REQUIRED_PROJECT_KEYS = Object.freeze(["name", "tags", "decisionRef"]);
 /** The keys a `projects.forbidden[]` row may carry. */
-export const FORBIDDEN_PROJECT_KEYS = Object.freeze(["name", "decisionRef"]);
+const FORBIDDEN_PROJECT_KEYS = Object.freeze(["name", "decisionRef"]);
 /** The keys a `dependencies.allowed[]` / `dependencies.forbidden[]` row may carry. */
-export const DEPENDENCY_ROW_KEYS = Object.freeze(["source", "target", "decisionRef"]);
+const DEPENDENCY_ROW_KEYS = Object.freeze(["source", "target", "decisionRef"]);
 /** The keys a `forbiddenTags[]` row may carry. */
-export const TAG_ROW_KEYS = Object.freeze(["from", "to", "decisionRef"]);
+const TAG_ROW_KEYS = Object.freeze(["from", "to", "decisionRef"]);
 
 /**
  * The shared governance-block check for any intent row (Contract 2): when the
@@ -157,6 +158,7 @@ function isSingleProjectSelector(selector) {
  * resolve against.
  */
 export function boundaryNames(intent) {
+  // used by its own test
   return (intent.boundaries ?? []).map((b) => b.name);
 }
 
@@ -168,6 +170,7 @@ export function boundaryNames(intent) {
  * @returns {string[]}
  */
 export function findIntentViolations(raw) {
+  // used by its own test
   const violations = [];
 
   if (!isPlainObject(raw)) {
@@ -603,6 +606,7 @@ export function findIntentViolations(raw) {
  * @returns {object} The normalized model: `{version, boundaries: {name, match, members?}[], allowed, forbidden, projects?, dependencies?, forbiddenTags?}`.
  */
 export function normalizeIntent(intent) {
+  // used by its own test
   return {
     version: intent.version,
     boundaries: intent.boundaries.map((b) => ({ name: b.name, match: [...b.match] })),

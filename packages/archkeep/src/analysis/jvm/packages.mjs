@@ -81,6 +81,7 @@ import { maskJavaComments, maskKotlinComments } from "./mask.mjs";
  *   package file, which declares no name the index can carry.
  */
 export function parseJvmPackageDeclaration(maskedText) {
+  // used by its own test
   // An identifier segment starts with a letter (Unicode, via \p{L}), `_`, or
   // `$`, continues with those plus digits; segments join on optional spaces
   // around the dot, because `com . example` is legal if absurd. The match is

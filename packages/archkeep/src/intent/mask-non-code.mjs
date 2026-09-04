@@ -536,6 +536,7 @@ function scanTemplate(src, i) {
  *   same line structure.
  */
 export function maskNonCode(src) {
+  // used by its own test
   /**
    * Chunks of the result, joined once at the end. Code is copied through in
    * RUNS rather than a token at a time — `plainFrom` is where the current

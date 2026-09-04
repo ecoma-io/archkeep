@@ -26,7 +26,7 @@ import { ARCHKEEP_MODEL_FILE } from "../providers/native/model.mjs";
  * @param {object} options The resolved options from `resolveCommandContext`.
  * @returns {boolean}
  */
-export function hasProfiles(options) {
+function hasProfiles(options) {
   return typeof options?.profiles === "string" && options.profiles !== "";
 }
 

@@ -318,6 +318,7 @@ const SCRIPT_KIND_BY_LANG = Object.freeze({
  * @returns {{ path: boolean, relative: boolean, namesOnly: boolean }}
  */
 export function specifierSpelling(specifier) {
+  // used by its own test
   const relative =
     specifier === "." ||
     specifier === ".." ||
@@ -340,6 +341,7 @@ export function specifierSpelling(specifier) {
  * @returns {string|null}
  */
 export function packageNameOf(specifier) {
+  // used by its own test
   if (specifier === "" || specifier.startsWith(".") || specifier.startsWith("/")) return null;
   const segments = specifier.split("/");
   if (specifier.startsWith("@"))

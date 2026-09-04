@@ -41,11 +41,13 @@ import { nativeProvider } from "./index.mjs";
  * @param {Record<string, string>} files `{relativePath: text}`.
  */
 export function writeAll(write, files) {
+  // used by its own test
   for (const [path, text] of Object.entries(files)) write(path, text);
 }
 
 /** @param {string} root */
 export function writeIn(root) {
+  // used by its own test
   return (relativePath, text) => {
     mkdirSync(join(root, relativePath, ".."), { recursive: true });
     writeFileSync(join(root, relativePath), text);
@@ -53,7 +55,7 @@ export function writeIn(root) {
 }
 
 /** @param {string} root */
-export function readFileFrom(root) {
+function readFileFrom(root) {
   return (path) => {
     try {
       return readFileSync(join(root, path), "utf8");
@@ -76,6 +78,7 @@ function analyze(root, graph, files, tsConfig) {
 
 /** `{name → {root, type, tags}}`, comparable whichever provider produced it. */
 export const nodeShape = (nodes) =>
+  // used by its own test
   Object.fromEntries(
     Object.entries(nodes).map(([name, node]) => [
       name,
@@ -105,13 +108,14 @@ export const nodeShape = (nodes) =>
  * canonicalisation consistent with the code under test rather than a weaker
  * copy of it. */
 export const dependencyShape = (dependencies) =>
+  // used by its own test
   Object.values(dependencies)
     .flat()
     .map(({ source, target, type }) => JSON.stringify([source, target, type]))
     .sort();
 
 /** `["messageId sourceFile:line:column", ...]`, sorted the same way. */
-export const verdictShape = (violations) =>
+const verdictShape = (violations) =>
   violations.map((v) => `${v.messageId} ${v.sourceFile}:${v.line}:${v.column}`).sort();
 
 /**
@@ -128,6 +132,7 @@ export const verdictShape = (violations) =>
  * @type {typeof runProcess}
  */
 export function runNxGraphSpawn(file, args, cwd) {
+  // used by its own test
   const previous = process.env.NX_DAEMON;
   process.env.NX_DAEMON = "false";
   try {
@@ -157,6 +162,7 @@ export function runNxGraphSpawn(file, args, cwd) {
  * @throws {Error} naming every failing file, when either list is non-empty.
  */
 export function assertNoAnalysisFailures(nxFailures, nativeFailures) {
+  // used by its own test
   const named = [
     ...nxFailures.map((f) => `nx:${f.sourceFile} (${f.reason})`),
     ...nativeFailures.map((f) => `native:${f.sourceFile} (${f.reason})`),
@@ -188,6 +194,7 @@ export function assertNoAnalysisFailures(nxFailures, nativeFailures) {
  *   inherits the `NX_DAEMON` handling rather than choosing between the two.
  */
 export async function runBothProviders({
+  // used by its own test
   nxRoot,
   nxFiles,
   nativeRoot,
@@ -280,6 +287,7 @@ export async function runBothProviders({
  * @returns {{kind: string, subject: string, field: string, nx: unknown, native: unknown}[]}
  */
 export function diffGraphs(nxSide, nativeSide) {
+  // used by its own test
   const rows = [];
 
   const nxNames = new Set(Object.keys(nxSide.nodes));
@@ -417,6 +425,7 @@ export function diffGraphs(nxSide, nativeSide) {
  * detection) are scoped to one fixture pair and cannot silently absorb a
  * disagreement in another. */
 export function namespaced(rows, label) {
+  // used by its own test
   return rows.map((row) => ({ ...row, subject: `${label}:${row.subject}` }));
 }
 
@@ -458,7 +467,7 @@ export function namespaced(rows, label) {
  * `classifyDifferences`, not a search for every place `"native-only"` was
  * spelled as a bare string.
  */
-export const LEDGER_DIRECTIONS = Object.freeze(/** @type {const} */ (["native-only"]));
+const LEDGER_DIRECTIONS = Object.freeze(/** @type {const} */ (["native-only"]));
 
 /**
  * Every entry here is a **difference native reports and Nx does not** — the
@@ -479,7 +488,7 @@ export const LEDGER_DIRECTIONS = Object.freeze(/** @type {const} */ (["native-on
  *
  * @type {readonly LedgerRow[]}
  */
-export const LEDGER = Object.freeze([]);
+export const LEDGER = Object.freeze([]); // used by its own test
 
 /**
  * Every fixture-pair label this file actually runs a comparison over — the
@@ -487,7 +496,7 @@ export const LEDGER = Object.freeze([]);
  * list every `assertPairAgrees`/`pairProblems` call site draws its `label`
  * argument from, so the two can never drift into naming different pairs.
  */
-export const PAIR_LABELS = Object.freeze(["simple", "composite", "layout"]);
+export const PAIR_LABELS = Object.freeze(["simple", "composite", "layout"]); // used by its own test
 
 /**
  * The direction a `diffGraphs` row itself claims, in `LedgerRow.direction`'s
@@ -560,6 +569,7 @@ function differenceDirection(difference) {
  *   difference no ledger row may ever cover.
  */
 export function classifyDifferences(differences, ledger) {
+  // used by its own test
   for (const row of ledger) {
     if (!row.reason?.trim()) {
       throw new Error(`ledger row for "${row.subject}"/"${row.field}" has an empty reason`);
@@ -632,6 +642,7 @@ export function classifyDifferences(differences, ledger) {
  * @returns {string[]}
  */
 export function emptyVerdictBreaches(label, counts) {
+  // used by its own test
   const breaches = [];
   for (const [engine, count] of Object.entries(counts)) {
     if (count === 0) {
@@ -659,6 +670,7 @@ export function emptyVerdictBreaches(label, counts) {
  * @returns {string[]}
  */
 export function perMessageBreaches(label, nxViolations, nativeViolations) {
+  // used by its own test
   /** @param {{messageId: string}[]} violations @returns {Map<string, number>} */
   const countBy = (violations) => {
     const counts = new Map();
@@ -696,6 +708,7 @@ export function perMessageBreaches(label, nxViolations, nativeViolations) {
  * @returns {string[]}
  */
 export function pairProblems(label, result, ledger = LEDGER) {
+  // used by its own test
   const problems = [
     ...emptyVerdictBreaches(label, {
       nx: result.nx.violations.length,
@@ -734,6 +747,7 @@ export function pairProblems(label, result, ledger = LEDGER) {
  * @param {readonly LedgerRow[]} [ledger]
  */
 export function assertPairAgrees(label, result, ledger = LEDGER) {
+  // used by its own test
   const problems = pairProblems(label, result, ledger);
   if (problems.length > 0) {
     throw new Error(`${label}: provider differential disagreement:\n  ${problems.join("\n  ")}`);
@@ -758,6 +772,7 @@ export function assertPairAgrees(label, result, ledger = LEDGER) {
  * @returns {LedgerRow[]}
  */
 export function unknownLabelRows(ledger, knownLabels) {
+  // used by its own test
   return ledger.filter((row) => !knownLabels.includes(row.subject.split(":")[0]));
 }
 
@@ -773,7 +788,7 @@ export function unknownLabelRows(ledger, knownLabels) {
 // staying importable and spawn-free at import time for exactly that reuse,
 // and a second copy here is the drift `../../../../../AGENTS.md`'s "never
 // state a rule twice" rule exists to catch.
-export const SIMPLE_BOUNDARY_CONFIG = `export const depConstraints = [
+export const SIMPLE_BOUNDARY_CONFIG = `export const depConstraints = [ // used by its own test
   { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
   { sourceTag: "layer:adapter", onlyDependOnLibsWithTags: ["layer:domain", "layer:adapter"] },
 ];
@@ -794,6 +809,7 @@ export const moduleBoundaryOptions = {
 // the wrong way (`domain` reaching into `adapter`). Exported for the same
 // reuse reason as `SIMPLE_BOUNDARY_CONFIG` above.
 export const SIMPLE_GO_FILES = {
+  // used by its own test
   "libs/domain/go.mod": "module example.com/domain\n\ngo 1.24\n",
   "libs/adapter/go.mod": "module example.com/adapter\n\ngo 1.24\n",
   "libs/adapter/adapter.go": 'package adapter\n\nvar Name = "adapter"\n',
@@ -819,6 +835,7 @@ var _ = adapter.Name
  * @returns {string[]}
  */
 export function buildSimpleNxTree(root, { boundaryConfig = "module-boundaries.config.mjs" } = {}) {
+  // used by its own test
   const write = writeIn(root);
   write(
     "nx.json",
@@ -851,7 +868,7 @@ export function buildSimpleNxTree(root, { boundaryConfig = "module-boundaries.co
  * @param {{boundaryConfig?: string}} [options]
  * @returns {string[]}
  */
-export function buildSimpleNativeTree(
+export function buildSimpleNativeTree( // used by its own test
   root,
   { boundaryConfig = "module-boundaries.config.mjs" } = {},
 ) {
@@ -950,7 +967,7 @@ var _ = parent.Name
  * @param {{boundaryConfig?: string}} [options]
  * @returns {string[]}
  */
-export function buildCompositeNxTree(
+export function buildCompositeNxTree( // used by its own test
   root,
   { boundaryConfig = "module-boundaries.config.mjs" } = {},
 ) {
@@ -1029,7 +1046,7 @@ export function buildCompositeNxTree(
  * @param {{boundaryConfig?: string}} [options]
  * @returns {string[]}
  */
-export function buildCompositeNativeTree(
+export function buildCompositeNativeTree( // used by its own test
   root,
   { boundaryConfig = "module-boundaries.config.mjs" } = {},
 ) {
@@ -1175,7 +1192,7 @@ export function buildCompositeNativeTree(
 const LAYOUT_BOUNDARY_CONFIG = `export const depConstraints = [
   { sourceTag: "layer:thing", onlyDependOnLibsWithTags: ["layer:thing"] },
 ];
-export const moduleBoundaryOptions = {
+export const moduleBoundaryOptions = { // used by its own test
   allow: [],
   buildTargets: ["build"],
   enforceBuildableLibDependency: false,
@@ -1227,6 +1244,7 @@ var _ = blocked.Name
  * @returns {string[]}
  */
 export function buildLayoutNxTree(root, { boundaryConfig = "module-boundaries.config.mjs" } = {}) {
+  // used by its own test
   const write = writeIn(root);
   write(
     "nx.json",
@@ -1262,7 +1280,7 @@ export function buildLayoutNxTree(root, { boundaryConfig = "module-boundaries.co
  * @param {{boundaryConfig?: string}} [options]
  * @returns {string[]}
  */
-export function buildLayoutNativeTree(
+export function buildLayoutNativeTree( // used by its own test
   root,
   { boundaryConfig = "module-boundaries.config.mjs" } = {},
 ) {

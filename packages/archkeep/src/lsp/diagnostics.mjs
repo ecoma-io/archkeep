@@ -38,7 +38,7 @@ import { DIAGNOSTIC_SEVERITY, SERVER_INFO } from "./protocol.mjs";
  * prints beside the message to say which tool spoke. Taken from the server's
  * own identity so the two can never disagree.
  */
-export const DIAGNOSTIC_SOURCE = SERVER_INFO.name;
+export const DIAGNOSTIC_SOURCE = SERVER_INFO.name; // used by its own test
 
 /**
  * The `code` on a diagnostic that reports the ABSENCE of a verdict rather than
@@ -46,7 +46,7 @@ export const DIAGNOSTIC_SOURCE = SERVER_INFO.name;
  * against `MESSAGE_IDS` at load so a future upstream id cannot silently collide
  * with it.
  */
-export const ANALYSIS_FAILURE_CODE = "analysisFailure";
+export const ANALYSIS_FAILURE_CODE = "analysisFailure"; // used by its own test
 
 if (MESSAGE_IDS.includes(ANALYSIS_FAILURE_CODE)) {
   throw new Error(
@@ -100,6 +100,7 @@ const QUOTES = new Set(['"', "'", "`"]);
  * @returns {{start: {line: number, character: number}, end: {line: number, character: number}}}
  */
 export function rangeAt(at, lines) {
+  // used by its own test
   // A failure about the file as a whole carries no position (`contract.md`
   // fixes it as an explicit `null`). It gets the first line, whole: a
   // zero-width range at the origin renders as an invisible caret in most

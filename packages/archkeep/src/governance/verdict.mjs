@@ -48,6 +48,7 @@ export const VERDICTS = Object.freeze(["pass", "fail", "unknown", "not_applicabl
 
 /** The single mapping from an envelope status to a verdict. */
 export const VERDICT_FOR_STATUS = Object.freeze({
+  // used by its own test
   ok: "pass",
   findings: "fail",
   "no-verdict": "unknown",

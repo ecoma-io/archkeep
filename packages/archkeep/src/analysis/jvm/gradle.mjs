@@ -90,6 +90,7 @@ import { fileFailure, perWorkspace, refuseUnreadTree } from "../source-util.mjs"
  *            { rootProjectName?: undefined, includedProjects?: undefined, reason: string }}
  */
 export function parseGradleSettings(text) {
+  // used by its own test
   // First, remove block comments to avoid matching include statements inside them
   let processedText = text.replace(/\/\*[\s\S]*?\*\//g, "");
 
@@ -187,6 +188,7 @@ export function parseGradleSettings(text) {
  *            { projectDependencies?: undefined, reason: string }}
  */
 export function parseGradleBuild(text) {
+  // used by its own test
   const lines = text.split(/\r?\n/);
   const projectDependencies = [];
   let inString = false;
@@ -480,7 +482,7 @@ function buildGradleModel(workspace) {
   return { entries, pathToDirectory, failures };
 }
 
-export const gradleModelOf = perWorkspace(buildGradleModel);
+const gradleModelOf = perWorkspace(buildGradleModel);
 
 /**
  * Manifest-edge resolver: one edge per declared project dependency whose

@@ -160,7 +160,7 @@ function ownershipIndexOf(projects) {
  * one per equality probe.
  */
 let rootComparisons = 0;
-export const ownershipRootComparisons = () => rootComparisons;
+export const ownershipRootComparisons = () => rootComparisons; // used by its own test
 
 /**
  * The first index in `roots` (sorted ascending) whose value is at or after

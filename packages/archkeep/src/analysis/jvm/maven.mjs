@@ -128,6 +128,7 @@ const textOf = (value) => {
  *            { project?: undefined, reason: string }}
  */
 export function parsePomProject(text) {
+  // used by its own test
   const { parser, validate, error } = xmlParser();
   if (parser === null) {
     return { reason: `${XML_PARSER} is unavailable (${error})` };
@@ -179,6 +180,7 @@ export function parsePomProject(text) {
  * @returns {{ entry: PomEntry, reason?: undefined } | { entry?: undefined, reason: string }}
  */
 export function pomEntryOf(projectName, pomPath, text) {
+  // used by its own test
   const parsed = parsePomProject(text);
   if (parsed.reason !== undefined) return { reason: parsed.reason };
   const project = parsed.project;
@@ -252,6 +254,7 @@ export function pomEntryOf(projectName, pomPath, text) {
  * @returns {string|null}
  */
 export function parentPomPath(pomPath, relativePath) {
+  // used by its own test
   const dir = pomPath.includes("/") ? pomPath.slice(0, pomPath.lastIndexOf("/")) : "";
   const direct = resolveWithinWorkspace(dir, relativePath);
   if (direct === null) return null;
@@ -270,6 +273,7 @@ export function parentPomPath(pomPath, relativePath) {
  * @returns {Record<string, string>}
  */
 export function mavenConfigProperties(readFile, candidatePaths) {
+  // used by its own test
   const props = /** @type {Record<string, string>} */ ({});
   for (const path of candidatePaths) {
     const text = readFile(path);
@@ -300,6 +304,7 @@ export function mavenConfigProperties(readFile, candidatePaths) {
  * @returns {{ value: string, resolved: boolean }}
  */
 export function interpolateCoordinate(value, props, builtins) {
+  // used by its own test
   let resolved = true;
   const out = value.replace(/\$\{([^}]+)\}/g, (_, key) => {
     if (Object.hasOwn(builtins, key)) return builtins[key];
@@ -557,7 +562,7 @@ function buildMavenModel(workspace) {
   return { entries, identityHolders, failures };
 }
 
-export const mavenModelOf = perWorkspace(buildMavenModel);
+export const mavenModelOf = perWorkspace(buildMavenModel); // used by its own test
 
 /**
  * Manifest-edge resolver: one edge per declared dependency whose coordinates

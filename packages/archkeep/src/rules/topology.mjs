@@ -57,6 +57,7 @@ export function appIsMFERemote(project) {
  * — the common case, and the one that keeps `noSelfCircularDependencies` armed.
  */
 export function entryPointOf(file, projectRoot, entryPoints) {
+  // used by its own test
   if (!entryPoints || entryPoints.length === 0) return undefined;
   const fileEntryPoint = entryPoints.find((entry) => entry.file === file);
   if (fileEntryPoint) return fileEntryPoint.file;
@@ -88,7 +89,7 @@ export function entryPointOf(file, projectRoot, entryPoints) {
  * standing in for upstream's module resolution — the resolver already ran; this
  * layer never runs a second one.
  */
-export function secondaryEntryPointPath(resolvedFile, targetProject) {
+function secondaryEntryPointPath(resolvedFile, targetProject) {
   if (!resolvedFile) return undefined;
   return entryPointOf(resolvedFile, targetProject.data.root, targetProject.data?.entryPoints);
 }
@@ -128,6 +129,7 @@ export function belongsToDifferentEntryPoint(resolvedFile, sourceFile, sourcePro
  * @returns {string[]|null}
  */
 export function findDynamicImportPath(graph, sourceProjectName, targetProjectName, visited = []) {
+  // used by its own test
   if (visited.indexOf(sourceProjectName) > -1) return null;
   for (const dependency of graph.dependencies?.[sourceProjectName] ?? []) {
     if (dependency.type !== DYNAMIC) continue;
@@ -152,6 +154,7 @@ export function findDynamicImportPath(graph, sourceProjectName, targetProjectNam
  * fired, and then the verdict would name evidence for a route nobody walked.
  */
 export function hasDynamicImport(graph, sourceProjectName, targetProjectName) {
+  // used by its own test
   return findDynamicImportPath(graph, sourceProjectName, targetProjectName) !== null;
 }
 
@@ -209,6 +212,7 @@ export function createFileDependencyIndex(edges) {
 
 /** The files carrying each hop of a path — one entry per consecutive pair. */
 export function findFilesInCircularPath(fileIndex, circularPath) {
+  // used by its own test
   const chain = [];
   for (let i = 0; i < circularPath.length - 1; i++) {
     chain.push(fileIndex.any.get(edgeKey(circularPath[i].name, circularPath[i + 1].name)) ?? []);
@@ -218,6 +222,7 @@ export function findFilesInCircularPath(fileIndex, circularPath) {
 
 /** The files that lazy-load `target` from inside `source`. */
 export function findFilesWithDynamicImports(fileIndex, sourceProjectName, targetProjectName) {
+  // used by its own test
   return fileIndex.dynamic.get(edgeKey(sourceProjectName, targetProjectName)) ?? [];
 }
 

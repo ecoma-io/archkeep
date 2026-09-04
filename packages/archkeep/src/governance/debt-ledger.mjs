@@ -143,7 +143,7 @@ function owningProjectForPath(path, byName) {
  * @param {string} source The entry's `source` (its keying field).
  * @returns {string} The stable hex id.
  */
-export function entryId(kind, source) {
+function entryId(kind, source) {
   const semanticKind = kind === "expired-waiver" ? "waiver" : kind;
   return createHash("sha256")
     .update(canonicalizeJson({ kind: semanticKind, source }))

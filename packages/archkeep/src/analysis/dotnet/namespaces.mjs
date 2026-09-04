@@ -62,6 +62,7 @@ import { maskCSharpComments } from "./mask.mjs";
  *   which declares no name the index can carry.
  */
 export function parseCSharpNamespaceDeclarations(maskedText) {
+  // used by its own test
   const CS_NAMESPACE_DECLARATION =
     /(?:^\uFEFF?|\n)[ \t]*namespace[ \t]+([\p{L}_][\p{L}\p{Nd}_]*(?:[ \t]*\.[ \t]*[\p{L}_][\p{L}\p{Nd}_]*)*)[ \t]*(?:;|(?=[{;\r\n]|$))/gu;
   const declarations = [];

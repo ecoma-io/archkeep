@@ -122,6 +122,7 @@ function collectElements(node, name) {
  *            { project?: undefined, reason: string }}
  */
 export function parseCsproj(text) {
+  // used by its own test
   const { parser, validate, error } = xmlParser();
   if (parser === null) {
     return { reason: `${XML_PARSER} is unavailable (${error})` };
@@ -153,6 +154,7 @@ export function parseCsproj(text) {
  * @returns {{ paths: string[], problems: string[] }}
  */
 export function projectReferenceFacts(project, csprojDir) {
+  // used by its own test
   const paths = [];
   const problems = [];
   for (const ref of collectElements(project, "ProjectReference")) {
@@ -184,6 +186,7 @@ export function projectReferenceFacts(project, csprojDir) {
  * @returns {string[]}
  */
 export function usingNamespacesOf(project) {
+  // used by its own test
   const namespaces = [];
   for (const item of collectElements(project, "Using")) {
     const include = textOf(item["@_Include"] ?? item.Include);
@@ -215,6 +218,7 @@ export function usingNamespacesOf(project) {
  *            { entry?: undefined, problems?: undefined, reason: string }}
  */
 export function csprojEntryOf(projectName, csprojPath, text) {
+  // used by its own test
   const parsed = parseCsproj(text);
   if (parsed.reason !== undefined) return { reason: parsed.reason };
   // A manifest at the workspace root has no separator: `lastIndexOf` answers
@@ -251,7 +255,7 @@ export function csprojEntryOf(projectName, csprojPath, text) {
  *             usingEdges: { source: string, target: string, sourceFile: string, type: string }[],
  *             failures: { sourceFile: string, line: null, column: null, reason: string }[] }}
  */
-export const csprojModelOf = perWorkspace(({ projects, filesOf, readFile }) => {
+const csprojModelOf = perWorkspace(({ projects, filesOf, readFile }) => {
   const entries = [];
   const failures = [];
   const identity = new Map();
