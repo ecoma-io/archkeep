@@ -43,7 +43,10 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-import { readGateAttestation, verifiedAdopters } from "./verify-gate-attestation.mjs";
+import {
+  readGateAttestation,
+  verifiedAdopters,
+} from "../packages/archkeep/src/verify-gate-attestation.mjs";
 
 /** The conditions, in the roadmap's own order and wording. */
 export const CONDITIONS = Object.freeze([
@@ -238,7 +241,8 @@ function differentialRow(differential) {
  * Condition 2. Somebody else's CI, which nothing in this tree can see.
  *
  * The evidence arrives as validated gate attestations
- * (`./verify-gate-attestation.mjs` owns the schema and the refusals) — never a
+ * (`packages/archkeep/src/verify-gate-attestation.mjs` owns the schema and the
+ * refusals) — never a
  * bare name, because "a repository is known to us" is not the condition; the
  * condition is that its build fails on an archkeep verdict and is right to.
  *

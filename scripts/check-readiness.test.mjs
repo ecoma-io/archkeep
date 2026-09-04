@@ -84,8 +84,8 @@ test("one green differential run is not a run of them", () => {
 test("an empty adopter list is not met — supplying nothing is not the same as unmeasured", () => {
   assert.equal(stateOf(evaluate({ ...nothing, externalAdopters: [] }), CONDITIONS[1]), "not met");
   // The entries are `verifiedAdopters`' output — an owner/name@version pair
-  // that only a validated attestation (`./verify-gate-attestation.mjs`) can
-  // produce, never a bare name typed on a command line.
+  // that only a validated attestation (`../packages/archkeep/src/verify-gate-attestation.mjs`)
+  // can produce, never a bare name typed on a command line.
   assert.equal(
     stateOf(evaluate({ ...nothing, externalAdopters: ["acme/tree@0.15.0"] }), CONDITIONS[1]),
     "met",

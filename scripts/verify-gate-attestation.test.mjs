@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
@@ -6,7 +7,8 @@ import {
   GATE_ATTESTATION_SCHEMA_VERSION,
   validateGateAttestation,
   verifiedAdopters,
-} from "./verify-gate-attestation.mjs";
+} from "../packages/archkeep/src/verify-gate-attestation.mjs";
+import { validateGateAttestation as validateGateAttestationFromEntry } from "../packages/archkeep/gate-attestation.mjs";
 
 /**
  * The valid record every mutation below is cut from. Written as an object
@@ -125,6 +127,50 @@ test("refuses a gate command that never reaches the boundary verdict", () => {
   }
 });
 
+test("accepts an npm-script alias whose CI invocation reaches the check verdict", () => {
+  // The real consumer's literal CI step: ecoma-io/action-agents runs
+  // `"arch": "archkeep check"` from `package.json`, CI runs `pnpm arch`.
+  for (const command of [
+    "pnpm arch",
+    "npm run arch",
+    "yarn arch",
+    "pnpm archkeep",
+    "pnpm archkeep:check",
+  ]) {
+    const attestation = validateGateAttestation({
+      ...VALID,
+      gate: { command, blocking: true },
+    });
+    assert.equal(attestation.command, command, JSON.stringify(command));
+  }
+});
+
+test("refuses a clearly-unrelated package-manager script alias", () => {
+  // Narrowness direction: a gate that accepts every script name is the
+  // failure mode. `test` and `build` are lifecycle names, not archkeep
+  // aliases — and an alias whose name is not plausibly archkeep's does not
+  // verifiably reach the boundary verdict.
+  for (const command of ["npm run test", "pnpm build", "yarn lint", "pnpm format"]) {
+    assert.match(
+      refused({ ...VALID, gate: { command, blocking: true } }) ?? "",
+      /"gate\.command" must name the check invocation/u,
+      JSON.stringify(command),
+    );
+  }
+});
+
+test("refuses an arch-prefixed name that is not the tool's own alias", () => {
+  // `archive` shares the prefix but is not an archkeep alias — the match is
+  // the whole word `arch` or a name that begins `archkeep`, not any prefix.
+  for (const command of ["pnpm archive", "npm run archive"]) {
+    assert.match(
+      refused({ ...VALID, gate: { command, blocking: true } }) ?? "",
+      /"gate\.command" must name the check invocation/u,
+      JSON.stringify(command),
+    );
+  }
+});
+
 test("demands exit 1 for the red direction — green-only proves nothing", () => {
   for (const violationExitCode of [undefined, 0, 2, 3, "1"]) {
     assert.match(
@@ -172,4 +218,46 @@ test("verifiedAdopters refuses an attested version the registry never published"
   assert.throws(() => verifiedAdopters([attestation], ["0.14.0"]), /has never\s+published/u);
   // The same registry document holding the version passes.
   assert.deepEqual(verifiedAdopters([attestation], ["0.14.0", "0.15.0"]), ["acme/tree@0.15.0"]);
+});
+
+test("verifiedAdopters collapses repeated verification of the same adopter", () => {
+  // The recovery chain produces two artifacts for one repository (red and
+  // green halves of the same proof). Re-running readiness over both must not
+  // print the same `owner/name@version` entry twice.
+  const first = validated();
+  const sameAgain = validateGateAttestation({
+    ...VALID,
+    commit: "b".repeat(40),
+  });
+  assert.deepEqual(verifiedAdopters([first, sameAgain], null), ["acme/tree@0.15.0"]);
+  // A genuinely different repository still appears beside it.
+  const other = validateGateAttestation({
+    ...VALID,
+    repository: "other/monorepo",
+  });
+  assert.deepEqual(verifiedAdopters([first, sameAgain, other], null), [
+    "acme/tree@0.15.0",
+    "other/monorepo@0.15.0",
+  ]);
+});
+
+test("the package ships the verifier through a documented subpath export", () => {
+  // A consumer installs this package and must be able to validate its own
+  // attestation with the version it installed — not copy source out of this
+  // repository. The manifest's `exports` map names the subpath and the
+  // `files` array carries the entry file, and the re-export resolves.
+  const manifest = JSON.parse(
+    readFileSync(new URL("../packages/archkeep/package.json", import.meta.url), "utf8"),
+  );
+  assert.ok(
+    manifest.exports["./gate-attestation"],
+    'the "./gate-attestation" subpath must be exported',
+  );
+  assert.ok(
+    manifest.files.includes("gate-attestation.mjs"),
+    "the entry file must ship in the published tree",
+  );
+  // The re-export is the same functions the tests above exercised — one
+  // implementation, two faces, no second opinion about what a verdict means.
+  assert.equal(validateGateAttestationFromEntry, validateGateAttestation);
 });

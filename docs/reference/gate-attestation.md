@@ -8,7 +8,10 @@ An attestation is a small JSON file an external consumer publishes in its own
 repository. It carries no verdict authority and proves nothing by existing. It
 is a _claim_, structured tightly enough that every named fact can be checked —
 by `scripts/verify-gate-attestation.mjs` for shape, by a human reviewer for the
-facts no script can see.
+facts no script can see. The same validator ships in the package: a consumer
+can validate its own file against the version it installed, through the
+[`./gate-attestation` subpath](#verifying-from-an-installed-package), without
+cloning this repository.
 
 ## The file
 
@@ -23,17 +26,17 @@ facts no script can see.
 }
 ```
 
-| field                     | rule                                                                                                                                             |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `schemaVersion`           | Exactly `1`. A different number is a different format and is refused, never guessed at.                                                          |
-| `repository`              | `owner/name` of the consumer repository — outside this one by definition.                                                                        |
-| `commit`                  | The full 40-hex SHA the gate ran at. A short or symbolic ref could name a different commit tomorrow; staleness must be detectable, not deniable. |
-| `tool.name`               | Exactly `@ecoma-io/archkeep`. This condition speaks about this package and no other.                                                             |
-| `tool.version`            | Bare semver (`major.minor.patch`) — the version their gate ran, checkable against a registry document.                                           |
-| `gate.command`            | The invocation their CI runs; it must reach the boundary verdict (name `check`).                                                                 |
-| `gate.blocking`           | Exactly `true`. A non-blocking run is a report, not a gate a build answers to.                                                                   |
-| `proof.violationExitCode` | Exactly `1` — [the findings exit code](exit-codes.md). `0` proves the gate never blocks; `3` proves it could not look, not that it judged.       |
-| `proof.recoveryExitCode`  | Exactly `0` — removing the violation restored green. Without the recovery half, a permanently red pipeline would satisfy the condition too.      |
+| field                     | rule                                                                                                                                                                                                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion`           | Exactly `1`. A different number is a different format and is refused, never guessed at.                                                                                                                                                                              |
+| `repository`              | `owner/name` of the consumer repository — outside this one by definition.                                                                                                                                                                                            |
+| `commit`                  | The full 40-hex SHA the gate ran at. A short or symbolic ref could name a different commit tomorrow; staleness must be detectable, not deniable.                                                                                                                     |
+| `tool.name`               | Exactly `@ecoma-io/archkeep`. This condition speaks about this package and no other.                                                                                                                                                                                 |
+| `tool.version`            | Bare semver (`major.minor.patch`) — the version their gate ran, checkable against a registry document.                                                                                                                                                               |
+| `gate.command`            | The invocation their CI runs; it must reach the boundary verdict — either by naming the check subcommand (`archkeep check`, `npx archkeep check`) or as a package-manager script alias whose name is this tool's own (`pnpm arch`, `npm run arch`, `pnpm archkeep`). |
+| `gate.blocking`           | Exactly `true`. A non-blocking run is a report, not a gate a build answers to.                                                                                                                                                                                       |
+| `proof.violationExitCode` | Exactly `1` — [the findings exit code](exit-codes.md). `0` proves the gate never blocks; `3` proves it could not look, not that it judged.                                                                                                                           |
+| `proof.recoveryExitCode`  | Exactly `0` — removing the violation restored green. Without the recovery half, a permanently red pipeline would satisfy the condition too.                                                                                                                          |
 
 Unknown fields are refused. An attestation proves exactly the fields above;
 anything else would be a claim nobody validates.
@@ -54,6 +57,19 @@ whether CI actually ran those two directions, whether the run is still current.
 That is why readiness stays a report and acceptance stays a maintainer's — the
 verifier's job ends at making the claim precise enough to check against the
 consumer's CI history by hand.
+
+### Verifying from an installed package
+
+The same validator is available through the package's `./gate-attestation`
+subpath, so a consumer can validate its own attestation against the version it
+installed:
+
+```js
+import { validateGateAttestation, readGateAttestation } from "@ecoma-io/archkeep/gate-attestation";
+```
+
+The entry is a re-export of the same implementation the CLI script drives — one
+contract, two faces, no second opinion about what a verdict means.
 
 ## How readiness reads it
 

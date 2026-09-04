@@ -282,7 +282,7 @@ export const boundarySuppressions = [
       "`from archkeep_rule_sdk import ...` is the only spelling that resolves inside a Python rule's wasm carrier: the carrier registers the SDK runtime under that name in sys.modules, and there is no filesystem for the relative import this message recommends to walk. So the package's reference rule imports the SDK exactly as an outside author's rule does, and its tests import it exactly as the rule does. The rule being waived is about a language with two spellings for one import, where reaching a sibling file through the barrel is a real cycle — Python names a package one way, and taking the message's advice would produce an artifact that cannot load.",
   },
 
-  // The five rows below hold the same fact for the gate scripts: the
+  // The rows below hold the same fact for the gate scripts: the
   // verification machinery in `scripts/` imports the engine's internals
   // relatively because the engine publishes no deep path to import them by —
   // its exports map names `.`, `./nx`, `./commands` and presets, and the
@@ -338,6 +338,42 @@ export const boundarySuppressions = [
     messageId: "noImportsOfLazyLoadedLibraries",
     reason:
       "the analyzer-coverage gate drives `src/analysis` directly, for the reason its spelling row states; the lazy-loaded verdict is the same import judged by a second rule once the type-gates row makes the edge table-visible.",
+  },
+  {
+    path: "scripts/verify-gate-attestation.mjs",
+    messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+    reason:
+      "the verifier's CLI face — argv, output, exit only — drives the one shared implementation that moved into the package (`packages/archkeep/src/verify-gate-attestation.mjs`), so the gate ships the module consumers install and scripts/ stays a launcher rather than a second verifier.",
+  },
+  {
+    path: "scripts/check-readiness.mjs",
+    messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+    reason:
+      "the readiness gate reads the attestation through the same package-internal module its CLI face drives — one verifier implementation, judged where it ships; the engine publishes no exports-map path for it because it is not a consumer API.",
+  },
+  {
+    path: "scripts/verify-gate-attestation.test.mjs",
+    messageId: "noRelativeOrAbsoluteImportsAcrossLibraries",
+    reason:
+      "the verifier's tests pin both spellings the package ships — the source module and the `./gate-attestation` re-export entry — so a manifest drift between them fails here before a consumer ever sees it; same reach, one level of indirection, the test reading the code it verifies.",
+  },
+  {
+    path: "scripts/verify-gate-attestation.mjs",
+    messageId: "noImportsOfLazyLoadedLibraries",
+    reason:
+      "the same package-internal reach the spelling row above accepts for this file: once the type-gates row makes the edge table-visible, the engine's rule battery also judges these imports against the lazy-loaded-library rule, and driving the shipped module is the point of #605's fix.",
+  },
+  {
+    path: "scripts/check-readiness.mjs",
+    messageId: "noImportsOfLazyLoadedLibraries",
+    reason:
+      "the same attestation reach the spelling row above accepts for this file — one verifier implementation, judged where it ships; the lazy-loaded verdict is that import judged by a second rule, not a second coupling.",
+  },
+  {
+    path: "scripts/verify-gate-attestation.test.mjs",
+    messageId: "noImportsOfLazyLoadedLibraries",
+    reason:
+      "the same two-spellings pin the spelling row above accepts for this file — the source module and the re-export entry imported directly because asserting their agreement is the test.",
   },
 ];
 
