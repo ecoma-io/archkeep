@@ -52,21 +52,26 @@ run the minimum sufficient set of `archkeep` operations — `context`, `check`,
 `health`, `report`, `debt`, `impact`, `explain`, `graph`, `provenance`, `adr` —
 and never requires every command for every change.
 
-`check` is the only command that exits 1 on boundary findings — with one
-companion: `fitness` also exits 1 when a declared function `fail`s, because a
-failing fitness function is a finding. `check` also folds in the two laws the
+`check` is the only command that exits 1 on boundary findings — and it is not
+alone in carrying the findings exit: `fitness` exits 1 when a declared function
+`fail`s (a failing fitness function is a finding), `delta` when the compared
+change introduced a non-waived violation, `change` when its reconciliation
+found an undeclared, unfulfilled or failed-constraint consequence, and
+`rules verify` on an official-rules catalog integrity finding. Those five are
+the complete verdict-verb roster
+[`docs/reference/exit-codes.md`](../reference/exit-codes.md) pins; this page
+names them once and defers there rather than holding a second copy. `check`
+also folds in the two laws the
 workspace declares for itself, both by presence and neither behind a flag: a
 `fitness` list, and a `customRules` list of committed WebAssembly rules this
 engine did not write. Their verdicts ride the lanes the skills already teach —
 a `fail` is exit 1, an `unknown` is exit 3 — so a skill needs no new exit code
 for them, only the discipline that a rule which could not be run is never a
 rule that passed ([../concepts/custom-rules.md](../concepts/custom-rules.md)).
-Every other command is descriptive or
-proposal-only: `graph`, `diff`, `drift`, `discover`, `reconcile`, `impact`,
-`explain`, `context`, `history`, `waivers`, `health`, `report`, `debt`,
-`provenance`, and `adr` never exit 1 on their own, and both `--propose` surfaces
-mark their output as proposals that are never written — no command writes to
-the Intent.
+Every command outside that five-verb roster is descriptive or proposal-only —
+it exits 0 when the run completes and 3 when it could not fully look — and both
+`--propose` surfaces mark their output as proposals that are never written — no
+command writes to the Intent.
 Reconciling a stale declared architecture with the observed one is a human
 decision the CLI can only shape, never make.
 
