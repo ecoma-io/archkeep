@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.22.0](https://github.com/ecoma-io/archkeep/compare/v0.21.0...v0.22.0) (2026-09-03)
+
+
+### Features
+
+* pin the evidence and determinism folds from the 1.0 certification audit ([#607](https://github.com/ecoma-io/archkeep/issues/607)) ([b8379ef](https://github.com/ecoma-io/archkeep/commit/b8379efcd6d761662cf27f12153cfa6da92b0a55))
+
+
+### Bug Fixes
+
+* **archkeep:** close P0 Evidence-Complete soundness gaps ([#574](https://github.com/ecoma-io/archkeep/issues/574)) ([d2b1d70](https://github.com/ecoma-io/archkeep/commit/d2b1d7063632271d03e75c9fedaf9e66bc872e28))
+* **archkeep:** derive the provenance gate from decision facts ([#597](https://github.com/ecoma-io/archkeep/issues/597)) ([845e102](https://github.com/ecoma-io/archkeep/commit/845e102f4d81f19782d697bf29ff391dfb092415))
+* **archkeep:** make zero-analysis, blind-spot and tags-only coverage loud ([#602](https://github.com/ecoma-io/archkeep/issues/602)) ([fb87873](https://github.com/ecoma-io/archkeep/commit/fb878731f8754ec78539666e22ef13ef537a477b))
+* **archkeep:** one edge identity, honest scenario fields, guarded intent write ([#592](https://github.com/ecoma-io/archkeep/issues/592)) ([8ed9ddc](https://github.com/ecoma-io/archkeep/commit/8ed9ddc538ff1870b8edc21959cbd5bd16f620c5)), closes [#591](https://github.com/ecoma-io/archkeep/issues/591)
+* **archkeep:** one edge-identity spelling for evolution events; name the five verdict commands ([#578](https://github.com/ecoma-io/archkeep/issues/578)) ([b169351](https://github.com/ecoma-io/archkeep/commit/b1693516d717d6676b7875d95a120ad964686d41)), closes [#579](https://github.com/ecoma-io/archkeep/issues/579)
+* **archkeep:** one refusal contract for incomplete coverage, and the pinned disclosure gaps ([#610](https://github.com/ecoma-io/archkeep/issues/610)) ([8b1298d](https://github.com/ecoma-io/archkeep/commit/8b1298d14d3d0ee95d0d4e8fb0ee5c4220ede685))
+* **workspace:** harden the release lane read-back and the quiet-stretch scan ([#585](https://github.com/ecoma-io/archkeep/issues/585)) ([8d455e7](https://github.com/ecoma-io/archkeep/commit/8d455e7d9eaba27bb241b2b9919726e433b44b66))
+
+
+### Documentation
+
+* position README and roadmap around the architecture authority model ([#581](https://github.com/ecoma-io/archkeep/issues/581)) ([7ff7fcb](https://github.com/ecoma-io/archkeep/commit/7ff7fcb8906ede0ed304e8dd50f5ee16aacdcbd0))
+
 ## [0.21.0](https://github.com/ecoma-io/archkeep/compare/v0.20.1...v0.21.0) (2026-09-03)
 
 

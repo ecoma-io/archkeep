@@ -1,6 +1,6 @@
 {
   "name": "@ecoma-io/archkeep-rules",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "description": "Official generic rules catalog for Archkeep — documentation-as-data and integrity gate for shipped rule artifacts",
   "keywords": [
     "architecture",
