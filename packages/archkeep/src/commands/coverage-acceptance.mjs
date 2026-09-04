@@ -111,3 +111,49 @@ export function partitionUnownedCoverage({ rows, unownedGap, unclaimedFiles, tra
     },
   };
 }
+
+/**
+ * Withdraws each accepted unclaimed file's failure from the run's failure
+ * list — the acceptance channel's effect on it, kept beside the matching so
+ * the channel's contract (accept the file ⇒ withdraw its refusal) is one
+ * module's. `./check.mjs` holds the list and narrows `acceptedFiles` to the
+ * unclaimed half; `./waivers.mjs` has no failure list and only reports rows.
+ *
+ * An accepted unclaimed file carries exactly one failure — its unowned-file
+ * refusal, the only row any producer appends for a file no analyzer ever
+ * read. The withdrawal does not TRUST that assumption, it ENFORCES it: an
+ * accepted file carrying more than one failure means some producer appended a
+ * second row for it, and a splice by `sourceFile` would take the second one
+ * down with the first — the failure count falls, `coverage.notAnalyzed` loses
+ * a row, and a could-not-look run tips toward a clean one, the silent
+ * direction (`../../../../AGENTS.md`). The run refuses instead, naming the
+ * file and the count it found.
+ *
+ * @param {{sourceFile: string}[]} failures The run's failure list, in order.
+ * @param {Set<string>} acceptedFiles The accepted subset of the unclaimed
+ *   list — `partitionUnownedCoverage`'s `acceptedFiles` narrowed to that list
+ *   by the caller.
+ * @returns {{sourceFile: string}[]} A new array without the accepted files'
+ *   single failures; the input is not mutated.
+ * @throws {Error} when an accepted file carries more than one failure.
+ */
+export function withdrawAcceptedUnclaimedFailures(failures, acceptedFiles) {
+  const carried = new Map();
+  for (const failure of failures) {
+    if (!acceptedFiles.has(failure.sourceFile)) continue;
+    carried.set(failure.sourceFile, (carried.get(failure.sourceFile) ?? 0) + 1);
+  }
+  const overloaded = [...carried.entries()].filter(([, count]) => count > 1);
+  if (overloaded.length > 0) {
+    const named = overloaded
+      .map(([file, count]) => `'${file}' (carries ${count} failures)`)
+      .join(", ");
+    throw new Error(
+      `archkeep: the coverage.unowned acceptance channel cannot withdraw ${named} — ` +
+        `acceptance withdraws exactly one failure per file (the unowned-file refusal), and ` +
+        `withdrawing by file would drop the second one with it, understating what this run ` +
+        `could not read`,
+    );
+  }
+  return failures.filter((failure) => !acceptedFiles.has(failure.sourceFile));
+}

@@ -193,7 +193,10 @@ describe("evidenceGraphToProjectGraph", () => {
       evidenceGraphToProjectGraph({
         projects: [],
         dependencies: [],
-        exemptedFiles: ["vendor/generated.go", 7],
+        // The corruption is deliberate — the `7` a hand-edited snapshot could
+        // carry, spelled past the declared `string[]` the way a JSON parse
+        // would deliver it.
+        exemptedFiles: /** @type {string[]} */ (["vendor/generated.go", 7]),
       }),
     ).toThrow(/graph\.exemptedFiles\[1\] is 7, not a string/u);
   });

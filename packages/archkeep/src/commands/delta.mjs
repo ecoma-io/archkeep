@@ -273,6 +273,8 @@ export function captureDelta(commandContext, { config }) {
  *   type: string}[], workspaceLayout?: object, exemptedFiles?: string[]}} storedGraph
  *   A validated snapshot's `graph` section (`parseEvidenceSnapshot`).
  * @returns {object} A graph `evaluate()` consumes.
+ * @throws {Error} when an `exemptedFiles` entry is not a string — the engine's
+ *   own filter would drop it in silence (the refusal beside the copy below).
  */
 export function evidenceGraphToProjectGraph(storedGraph) {
   /** @type {Record<string, object>} */
@@ -299,7 +301,26 @@ export function evidenceGraphToProjectGraph(storedGraph) {
   const graph = { nodes, dependencies };
   if (storedGraph.workspaceLayout !== undefined)
     graph.workspaceLayout = storedGraph.workspaceLayout;
-  if (Array.isArray(storedGraph.exemptedFiles)) graph.exemptedFiles = storedGraph.exemptedFiles;
+  if (Array.isArray(storedGraph.exemptedFiles)) {
+    // An entry that is not a string is refused here rather than carried:
+    // `../rules/index.mjs`'s `createContext` filters `graph.exemptedFiles`
+    // with `typeof file === "string"`, so a corrupted snapshot's entry would
+    // ride through this conversion and vanish there — the exemption set the
+    // snapshot recorded silently shrinking by one file, the under-count
+    // disclosed nowhere.
+    const malformed = storedGraph.exemptedFiles
+      .map((entry, at) => ({ entry, at }))
+      .filter(({ entry }) => typeof entry !== "string");
+    if (malformed.length > 0) {
+      const { entry, at } = malformed[0];
+      throw new Error(
+        `archkeep: the snapshot's graph.exemptedFiles[${at}] is ${JSON.stringify(entry)}, ` +
+          `not a string — the rule engine drops such entries in silence, which would shrink ` +
+          `the exemption set the snapshot recorded; re-capture the baseline or correct the file`,
+      );
+    }
+    graph.exemptedFiles = storedGraph.exemptedFiles;
+  }
   return graph;
 }
 
