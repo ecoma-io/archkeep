@@ -545,6 +545,37 @@ describe("computePolicyFingerprint", () => {
     );
   });
 
+  it("moves when the workspace selects a different profile by name", () => {
+    // The silent direction this covers: `profilePolicy`
+    // (`../governance/profile-registry.mjs`) resolves two different named laws
+    // onto the same fields when their blocks converge, so a fingerprint blind
+    // to the selection would let a `delta` between the two report the policy
+    // unchanged — and nothing else in that run names the switch, because only
+    // `check`'s report carries the profile at all.
+    const base = { depConstraints: [], options: {}, suppressions: [] };
+    expect(computePolicyFingerprint({ ...base, profile: "strict" })).not.toBe(
+      computePolicyFingerprint({ ...base, profile: "pedantic" }),
+    );
+    // The selection is identity, not content: a law that names no profile is a
+    // different law from one that does, even with identical rows.
+    expect(computePolicyFingerprint(base)).not.toBe(
+      computePolicyFingerprint({ ...base, profile: "strict" }),
+    );
+  });
+
+  it("hashes a policy that names no profile exactly as it did before the key existed", () => {
+    // The value itself is the tripwire, the way
+    // `../governance/preset-fingerprints.integration.test.mjs` pins the shipped
+    // packs: `profile` joins the canonical object only when the law was
+    // selected by name, and this digest is the byte-for-byte guarantee that a
+    // file-selected or inline-selected workspace keeps its stored
+    // fingerprints — its next `delta` must not report a law change nobody
+    // made.
+    expect(computePolicyFingerprint({ depConstraints: [], options: {}, suppressions: [] })).toBe(
+      "bf56218512fc0a97dfac0f3d6febaa98004f8453d1eb89c73e50be71cbd0d97a",
+    );
+  });
+
   it("is key-order independent — same policy with different key order produces same fingerprint", () => {
     // Two options objects with the same keys but different insertion order.
     const configA = {
