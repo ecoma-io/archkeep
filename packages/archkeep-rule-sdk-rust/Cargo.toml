@@ -14,7 +14,7 @@
 # version chain", wired.
 [package]
 name = "archkeep-rule-sdk"
-version = "0.22.2"
+version = "0.22.3"
 edition = "2024"
 # Edition 2024 stabilized in Rust 1.85.0 (the edition guide's own release note),
 # which is what makes this the floor rather than a number someone remembered.
