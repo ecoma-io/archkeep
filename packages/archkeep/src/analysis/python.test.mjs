@@ -1279,7 +1279,10 @@ describe("analyzePython", () => {
   it("records a dynamic import of a variable as unresolvable instead of guessing", () => {
     const { imports, failures } = analyze("importlib.import_module(plugin_name)\n");
     expect(imports[0]).toMatchObject({ kind: "dynamic", specifier: "plugin_name", resolved: null });
-    expect(failures[0].reason).toMatch(/non-literal argument/);
+    expect(failures[0]).toMatchObject({
+      reason: expect.stringMatching(/non-literal argument/),
+      dynamic: true,
+    });
   });
 
   it("returns an envelope rather than throwing when the workspace misbehaves", () => {

@@ -638,3 +638,83 @@ describe("#603 — every analyzer discloses a bare external coordinate", () => {
     expect(disclosed.dynamic).toBeUndefined();
   });
 });
+
+describe("#623 — Python's non-literal dynamic imports carry dynamic: true instead of withholding", () => {
+  const dyn = makeRoot("python-dynamic-623");
+  dyn.write("nx.json", "{}\n");
+  dyn.write("module-boundaries.config.mjs", CONFIG);
+  dyn.write("libs/widget/pyproject.toml", '[project]\nname = "widget"\nversion = "0.1.0"\n');
+  dyn.write("libs/widget/src/widget/__init__.py", "\n");
+  // A Python dynamic import with a variable argument — the language declaring
+  // the target computed at runtime. Without `dynamic: true` on the failure row,
+  // the envelope law treats this as a withholding site: exit 3, no-verdict.
+  // With the marker, it is disclosed verdict-neutral: ok, exit 0, complete.
+  dyn.write("libs/widget/src/widget/ext.py", "importlib.import_module(name)\n");
+
+  it("(a) silent direction — a Python dynamic import site is disclosed with dynamic: true, not withheld", async () => {
+    const { report } = await check(
+      { format: "json", config: null, paths: [] },
+      contextFor(
+        dyn.root,
+        [
+          "nx.json",
+          "module-boundaries.config.mjs",
+          "libs/widget/pyproject.toml",
+          "libs/widget/src/widget/__init__.py",
+          "libs/widget/src/widget/ext.py",
+        ],
+        widgetNode(),
+      ),
+    );
+    const envelope = JSON.parse(report);
+    expect(envelope.status).toBe("ok");
+    expect(envelope.exitCode).toBe(0);
+    expect(envelope.decision.verdict).toBe("pass");
+    expect(envelope.coverage.complete).toBe(true);
+    expect(envelope.coverage.blindSpots).toHaveLength(1);
+    expect(envelope.coverage.blindSpots[0]).toMatchObject({
+      file: "libs/widget/src/widget/ext.py",
+      dynamic: true,
+    });
+    expect(envelope.coverage.blindSpots[0].external).toBeUndefined();
+  });
+
+  it("(b) loudness preserved — Python withholding classes still withhold, no marker", async () => {
+    // A file with two imports: a relative import past the top-level package
+    // (withholds) and an `__import__` with a variable argument (should be
+    // dynamic). The withholding one must carry neither marker.
+    const loud = makeRoot("python-dynamic-loud-623");
+    loud.write("nx.json", "{}\n");
+    loud.write("module-boundaries.config.mjs", CONFIG);
+    loud.write("libs/widget/pyproject.toml", '[project]\nname = "widget"\nversion = "0.1.0"\n');
+    loud.write("libs/widget/main.py", "from .. import outside\n\n__import__(plugin_name)\n");
+    const { report } = await check(
+      { format: "json", config: null, paths: [] },
+      contextFor(
+        loud.root,
+        [
+          "nx.json",
+          "module-boundaries.config.mjs",
+          "libs/widget/pyproject.toml",
+          "libs/widget/main.py",
+        ],
+        widgetNode(),
+      ),
+    );
+    const envelope = JSON.parse(report);
+    // Two rows: the relative-past-top withholds → exit 3; the dynamic
+    // does not withhold, but the withholding count is still >0.
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.decision.verdict).toBe("unknown");
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.blindSpots).toHaveLength(2);
+    const withheld = envelope.coverage.blindSpots.find((row) => row.reason.includes("climbs past"));
+    expect(withheld).toBeTruthy();
+    expect(withheld.dynamic).toBeUndefined();
+    expect(withheld.external).toBeUndefined();
+    const dynamic = envelope.coverage.blindSpots.find((row) => row.dynamic === true);
+    expect(dynamic).toBeTruthy();
+    expect(dynamic.external).toBeUndefined();
+  });
+});

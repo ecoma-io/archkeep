@@ -1243,10 +1243,15 @@ export function analyzePython({ sourceFile, text, workspace }) {
           continue;
         }
         if (!site.literal) {
-          fail(
-            `dynamic import of '${site.specifier}' has a non-literal argument, ` +
+          result.failures.push({
+            sourceFile,
+            line,
+            column,
+            reason:
+              `dynamic import of '${site.specifier}' has a non-literal argument, ` +
               `so its target is not knowable statically`,
-          );
+            dynamic: true,
+          });
           continue;
         }
 
