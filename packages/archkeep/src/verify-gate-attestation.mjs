@@ -1,6 +1,6 @@
 /**
  * The external blocking-gate attestation — the machine-readable form of
- * `../../docs/doctrine/roadmap.md`'s second 1.0 condition: a workspace OUTSIDE
+ * `../../../docs/doctrine/roadmap.md`'s second 1.0 condition: a workspace OUTSIDE
  * this repository running `archkeep check` as a blocking gate.
  *
  * An attestation is a small JSON file an external consumer publishes. It
