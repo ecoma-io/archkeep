@@ -29,7 +29,10 @@ import {
   unownedGapWithoutRunConfiguration,
   untrackedOwnedFiles,
 } from "./context.mjs";
-import { partitionUnownedCoverage } from "./coverage-acceptance.mjs";
+import {
+  partitionUnownedCoverage,
+  withdrawAcceptedUnclaimedFailures,
+} from "./coverage-acceptance.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
 import { declaredEdgeViolationsForCheck, judgeEdge } from "../rules/edge-constraints.mjs";
@@ -223,7 +226,7 @@ export async function check(
   );
   const { root, graph, workspace, tracked } = commandContext;
   const { imports, exemptedFiles, unsupportedLanguageFiles } = commandContext.analysis;
-  const failures = [...commandContext.analysis.failures];
+  let failures = [...commandContext.analysis.failures];
   const analyzed = commandContext.analysis.analyzed;
 
   // The config's location is a separate fact from the workspace root, which is
@@ -308,17 +311,16 @@ export async function check(
   // acceptance now — stated below as the `"accepted-unowned-files"` coverage
   // gap, never silently — rather than the exit-3 refusal an unanswered
   // orphan earns. Uncovered unclaimed files keep their failures, and with
-  // them the exit code, byte-identical to before the channel existed. An
-  // unclaimed file carries exactly one failure (it is unowned, so no
-  // analyzer ever read it), so filtering by file cannot drop an unrelated
-  // read failure.
+  // them the exit code, byte-identical to before the channel existed. The
+  // one-failure-per-file assumption the withdrawal rests on is enforced where
+  // it is spent (`./coverage-acceptance.mjs`), not stated here: an accepted
+  // file carrying a second failure refuses the run instead of losing both
+  // rows to a by-file splice.
   const acceptedUnclaimed = new Set(
     commandContext.unclaimedGap.files.filter((file) => unownedCoverage.acceptedFiles.has(file)),
   );
   if (acceptedUnclaimed.size > 0) {
-    for (let at = failures.length - 1; at >= 0; at -= 1) {
-      if (acceptedUnclaimed.has(failures[at].sourceFile)) failures.splice(at, 1);
-    }
+    failures = withdrawAcceptedUnclaimedFailures(failures, acceptedUnclaimed);
   }
 
   // The go.work drift check, keyed off the manifest's presence the way every
