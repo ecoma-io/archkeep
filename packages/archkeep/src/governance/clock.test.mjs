@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { referenceTime } from "./clock.mjs";
+import { clockViolations, referenceTime } from "./clock.mjs";
 
 describe("referenceTime", () => {
   it("returns a parseable ISO-8601 UTC instant", () => {
@@ -19,5 +19,28 @@ describe("referenceTime", () => {
     const clock = () => "2026-08-16T10:00:00.000Z";
     expect(clock()).toBe("2026-08-16T10:00:00.000Z");
     expect(typeof referenceTime).toBe("function");
+  });
+});
+
+describe("clockViolations", () => {
+  // The refusal renders the refused value WITH its JSON. This module's
+  // describer is deliberately not the package-wide one (`../values.mjs`): it
+  // omits the array branch, which its only call site can never reach anyway —
+  // the object check above the describer call runs first, so an array is
+  // answered by the `.now` arm, never rendered. The exact sentence is pinned
+  // so a later unification cannot silently change what a refusal says.
+  it("refuses a non-object clock, naming what was actually there", () => {
+    expect(clockViolations(42)).toEqual([
+      "clock must be an object with a now() function, got number (42)",
+    ]);
+    expect(clockViolations(null)).toEqual([
+      "clock must be an object with a now() function, got null",
+    ]);
+  });
+
+  it("refuses a clock whose now is not a function", () => {
+    expect(clockViolations({ now: 42 })).toEqual([
+      "clock.now must be a function returning a non-empty string",
+    ]);
   });
 });

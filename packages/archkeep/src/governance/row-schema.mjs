@@ -57,6 +57,7 @@
  */
 
 import { originViolations } from "./provenance-record.mjs";
+import { describe, isPlainObject } from "../values.mjs";
 
 /** The shape of any `origin.on` producer. Re-exported for a row owner's own docs. */
 export { clockViolations as clockValidation } from "./clock.mjs";
@@ -84,17 +85,6 @@ export const GOVERNANCE_ROW_KEYS = Object.freeze([
  *   (`rule:no-direct-dep`), or a fitness id (`fitness:hotspot`).
  * @property {string[]} [fitnessBindings] Fitness ids this row is bound to.
  */
-
-/** @type {(value: unknown) => value is Record<string, unknown>} */
-const isPlainObject = (value) =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
-
-/** A value's type, for an error message that shows what was actually there. */
-function describe(value) {
-  if (Array.isArray(value)) return `an array (${JSON.stringify(value)})`;
-  if (value === null) return "null";
-  return `${typeof value} (${JSON.stringify(value) ?? String(value)})`;
-}
 
 /**
  * Everything wrong with a row's `rationale`, `decisionRef`, or

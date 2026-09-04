@@ -133,6 +133,16 @@ describe("violationIdentity", () => {
     const result = refused(violationIdentity(null));
     expect(result.reason).toMatch(/null/);
   });
+
+  // The refusal names a primitive BARELY — `typeof` alone, no JSON dump. This
+  // module's describer is deliberately not the package-wide one
+  // (`../values.mjs`), whose rendering of the same input is
+  // `number (42)`; the two sentences must not converge silently, so the exact
+  // string is pinned.
+  it("names a non-object violation by its bare type, without a dump", () => {
+    expect(refused(violationIdentity(42)).reason).toBe("violation is number, not an object");
+    expect(refused(violationIdentity("x")).reason).toBe("violation is string, not an object");
+  });
 });
 
 // ---------------------------------------------------------------------------

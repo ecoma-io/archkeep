@@ -43,6 +43,7 @@ import { resolve } from "node:path";
 import { containmentViolation } from "../containment.mjs";
 
 import { isValidSelector, splitSelector } from "./selectors.mjs";
+import { describe, isPlainObject } from "../values.mjs";
 import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "../governance/row-schema.mjs";
 
 /** The base name of the root file this module reads. */
@@ -120,17 +121,6 @@ const ROW_KEYS = Object.freeze(["from", "to", "reason", "optional", "decisionRef
 
 /** A boundary `name`, matched exactly by the loaders — names can never contain `:`, so a name can never collide with a `name:`-prefixed selector. */
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/u;
-
-/** A value's type, for an error message that shows what was actually there. */
-function describe(value) {
-  if (Array.isArray(value)) return `an array (${JSON.stringify(value)})`;
-  if (value === null) return "null";
-  return `${typeof value} (${JSON.stringify(value) ?? String(value)})`;
-}
-
-/** @type {(value: unknown) => value is Record<string, unknown>} */
-const isPlainObject = (value) =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
 
 /** `key` on `obj` that is not one of `allowed` — for the reject-by-name rule. */
 function unknownKeys(obj, allowed) {
