@@ -304,6 +304,31 @@ actually is.
 reported import. That distance is intentional — a licence or deprecation rule
 that stopped at the first hop would be trivially bypassable.
 
+### Edges judged without an import site
+
+Two kinds of claim reach these four rules with no import behind them, and each
+reports where its claim lives:
+
+- A **declared edge** (`implicitDependencies` in a `project.json`/`archkeep.json`
+  row) has no file and no specifier, so it reports in
+  [`declaredEdges`](json-output.md#result-for-command-check)'s `findings` —
+  a workspace-level list beside `violations`, never inside it.
+- A **document marker** (a policy's `markdown` block) claims a dependency in
+  prose the workspace wrote, and the line it claims it on is the line a reader
+  edits — so it reports as an ordinary member of `violations`, positioned at
+  the marker itself: `sourceFile`/`line`/`column` are the document's,
+  `specifier` is the captured symbol name, and `kind` is the row's edge kind
+  rather than an import rule's. A `boundarySuppressions` row whose `path`
+  matches the document removes it, the same as any other verdict.
+
+Both go through the same tag judgement an import site's edge does, so an edge
+cannot be legal in one report and violating in another. The verdict carried at
+the claim is limited to these four — with no specifier, there is nothing for
+the eleven import-shape findings above to read — but the edge itself joins the
+graph, so a graph-shape consequence of it, a cycle the pairing completes, is
+judged exactly as if the import had been written, at the import sites that make
+up the rest of that cycle.
+
 ---
 
 ## `workspaceLayout`, and the one place this deliberately diverges from Nx

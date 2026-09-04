@@ -1067,6 +1067,157 @@ describe("findBoundaryConfigViolations — the coverage acceptance table", () =>
   });
 });
 
+describe("findBoundaryConfigViolations — markdown, the document track", () => {
+  // The seventh top-level key: `markdown` reads machine-readable markers out
+  // of tracked documents (`./analysis/markdown.mjs`) and turns them into
+  // graph edges the existing tag rows judge. The shape law lives here, and it
+  // is refused at load for the same reason every other dead shape is: a track
+  // that reads nothing judges nothing while reading as enforced.
+  const wellFormedMarkdown = () => ({
+    include: ["docs/**/*.md"],
+    markers: [{ pattern: "^<!-- @api (\\S+) -->$", edge: "resolvedExportOwner" }],
+  });
+
+  const withMarkdown = (markdown) => ({ ...wellFormed(), markdown });
+
+  it("accepts a well-formed block and treats an absent one as declaring no document track", () => {
+    expect(findBoundaryConfigViolations(withMarkdown(wellFormedMarkdown()))).toEqual([]);
+    expect(findBoundaryConfigViolations(wellFormed())).toEqual([]);
+  });
+
+  it("accepts several include globs and several marker rows", () => {
+    expect(
+      findBoundaryConfigViolations(
+        withMarkdown({
+          include: ["docs/**/*.md", "guide.md"],
+          markers: [
+            { pattern: "^<!-- @api (\\S+) -->$", edge: "resolvedExportOwner" },
+            { pattern: "@see\\s+(\\w+)", edge: "resolvedExportOwner" },
+          ],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("rejects a non-object markdown", () => {
+    expect(findBoundaryConfigViolations(withMarkdown("docs"))).toEqual([
+      expect.stringContaining("markdown: must be an object carrying 'include' and 'markers'"),
+    ]);
+  });
+
+  it("rejects a missing, empty, or non-string include list, naming the entry", () => {
+    expect(
+      findBoundaryConfigViolations(withMarkdown({ markers: wellFormedMarkdown().markers })),
+    ).toEqual([expect.stringMatching(/^markdown\.include: must be a non-empty array/)]);
+    expect(
+      findBoundaryConfigViolations(withMarkdown({ ...wellFormedMarkdown(), include: [] })),
+    ).toEqual([expect.stringMatching(/^markdown\.include: must be a non-empty array/)]);
+    expect(
+      findBoundaryConfigViolations(withMarkdown({ ...wellFormedMarkdown(), include: [42] })),
+    ).toEqual([
+      expect.stringMatching(/^markdown\.include\[0\]: must be a non-empty workspace-relative glob/),
+    ]);
+  });
+
+  it("rejects an absolute include glob, which can never match a workspace-relative path", () => {
+    expect(
+      findBoundaryConfigViolations(
+        withMarkdown({ ...wellFormedMarkdown(), include: ["/docs/**/*.md"] }),
+      ),
+    ).toEqual([
+      expect.stringContaining(
+        "markdown.include[0]: '/docs/**/*.md' is an absolute path — an include glob is matched " +
+          "against workspace-relative document paths",
+      ),
+    ]);
+  });
+
+  it("rejects a brace-bomb include glob at load, the same family refusal a suppression path gets", () => {
+    expect(
+      findBoundaryConfigViolations(
+        withMarkdown({ ...wellFormedMarkdown(), include: [bracePattern()] }),
+      ),
+    ).toEqual([expect.stringMatching(/markdown\.include\[0\]: .*expands to more than/)]);
+  });
+
+  it("rejects a marker list that is missing, empty, or not an array — a present list is law", () => {
+    expect(
+      findBoundaryConfigViolations(withMarkdown({ ...wellFormedMarkdown(), markers: [] })),
+    ).toEqual([
+      expect.stringContaining(
+        "markdown.markers: must be a non-empty array of {pattern, edge} rows",
+      ),
+    ]);
+    expect(
+      findBoundaryConfigViolations(withMarkdown({ ...wellFormedMarkdown(), markers: "x" })),
+    ).toEqual([expect.stringMatching(/^markdown\.markers: must be a non-empty array/)]);
+  });
+
+  it("rejects a pattern that does not compile, naming the compile error", () => {
+    expect(
+      findBoundaryConfigViolations(
+        withMarkdown({
+          ...wellFormedMarkdown(),
+          markers: [{ pattern: "(unclosed", edge: "resolvedExportOwner" }],
+        }),
+      ),
+    ).toEqual([
+      expect.stringMatching(
+        /^markdown\.markers\[0\]\.pattern: '\(unclosed' is not a valid regular expression under the 'u' flag/,
+      ),
+    ]);
+  });
+
+  it("rejects a pattern with no capture group, which resolves nothing while reading as enforced", () => {
+    expect(
+      findBoundaryConfigViolations(
+        withMarkdown({
+          ...wellFormedMarkdown(),
+          markers: [{ pattern: "^<!-- @api \\S+ -->$", edge: "resolvedExportOwner" }],
+        }),
+      ),
+    ).toEqual([expect.stringMatching(/^markdown\.markers\[0\]\.pattern: .* has no capture group/)]);
+  });
+
+  it("rejects an edge kind this reader cannot draw, naming the one kind it can", () => {
+    expect(
+      findBoundaryConfigViolations(
+        withMarkdown({
+          ...wellFormedMarkdown(),
+          markers: [{ pattern: "(\\S+)", edge: "static" }],
+        }),
+      ),
+    ).toEqual([
+      expect.stringContaining(
+        'markdown.markers[0].edge: string ("static") is not an edge kind this reader can draw — ' +
+          'expected "resolvedExportOwner"',
+      ),
+    ]);
+  });
+
+  it("rejects unknown keys at the row level and at the block level, by name", () => {
+    expect(
+      findBoundaryConfigViolations(
+        withMarkdown({
+          ...wellFormedMarkdown(),
+          markers: [{ pattern: "(\\S+)", edge: "resolvedExportOwner", kind: "typo" }],
+        }),
+      ),
+    ).toEqual([
+      expect.stringContaining(
+        "markdown.markers[0].kind: not a markdown marker field — expected 'pattern' and 'edge'",
+      ),
+    ]);
+    expect(
+      findBoundaryConfigViolations(withMarkdown({ ...wellFormedMarkdown(), globs: ["docs/**"] })),
+    ).toEqual([
+      expect.stringContaining(
+        "markdown.globs: not a markdown field — expected 'include' and 'markers'",
+      ),
+    ]);
+  });
+});
+
 describe("loadBoundaryConfigFile", () => {
   it("throws on a legacy .eslintrc basename", async () => {
     await expect(loadBoundaryConfigFile("/tmp/.eslintrc.json")).rejects.toThrow(
