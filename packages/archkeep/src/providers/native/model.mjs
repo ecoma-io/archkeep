@@ -46,6 +46,7 @@
 import { globComplexityError, projectPatternError, safeMatchesGlob } from "../../rules/match.mjs";
 import { resolveOptions } from "../../options.mjs";
 import { findBoundaryConfigViolations, policyKeyViolations } from "../../config.mjs";
+import { describe, isPlainObject, isStringArray } from "../../values.mjs";
 
 /** The file this provider treats as a workspace root marker and its model. */
 export const ARCHKEEP_MODEL_FILE = "archkeep.json";
@@ -258,21 +259,6 @@ export const DEFAULT_INFER_EXCLUDE = Object.freeze([
   "**/fixtures/**",
   "**/__fixtures__/**",
 ]);
-
-/** @type {(value: unknown) => value is Record<string, unknown>} */
-const isPlainObject = (value) =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-/** @type {(value: unknown) => value is string[]} */
-const isStringArray = (value) =>
-  Array.isArray(value) && value.every((item) => typeof item === "string");
-
-/** A value's type, for an error message that shows what was actually there. */
-function describe(value) {
-  if (Array.isArray(value)) return `an array (${JSON.stringify(value)})`;
-  if (value === null) return "null";
-  return `${typeof value} (${JSON.stringify(value) ?? String(value)})`;
-}
 
 /**
  * A non-empty-string list's problems, each message naming the entry's own

@@ -49,6 +49,7 @@
 
 import { ADR_STATUSES } from "./adr-registry.mjs";
 import { clockViolations } from "./clock.mjs";
+import { describe, isPlainObject } from "../values.mjs";
 
 /** The only keys a validated `origin` may carry. */
 export const ORIGIN_KEYS = Object.freeze(["by", "tool", "on"]);
@@ -62,17 +63,6 @@ export const ORIGIN_KEYS = Object.freeze(["by", "tool", "on"]);
  * @property {string} [on] When the decision was recorded — present ONLY when
  *   `recordOrigin` produced it through the shared clock.
  */
-
-/** @type {(value: unknown) => value is Record<string, unknown>} */
-const isPlainObject = (value) =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
-
-/** A value's type, for an error message that shows what was actually there. */
-function describe(value) {
-  if (Array.isArray(value)) return `an array (${JSON.stringify(value)})`;
-  if (value === null) return "null";
-  return `${typeof value} (${JSON.stringify(value) ?? String(value)})`;
-}
 
 /**
  * Everything wrong with a raw `origin` record at READ time, as messages; empty

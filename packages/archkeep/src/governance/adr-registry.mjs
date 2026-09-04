@@ -91,6 +91,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "
 import { join } from "node:path";
 
 import { containmentViolation } from "../containment.mjs";
+import { describe } from "../values.mjs";
 
 /** The directory, relative to a workspace root, where ADR files live. */
 export const ADR_DIR = "docs/adr";
@@ -136,13 +137,6 @@ const FRONTMATTER_KEYS = Object.freeze([
   "created",
   "updated",
 ]);
-
-/** A value's type, for an error message that shows what was actually there. */
-function describe(value) {
-  if (Array.isArray(value)) return `an array (${JSON.stringify(value)})`;
-  if (value === null) return "null";
-  return `${typeof value} (${JSON.stringify(value) ?? String(value)})`;
-}
 
 /** The `---`-delimited frontmatter block's text, or null when the file has none. */
 function frontmatterBlock(text) {

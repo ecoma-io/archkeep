@@ -125,6 +125,7 @@ import { pathToFileURL } from "node:url";
 import { containmentViolation, pathEscapes } from "./containment.mjs";
 
 import { loadEslintBoundaryConfig } from "./eslint-config.mjs";
+import { describe, isPlainObject, isStringArray } from "./values.mjs";
 import { findFitnessViolations } from "./governance/fitness-registry.mjs";
 import { declaredFitnessNames, stripRuleFitnessPrefix } from "./governance/adr-registry.mjs";
 import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "./governance/row-schema.mjs";
@@ -258,17 +259,9 @@ const ROW_LIST_MATCHERS = {
 
 const ROW_LIST_KEYS = Object.keys(ROW_LIST_MATCHERS);
 
-/** @type {(value: unknown) => value is string[]} */
-const isStringArray = (value) =>
-  Array.isArray(value) && value.every((item) => typeof item === "string");
-
 /** @type {(value: unknown) => value is [string, string][]} */
 const isTagPairArray = (value) =>
   Array.isArray(value) && value.every((pair) => isStringArray(pair) && pair.length === 2);
-
-/** @type {(value: unknown) => value is Record<string, unknown>} */
-const isPlainObject = (value) =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
  * What is wrong with the entries of one string list, each message naming the
@@ -932,13 +925,6 @@ function findCustomRuleViolations(list, io) {
   const names = new Set();
   list.forEach((row, index) => violations.push(...customRuleRowViolations(row, index, names, io)));
   return violations;
-}
-
-/** A value's type, for an error message that shows what was actually there. */
-function describe(value) {
-  if (Array.isArray(value)) return `an array (${JSON.stringify(value)})`;
-  if (value === null) return "null";
-  return `${typeof value} (${JSON.stringify(value) ?? String(value)})`;
 }
 
 /**

@@ -61,6 +61,7 @@
 import { readFileSync } from "node:fs";
 
 import { policyFrom } from "../config.mjs";
+import { describe, isPlainObject } from "../values.mjs";
 
 /**
  * The top-level keys a profiles file may carry. `version` is checked AFTER
@@ -108,16 +109,6 @@ const BLOCK_KEYS = ["depConstraints", "moduleBoundaryOptions", "boundarySuppress
  * string, so the existing duplicate check is sufficient again.
  */
 const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/u;
-
-/** @type {(value: unknown) => value is Record<string, unknown>} */
-const isPlainObject = (value) =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-function describe(value) {
-  if (Array.isArray(value)) return `an array (${JSON.stringify(value)})`;
-  if (value === null) return "null";
-  return `${typeof value} (${JSON.stringify(value) ?? String(value)})`;
-}
 
 /** A profile's declared block, kept ONLY for this command's own data. */
 export function listNames(registry) {

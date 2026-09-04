@@ -41,6 +41,8 @@
 
 import { readFile as readFileFromDisk } from "node:fs/promises";
 
+import { describe, isPlainObject } from "../values.mjs";
+
 /** The only `version` this module accepts. A different value is a load error. */
 export const CHANGE_INTENT_VERSION = "1";
 
@@ -107,17 +109,6 @@ export const CONSTRAINT_ROW_NAMES = Object.freeze({
 export function edgePairKey({ from, to }) {
   return `${from}\u0000${to}`;
 }
-
-/** A value's type, for an error message that shows what was actually there. */
-function describe(value) {
-  if (Array.isArray(value)) return `an array (${JSON.stringify(value)})`;
-  if (value === null) return "null";
-  return `${typeof value} (${JSON.stringify(value) ?? String(value)})`;
-}
-
-/** @type {(value: unknown) => value is Record<string, unknown>} */
-const isPlainObject = (value) =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
 
 /** `key` on `obj` that is not one of `allowed` — the reject-by-name rule. */
 function unknownKeys(obj, allowed) {

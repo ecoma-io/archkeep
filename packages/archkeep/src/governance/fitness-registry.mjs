@@ -50,6 +50,7 @@
 import { isValidSelector, resolveMembers } from "../architecture-intent/selectors.mjs";
 import { languageOf } from "../analysis/registry.mjs";
 import { canonicalizeJson } from "../canonical.mjs";
+import { describe, isPlainObject } from "../values.mjs";
 import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "./row-schema.mjs";
 import { fitnessVerdict, isVerdict } from "./verdict.mjs";
 import {
@@ -86,17 +87,6 @@ const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/u;
 const LAYER_DIRECTIONS = Object.freeze(["forbidden", "required"]);
 /** The one `toDependents` a `tag-conformance` row may carry. */
 const TAG_DEPENDENT_DIRECTIONS = Object.freeze(["only", "never"]);
-
-/** @type {(value: unknown) => value is Record<string, unknown>} */
-const isPlainObject = (value) =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
-
-/** A value's type, for an error message that shows what was actually there. */
-function describe(value) {
-  if (Array.isArray(value)) return `an array (${JSON.stringify(value)})`;
-  if (value === null) return "null";
-  return `${typeof value} (${JSON.stringify(value) ?? String(value)})`;
-}
 
 function unknownKeys(obj, allowed) {
   return Object.keys(obj).filter((key) => !allowed.includes(key));

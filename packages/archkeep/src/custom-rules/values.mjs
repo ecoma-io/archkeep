@@ -16,11 +16,16 @@
  *
  * The rendering is fixed here and nowhere else: `an array of N`, `null`,
  * `undefined`, and otherwise the value's type followed by its JSON.
+ *
+ * The plain-object guard is defined one floor down, in `../values.mjs` — the
+ * package-wide vocabulary every layer's validators share — and re-exported
+ * here so this layer's importers keep their spelling. It cannot be defined
+ * here: `./host.mjs` imports `../config.mjs` and `../governance/verdict.mjs`,
+ * so a guard defined in this directory would sit above the modules that need
+ * to reach it.
  */
 
-/** @type {(value: unknown) => value is Record<string, any>} */
-export const isPlainObject = (value) =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
+export { isPlainObject } from "../values.mjs";
 
 /** @type {(value: unknown) => boolean} */
 export const isNonEmptyString = (value) => typeof value === "string" && value.trim() !== "";
