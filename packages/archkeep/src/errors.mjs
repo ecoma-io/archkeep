@@ -23,7 +23,10 @@
  * (`../AGENTS.md`, check's four exit codes).
  *
  * One class, nothing else exported: a second class needs a catch site that
- * treats two of these mistakes differently, and none does.
+ * treats two of these mistakes differently, and none does. Beside it sits the
+ * one error-SHAPE predicate the engine shares (`isEnoent` below) — a test of
+ * what a caught value looks like, not a decision about what one means, which
+ * is why it lives with the error primitives rather than at any catch site.
  */
 export class UsageError extends Error {
   /**
@@ -33,4 +36,23 @@ export class UsageError extends Error {
     super(message);
     this.name = "UsageError";
   }
+}
+
+/**
+ * Is this caught value the filesystem's "no such file or directory"?
+ *
+ * Node's `fs` throws the raw error with `code: "ENOENT"` set directly;
+ * `./process.mjs`'s `runProcess` wraps its child's failure and carries the
+ * original on `cause` — so the shape arrives both ways, and every site that
+ * distinguishes "absent" from "could not read" was spelling the test by hand
+ * (`#652`). The two legs together are the one definition; a catch site adds
+ * its own meaning on top (absent store, absent registry, install Moon), which
+ * is exactly the logic this predicate does not own.
+ *
+ * @param {unknown} error The caught value, of any shape.
+ * @returns {boolean}
+ */
+export function isEnoent(error) {
+  const thrown = /** @type {{code?: unknown, cause?: {code?: unknown}}|null|undefined} */ (error);
+  return thrown?.code === "ENOENT" || thrown?.cause?.code === "ENOENT";
 }

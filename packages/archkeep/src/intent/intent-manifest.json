@@ -312,7 +312,7 @@
           "type": "source-evidence",
           "path": "src/providers/moon.mjs",
           "assertion": "inferWorkspaceLayout returns null for partial layouts — same all-or-nothing contract as Nx and Native",
-          "sha256": "f461cfaa2c8267a78fa9afa4b3267e92be4a85ff5f370b9e4b613a1fb85fc211"
+          "sha256": "2b874da56bda5bc6cfcfb4a984556ace0eafe3a6a98d964c78204bd96cc30e48"
         },
         {
           "type": "behavioral-test",

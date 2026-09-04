@@ -31,6 +31,7 @@ import { existsSync } from "node:fs";
 import { delimiter, join, posix } from "node:path";
 
 import { environmentForTree, runProcess } from "../process.mjs";
+import { isEnoent } from "../errors.mjs";
 import { buildDependencies } from "./native/graph.mjs";
 
 /**
@@ -905,16 +906,15 @@ function resolveMoonCli(workspaceRoot, { resolveMoon = () => "moon" } = {}) {
  * `nxCli` guards against from the other direction, where only a
  * `MODULE_NOT_FOUND` earns the "not installed" story.
  *
- * `../process.mjs`'s `runProcess` wraps the child's failure and carries the
- * original on `cause`, so the code is read from there; the direct `code` is
- * read too, for a `run` seam that surfaces a spawn error unwrapped.
+ * The shape test itself is `../errors.mjs`'s `isEnoent` — the name stays
+ * because what this file asks is not "is this ENOENT" but "does this failure
+ * carry an install action".
  *
  * @param {unknown} error
  * @returns {boolean}
  */
 function isMoonBinaryMissing(error) {
-  const thrown = /** @type {{code?: unknown, cause?: {code?: unknown}}|null|undefined} */ (error);
-  return thrown?.code === "ENOENT" || thrown?.cause?.code === "ENOENT";
+  return isEnoent(error);
 }
 
 /**

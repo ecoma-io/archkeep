@@ -165,6 +165,30 @@ describe("loadAdrRegistry", () => {
     expect(byId.size).toBe(0);
   });
 
+  it("reads the real fs's ENOENT for a missing docs/adr as an empty registry too", () => {
+    // The test above drives an in-memory readdir that answers an absent
+    // directory with an EMPTY LISTING — the real `readdirSync` answers it by
+    // throwing ENOENT, and only the loader's ENOENT branch turns that throw
+    // into the same empty-registry verdict. Pinning the throw itself is what
+    // keeps that branch honest: if it stopped matching (or was removed), the
+    // in-memory listing above would still pass while every real workspace
+    // with no docs/adr started failing with `cannot read docs/adr` — absence
+    // is the documented answer, and this is the test that says so.
+    const io = {
+      readdirSync: () => {
+        throw Object.assign(
+          new Error("ENOENT: no such file or directory, scandir '/tmp/x/docs/adr'"),
+          {
+            code: "ENOENT",
+          },
+        );
+      },
+    };
+    const { records, byId } = loadAdrRegistry("/tmp/x", io);
+    expect(records).toEqual([]);
+    expect(byId.size).toBe(0);
+  });
+
   it("indexes records deterministically in filename order", () => {
     // Defined out of sorted order to prove byte-sort, not insertion order.
     const extra = inMemoryTree({

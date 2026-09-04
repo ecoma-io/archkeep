@@ -41,6 +41,7 @@ import { readFile as readFileFromDisk } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { containmentViolation } from "../containment.mjs";
+import { isEnoent } from "../errors.mjs";
 
 import { isValidSelector, splitSelector } from "./selectors.mjs";
 import { describe, isPlainObject } from "../values.mjs";
@@ -665,7 +666,7 @@ export async function loadIntent(root, { read = readFileFromDisk, tracked } = {}
     // neighbours on the identical tree are both loud: an escaping symlink
     // throws at the containment check above, and EACCES throws below. Only
     // this one was silent (`../../../../AGENTS.md`).
-    if (cause?.code === "ENOENT") {
+    if (isEnoent(cause)) {
       if (tracked === undefined) return undefined;
       throw new Error(
         `${INTENT_FILE}: is tracked but could not be read: ${cause?.message ?? cause} — ` +
