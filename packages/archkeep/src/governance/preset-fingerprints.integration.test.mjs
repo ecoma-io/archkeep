@@ -29,10 +29,10 @@
  *   to resolve at all — would reduce this suite to zero comparisons and stay
  *   green. The expected file's keys and the discovered keys must be the same
  *   set before any fingerprint is compared.
- * - **The fingerprint's own coverage is asserted.** It hashes exactly
- *   `depConstraints`, `options` and `suppressions`. Every shipped pack resolves
- *   to those three fields today and nothing else, so the pin is total — but a
- *   pack that grew a `fitness` block tomorrow would change the law it ships
+ * - **The fingerprint's own coverage is asserted.** It hashes the fields
+ *   `FINGERPRINTED_FIELDS` below names. Every shipped pack resolves to those
+ *   fields today and nothing else, so the pin is total — but a pack that grew
+ *   a field outside the hash tomorrow would change the law it ships
  *   while every fingerprint here held still. That is the same silence this file
  *   exists to end, so a resolved policy carrying a field outside the hash fails
  *   here rather than slipping past.
@@ -64,6 +64,10 @@ const FINGERPRINTED_FIELDS = [
   "suppressions",
   "fitness",
   "customRules",
+  // The selection a pack was resolved by (`profilePolicy` sets it on every
+  // policy this file pins), not just the rows it resolves to — two packs that
+  // ship converging blocks are two different named laws.
+  "profile",
 ];
 
 /**

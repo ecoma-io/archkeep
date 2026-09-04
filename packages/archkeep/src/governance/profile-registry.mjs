@@ -341,13 +341,27 @@ export function loadProfileRegistry(path, { readFile = defaultProfileIo.readFile
  * @param {string} profileName The profile to resolve.
  * @param {string} sourceLabel What failed, named in the thrown message.
  * @param {{readFile?: (path: string) => string|null}} [io]
- * @returns {{depConstraints: object[], options: object, suppressions: object[], fitness?: object[]}}
+ * @returns {{depConstraints: object[], options: object, suppressions: object[], fitness?: object[],
+ *   profile: string}} `profile` is the selection the policy was resolved by,
+ *   carried on the policy itself so the law's identity travels with it —
+ *   `../commands/graph.mjs`'s `computePolicyFingerprint` reads it, and the
+ *   fingerprint is the one policy fact that travels between captures
+ *   (`delta`, `diff`, `history`).
  * @throws {Error} when the registry or the named profile is defective.
  */
 export function profilePolicy(registryPath, profileName, sourceLabel, io = {}) {
   const registry = loadProfileRegistry(registryPath, io);
   const effective = resolveProfile(registry.profiles, profileName);
-  return policyFrom(effective, `${sourceLabel} (profile "${profileName}")`);
+  return {
+    ...policyFrom(effective, `${sourceLabel} (profile "${profileName}")`),
+    // The selection rides on the policy it produced: two profiles whose
+    // blocks converge resolve to the same fields, so without this key a
+    // switch between them resolves to the same fingerprint and a `delta`
+    // across the switch classifies as no law change. The NAME, never
+    // `registryPath` — a path is machine-local, and a fingerprint that
+    // differs between a laptop and CI reports a change nobody made.
+    profile: profileName,
+  };
 }
 
 /**

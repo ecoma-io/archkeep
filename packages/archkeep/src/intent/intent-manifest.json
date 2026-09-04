@@ -104,13 +104,13 @@
           "type": "source-evidence",
           "path": "src/commands/graph.mjs",
           "assertion": "Plain string comparison, never localeCompare; INTERNAL_DATA_FIELDS stripped; SCHEMA_VERSION = 2",
-          "sha256": "72a28c1edcbcb209f74bd10a1a3691e25aaa848bac4bd54aceeacf8d415c8f13"
+          "sha256": "dd594e4f9234f0c11545e060ae3a438c6e44248b4a757204d4486a3a76a7a7d5"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/graph.mjs",
           "assertion": "computePolicyFingerprint produces SHA-256 of canonicalized policy",
-          "sha256": "72a28c1edcbcb209f74bd10a1a3691e25aaa848bac4bd54aceeacf8d415c8f13"
+          "sha256": "dd594e4f9234f0c11545e060ae3a438c6e44248b4a757204d4486a3a76a7a7d5"
         }
       ],
       "status": "proven"
@@ -286,7 +286,7 @@
           "type": "source-evidence",
           "path": "src/commands/graph.mjs",
           "assertion": "Plain string comparison throughout; never localeCompare",
-          "sha256": "72a28c1edcbcb209f74bd10a1a3691e25aaa848bac4bd54aceeacf8d415c8f13"
+          "sha256": "dd594e4f9234f0c11545e060ae3a438c6e44248b4a757204d4486a3a76a7a7d5"
         }
       ],
       "status": "proven"
