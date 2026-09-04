@@ -21,7 +21,7 @@
  * from "the pipeline never collected any", so it answers `pass` for a reason
  * nobody earned. A throw is a bug in the caller that composed the bundle, not
  * a fact about the workspace, which is why it is an exception rather than a
- * violation list — the same posture `../report/evidence.mjs`'s `buildDecision`
+ * violation list — the same posture `../governance/verdict.mjs`'s `buildDecision`
  * takes when a verdict and its counts disagree.
  *
  * ## Byte-determinism, and the two orders that are NOT normalized here

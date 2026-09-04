@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 
+import { buildDecision as buildDecisionFromGovernance } from "../governance/verdict.mjs";
 import { buildDecision } from "./evidence.mjs";
 
 /**
  * The decision builder's five invariants, pinned in both directions — each
  * with a case that MUST build (the verdict + its required evidence) and a
  * case that MUST throw (the verdict minus that evidence). `src/governance/verdict.mjs`
- * states the invariants; this file proves the runtime refuses the silent
- * direction of each.
+ * states the invariants and enforces them — `buildDecision` lives there
+ * (#650), and this file exercises it through the re-export its render-side
+ * callers import, which is what pins that chain too.
  */
 describe("buildDecision", () => {
   it("I1 — pass requires complete coverage; a pass over an unread tree throws, never degrades", () => {
@@ -287,5 +289,16 @@ describe("buildDecision — error-path", () => {
     expect(() =>
       buildDecision({ status: "ok", coverageComplete: true, findings: Infinity }),
     ).toThrow(/findings must be a non-negative number/);
+  });
+});
+
+describe("the re-export chain (#650)", () => {
+  it("re-exports governance's buildDecision itself — never a second implementation", () => {
+    // `report/evidence.mjs` kept its path for the render-side callers, but it
+    // must stay a PATH. A re-implementation here would drift from the
+    // vocabulary's enforcer while every import site kept passing — byte for
+    // byte identical to a healthy chain, which is the silent direction — so
+    // the guard is identity, not shape.
+    expect(buildDecision).toBe(buildDecisionFromGovernance);
   });
 });

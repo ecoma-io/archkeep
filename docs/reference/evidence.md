@@ -44,7 +44,7 @@ is the membership test.
 ## The invariants, I1–I5
 
 Each invariant is enforced in code — `buildDecision`
-(`src/report/evidence.mjs`) throws rather than emit a decision that violates
+(`src/governance/verdict.mjs`) throws rather than emit a decision that violates
 one, and the tests pin both directions (the verdict with its evidence builds;
 the verdict minus that evidence refuses).
 
@@ -114,6 +114,10 @@ it; only a rename, retype, or removal does (see
 status→verdict map (`VERDICT_FOR_STATUS`), and `isVerdict` / `verdictForStatus`.
 `src/governance/clock.mjs` — `referenceTime()`, the zero-argument reference
 clock a time-based capability injects a fixed time into, so tests never assert
-the wall clock. `src/report/evidence.mjs` — `buildDecision`, the executable
-form of I1–I5. The engine's own `check` command is the only caller today, and
+the wall clock. `buildDecision`, the executable form of I1–I5, lives in
+`src/governance/verdict.mjs` beside the vocabulary it enforces;
+`src/report/evidence.mjs` re-exports it under the same name for the
+render-side callers (`src/commands/*`) that build a decision while composing
+the payload they render — a path kept, never a second implementation. The
+engine's own `check` command is the only caller today, and
 it emits only `pass` / `fail` / `unknown`.

@@ -42,13 +42,19 @@ dependencies)` for projects with no edges, and a coverage claim above the
   id, and each transition classified (architecture / policy / provider /
   code drift / unchanged) with its changes and disclosure notes. Renders the
   same payload `json.mjs` wraps; decides nothing.
-- `evidence.mjs` — the decision builder, `buildDecision`: turns a command's
-  verdict counts into the `decision` the envelope optionally carries, enforcing
-  the five evidence invariants (`../governance/verdict.mjs` states them) in
-  code — `pass` requires complete coverage, `fail` requires a finding, `unknown`
-  requires a reason, `not_applicable` requires `notApplicableReason`, and a
-  could-not-determine run is never a `pass`. It decides nothing about whether a
-  finding IS one; it throws when the verdict and its evidence disagree.
+- `evidence.mjs` — a re-export, not a home: `buildDecision` lives in
+  `../governance/verdict.mjs`, beside the four-state vocabulary it enforces
+  (#650). Holding it here had made the core verdict module (`../verdict.mjs`)
+  import the presentation layer. The path stays for the command layer —
+  `src/commands/*` build a decision while composing the payload they render —
+  and the builder itself turns a command's verdict counts into the `decision`
+  the envelope optionally carries, enforcing the five evidence invariants in
+  code: `pass` requires complete coverage, `fail` requires a finding,
+  `unknown` requires a reason, `not_applicable` requires
+  `notApplicableReason`, and a could-not-determine run is never a `pass`. It
+  decides nothing about whether a finding IS one; it throws when the verdict
+  and its evidence disagree. `evidence.test.mjs` pins the re-export by
+  identity, so a second implementation cannot quietly replace the path.
 
 `json.mjs` is not a formatter in that sense — it does not turn violations into
 output. `jsonEnvelope` wraps whatever result object a command already computed

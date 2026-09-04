@@ -37,6 +37,7 @@
  * does not opt in), which is what keeps SCHEMA_VERSION at 2: additive,
  * byte-compatible with every consumer that reads the envelope today.
  */
+import { EXIT_FOR_STATUS } from "../verdict.mjs";
 import { verdictForStatus } from "../governance/verdict.mjs";
 import { createRequire } from "node:module";
 
@@ -55,9 +56,6 @@ const { name: TOOL_NAME, version: TOOL_VERSION } = require("../../package.json")
  * consumer, not a mechanism enforced here.
  */
 export const SCHEMA_VERSION = 2;
-
-/** The one `status`↔`exitCode` mapping every command's envelope must agree with. */
-const EXIT_CODE_FOR_STATUS = Object.freeze({ ok: 0, findings: 1, "no-verdict": 3 });
 
 /**
  * Builds the envelope, asserting the three invariants that keep it from ever
@@ -86,10 +84,14 @@ export function jsonEnvelope({ command, context, status, exitCode, coverage, res
         `workspace being judged.`,
     );
   }
-  if (EXIT_CODE_FOR_STATUS[status] !== exitCode) {
+  // The `status`↔`exitCode` agreement reads `EXIT_FOR_STATUS` (`../verdict.mjs`)
+  // — the one status-keyed view of the process's exit-code table — so this
+  // assertion and `verdictFor`'s own encoding cannot become two independent
+  // copies of the same contract.
+  if (EXIT_FOR_STATUS[status] !== exitCode) {
     throw new Error(
       `archkeep: refusing to build a JSON envelope where status "${status}" and exitCode ${exitCode} ` +
-        `disagree — status "${status}" must carry exitCode ${EXIT_CODE_FOR_STATUS[status]}. A ` +
+        `disagree — status "${status}" must carry exitCode ${EXIT_FOR_STATUS[status]}. A ` +
         `consumer reading a file written by --output has only these two fields to trust; letting ` +
         `them disagree would make one of them a lie.`,
     );
@@ -149,8 +151,9 @@ export function jsonEnvelope({ command, context, status, exitCode, coverage, res
           `This is a bug in the command that built the envelope.`,
       );
     }
-    // I3, enforced again at this boundary — `src/governance/evidence.mjs`
-    // already guarantees it for the engine path, but a hand-built decision
+    // I3, enforced again at this boundary — `buildDecision`
+    // (`../governance/verdict.mjs`) already guarantees it for the engine
+    // path, but a hand-built decision
     // would otherwise ship an "unknown" without the reason I3 requires and
     // only this boundary would ever see the mistake. I2 (findings on "fail")
     // gets no latch here for the same reason I4 gets none: the other

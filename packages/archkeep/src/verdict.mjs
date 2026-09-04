@@ -8,15 +8,35 @@
  * `../cli.mjs`'s `runCheck` takes the process's exit code from the same call.
  * `../cli.mjs` re-exports `EXIT` under its own name, so every importer that
  * already reads it from there keeps working.
+ *
+ * `EXIT` is the one place a status→exit-code number is written. The
+ * status-keyed view of it, `EXIT_FOR_STATUS`, is derived from `EXIT` and is
+ * what the envelope's consistency check (`./report/json.mjs`) asserts against,
+ * so a consumer-facing status and the process's own exit code can never drift
+ * into two encodings of one contract.
  */
 
-import { buildDecision } from "./report/evidence.mjs";
+import { buildDecision } from "./governance/verdict.mjs";
 
 export const EXIT = Object.freeze({
   ok: 0,
   violations: 1,
   usage: 2,
   error: 3,
+});
+
+/**
+ * The envelope `status`→`exitCode` view of `EXIT` — the one mapping
+ * `jsonEnvelope` asserts every command's envelope against. Derived from
+ * `EXIT` rather than restated, so the numbers are written exactly once;
+ * `usage` has no status because a usage error never reaches an envelope.
+ *
+ * @type {Readonly<Record<"ok"|"findings"|"no-verdict", 0|1|3>>}
+ */
+export const EXIT_FOR_STATUS = Object.freeze({
+  ok: EXIT.ok,
+  findings: EXIT.violations,
+  "no-verdict": EXIT.error,
 });
 /**
  * The coverage clauses of a no-verdict reason, spelled once — the strings
@@ -57,7 +77,7 @@ export function coverageIncompleteReasons({ unchecked, blindSpots, analyzed }) {
  * "checked, and fine".
  *
  * The `decision` is the canonical 4-state verb of the same verdict
- * (`./report/evidence.mjs`), built from the same counts so the envelope's
+ * (`./governance/verdict.mjs`), built from the same counts so the envelope's
  * `status` and its `decision.verdict` cannot disagree: `ok`→`pass`,
  * `findings`→`fail`, `no-verdict`→`unknown`. `buildDecision` throws on any
  * invariant the counts violate (a `pass` over incomplete coverage, a `fail`
@@ -103,7 +123,7 @@ export function verdictFor({
   ) {
     return {
       status: "findings",
-      exitCode: EXIT.violations,
+      exitCode: EXIT_FOR_STATUS.findings,
       reasons: coverageReasons,
       decision: buildDecision({
         status: "findings",
@@ -164,7 +184,7 @@ export function verdictFor({
     ].filter(Boolean);
     return {
       status: "no-verdict",
-      exitCode: EXIT.error,
+      exitCode: EXIT_FOR_STATUS["no-verdict"],
       reasons,
       decision: buildDecision({
         status: "no-verdict",
@@ -176,7 +196,7 @@ export function verdictFor({
   }
   return {
     status: "ok",
-    exitCode: EXIT.ok,
+    exitCode: EXIT_FOR_STATUS.ok,
     reasons: [],
     decision: buildDecision({
       status: "ok",

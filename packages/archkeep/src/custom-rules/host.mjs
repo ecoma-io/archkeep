@@ -725,8 +725,8 @@ export async function evaluateCustomRule({
  * What is wrong with a verdict, or `null`.
  *
  * The obligations are the four-state vocabulary's, not this host's invention
- * (`../governance/verdict.mjs` states I1–I5 and `../report/evidence.mjs`
- * enforces the same ones for a command's own decision): `fail` names what
+ * (`../governance/verdict.mjs` states I1–I5 and enforces them for a command's
+ * own decision through `buildDecision`): `fail` names what
  * failed, `pass` names nothing, `unknown` names why it could not tell,
  * `not_applicable` names why it did not apply. A rule that breaks one of them
  * has returned a shape, not a judgment — hence "hollow", and hence a refusal

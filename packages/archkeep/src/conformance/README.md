@@ -43,12 +43,14 @@ workspace's own lint, typecheck and build — the same containment
 a question the differential structurally cannot — see "The labeled corpus"
 below, which owns everything about it.
 
-Three other files here check the project against its own declarations rather
+Four other files here check the project against its own declarations rather
 than against ESLint, and they are cheap where the differential is not:
 `boundary.test.mjs` holds the shipped tool to what it is allowed to depend on,
 `stated-counts.integration.test.mjs` holds both catalogues' sizes to the
-catalogues, and `plugin-catalogue.integration.test.mjs` holds the Claude Code
-plugin manifests to each other.
+catalogues, `plugin-catalogue.integration.test.mjs` holds the Claude Code
+plugin manifests to each other, and `verdict-layering.test.mjs` holds the
+verdict layer to its structural contract — one status→exit-code table in
+`../verdict.mjs`, and no `report/` import from either verdict module (#650).
 
 `rule-sdks.integration.test.mjs` is a differential of a different kind, and it
 belongs here for the same reason the ESLint one does: it puts verdicts beside
