@@ -17,3 +17,14 @@
 # otherwise fall through this file unrecognised.
 .config-spelling-a4-eslint-*
 .config-spelling-a5-eslint-*
+
+# The other two ESLint-dialect fixture roots, each with its own prefix:
+# `src/eslint-config.integration.test.mjs`'s `fixtureRoot()` (one per test,
+# torn down in `afterEach`) and `src/cli.integration.test.mjs`'s S2 describe
+# (one per file, torn down in `afterAll`). Listed here for the reason every
+# entry in this file exists: the project walk in
+# `src/conformance/boundary.test.mjs` reads its skip list from this file, and
+# an unlisted fixture root is one that walk judges as shipped source and races
+# the teardown — the intermittent `ENOENT` of #637.
+.eslint-config-fixture-*
+.cli-eslint-config-fixture-*

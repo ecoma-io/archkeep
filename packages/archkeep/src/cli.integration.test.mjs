@@ -6593,7 +6593,14 @@ describe("surfacing an ESLint boundaryConfig dialect's note on the coverage line
   // same reason `eslint-config.integration.test.mjs`'s `fixtureRoot()` picks
   // its location: `@nx/eslint-plugin` resolves by walking a file's own
   // ancestor directories, and only an ancestor of this package's own
-  // `node_modules` reaches this workspace's real, hoisted install.
+  // `node_modules` reaches this workspace's real, hoisted install. The
+  // `.cli-eslint-config-fixture-` prefix is listed in this package's
+  // `.gitignore`, which is what makes this tree's ownership unambiguous to
+  // everyone but this file: `./conformance/boundary.test.mjs` derives the
+  // roots its project walk must skip from that same entry, so a walk running
+  // in a parallel vitest worker never descends into a tree this describe's
+  // `afterAll` tears down (#637 was exactly that race, before the entry
+  // existed).
   const eslintRoot = mkdtempSync(join(packageRoot, ".cli-eslint-config-fixture-"));
   afterAll(() => rmSync(eslintRoot, { recursive: true, force: true }));
 

@@ -21,7 +21,7 @@
  */
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { isBuiltin } from "node:module";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -35,16 +35,20 @@ const SKIPPED_DIRECTORIES = new Set(["node_modules", "coverage", "dist"]);
  * The throwaway fixture roots a run creates INSIDE this package, read off the
  * package's own `.gitignore` rather than restated here.
  *
- * Two tests deliberately build their trees under `packageRoot` instead of the
+ * Four tests deliberately build their trees under `packageRoot` instead of the
  * system tmpdir, because `@nx/devkit` and `@nx/eslint-plugin` resolve from
  * where the tree sits (`../providers/native/differential.integration.test.mjs`
  * and `../config-spelling.integration.test.mjs` each argue it in their own
- * header). Those roots hold `.mjs` files, and vitest runs test files in
- * parallel, so a walk that descended into them judged fixture modules as if
- * this package shipped them — and crashed with `ENOENT` whenever the fixture's
- * `afterAll` removed the tree between `readdirSync` and `readFileSync`. Both
- * halves are the same defect: a gate whose subject set depends on which OTHER
- * tests happen to be running is not measuring what it says it measures.
+ * header, and so do `../eslint-config.integration.test.mjs` and
+ * `../cli.integration.test.mjs`, whose ESLint-dialect fixtures joined them).
+ * Those roots hold `.mjs` files, and vitest runs test files in parallel, so a
+ * walk that descended into them judged fixture modules as if this package
+ * shipped them — and crashed with `ENOENT` whenever the fixture's teardown
+ * removed the tree between `readdirSync` and `readFileSync`. Both halves are
+ * the same defect: a gate whose subject set depends on which OTHER tests
+ * happen to be running is not measuring what it says it measures. #637 was
+ * the ENOENT half arriving through a door this skip list did not cover: two
+ * fixture prefixes that had never been added to `.gitignore` at all.
  *
  * Derived from `.gitignore` rather than hardcoded, and not from a bare
  * "skip dot-directories" rule, because that file is already the one place
@@ -305,29 +309,66 @@ describe("what the shipped tool is allowed to depend on", () => {
     expect(sources.filter(isConformance).length).toBeGreaterThan(3);
   });
 
-  it("walks past a throwaway fixture root a sibling test is holding open", () => {
-    // The guard for `IGNORED_FIXTURE_ROOTS`. Vitest runs test files in
-    // parallel, and two of them build trees under this package on purpose, so
-    // without the skip this suite judged fixture modules as shipped source and
-    // crashed on `ENOENT` when the fixture was removed mid-walk. Both are the
-    // same defect — a gate whose subject set depends on which other tests are
-    // running — and neither is visible from a passing run, so it is measured
-    // here against a root created for the purpose.
-    const root = mkdtempSync(join(PROJECT_ROOT, ".oracle-boundary-walk-guard-"));
+  it("walks past every throwaway fixture root a sibling test may be holding open", () => {
+    // The matcher half of the guard for `IGNORED_FIXTURE_ROOTS`. Vitest runs
+    // test files in parallel, and four of them build trees under this package
+    // on purpose, so without the skip this suite judged fixture modules as
+    // shipped source and crashed on `ENOENT` when the fixture was torn down
+    // mid-walk (#637 was exactly that, through the two ESLint-dialect prefixes
+    // whose entries were missing from `.gitignore`). The failure is not
+    // visible from a passing run, so it is measured here against roots created
+    // for the purpose — one per prefix this file names, so a regression in
+    // `isIgnoredFixtureRoot`, or a typo in one entry, fails HERE loudly for
+    // that prefix instead of silently widening what the walk judges. That a
+    // fixture root made it INTO this file at all is the other half, and it is
+    // the next test's.
+    const probes = [];
     try {
-      writeFileSync(join(root, "fixture.mjs"), 'import "some-package-nobody-declared";\n');
-      const walked = projectSources();
-      expect(
-        walked.filter((file) => file.includes("oracle-boundary-walk-guard")),
-        "the walk descended into a gitignored fixture root",
-      ).toEqual([]);
-      // And the prefix really is the one `.gitignore` names, rather than the
-      // skip happening for some unrelated reason.
-      expect(isIgnoredFixtureRoot(relative(PROJECT_ROOT, root))).toBe(true);
+      for (const pattern of IGNORED_FIXTURE_ROOTS) {
+        if (!pattern.endsWith("*")) continue;
+        const root = mkdtempSync(join(PROJECT_ROOT, `${pattern.slice(0, -1)}walk-guard-`));
+        probes.push(root);
+        writeFileSync(join(root, "fixture.mjs"), 'import "some-package-nobody-declared";\n');
+        const probeRoot = relative(PROJECT_ROOT, root);
+        expect(
+          projectSources().filter((file) => file.startsWith(probeRoot + sep)),
+          `the walk descended into a '${pattern}' fixture root`,
+        ).toEqual([]);
+        // And the prefix really is the one `.gitignore` names, rather than the
+        // skip happening for some unrelated reason.
+        expect(isIgnoredFixtureRoot(probeRoot)).toBe(true);
+      }
+      // A directory that is not a fixture root is still walked.
       expect(isIgnoredFixtureRoot("src")).toBe(false);
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      for (const root of probes) rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it("judges no module under a dot-directory, so a fixture root missing from .gitignore goes red here", () => {
+    // The completeness half of the guard above: that test proves every prefix
+    // `.gitignore` lists is skipped, and this one proves nothing the walk DOES
+    // see lives under a dot-directory — the shape every in-package fixture
+    // root takes. #637 is what the missing half looks like when only the
+    // matcher is pinned: two fixture roots arrived without a `.gitignore`
+    // entry, no probe existed for them, and the walk kept descending into
+    // their trees until a teardown landed between its `readdirSync` and its
+    // `readFileSync`. A red here names a dot-directory the walk can see —
+    // either a fixture root whose entry is missing, which is fixed by adding
+    // it to `.gitignore`, the one file this suite reads its skip list from,
+    // or a crashed run's leftover, which only removing it fixes.
+    const underDot = sources.filter((file) => {
+      const segments = file.split(sep);
+      // A dot-ANCESTOR segment, not a dot-prefixed file name — the defect
+      // class is a directory the walk descended into, not a hidden file.
+      return segments.some(
+        (segment, index) => segment.startsWith(".") && index < segments.length - 1,
+      );
+    });
+    expect(
+      underDot,
+      "sources under a dot-directory — a fixture root `.gitignore` does not name, or a crashed run's leftover",
+    ).toEqual([]);
   });
 
   it("reads every load the tool performs, including the ones behind createRequire", () => {
