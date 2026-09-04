@@ -151,24 +151,26 @@ export function buildDependencies(dependencies) {
  * config comparison logic.
  *
  * The fingerprint is SHA-256 of the canonicalized JSON for `depConstraints`,
- * `options`, `suppressions` and — when the policy declares them — `fitness`
- * and `customRules`. Those are every field of a loaded policy that states
- * law: the first three decide which violations `evaluate` produces, the
- * fourth decides which fitness functions `check` folds into the same exit
- * code (`../governance/fitness-registry.mjs`), and the fifth names the rule
+ * `options`, `suppressions` and — when the policy declares them — the
+ * `fitness`, `customRules`, `coverage` and `markdown` blocks, plus the
+ * selected profile's NAME when the law was selected by name. Those are every
+ * field of a loaded policy that states law: the first three decide which
+ * violations `evaluate` produces, the fourth decides which fitness functions
+ * `check` folds into the same exit code
+ * (`../governance/fitness-registry.mjs`), and the fifth names the rule
  * artifacts a workspace declared, each pinned to the bytes its `sha256` claims
  * (`../config.mjs`'s `customRuleRowViolations`) — swap one row's hash or its
- * `params` and the policy says something different. A field that can fail a
- * build and is not in the hash is a law that can be rewritten while `diff`
- * reports the policy unchanged — the silent direction, and the reason the list
- * here and `policyFrom`'s return shape (`../config.mjs`) are revisited
- * together.
+ * `params` and the policy says something different. The three after those are
+ * argued at their keys below. A field that can fail a build and is not in the
+ * hash is a law that can be rewritten while `diff` reports the policy
+ * unchanged — the silent direction, and the reason the list here and
+ * `policyFrom`'s return shape (`../config.mjs`) are revisited together.
  *
- * `fitness` and `customRules` are included only when they are DECLARED, and
- * the absent case contributes no key rather than an empty array. A policy that
- * declares neither therefore fingerprints exactly as it did before those
- * fields were covered, so extending the hash did not move every existing
- * snapshot's value — only those whose law it was failing to describe.
+ * The conditional fields are included only when they are DECLARED, and the
+ * absent case contributes no key rather than an empty array. A policy that
+ * declares none therefore fingerprints exactly as it did before those fields
+ * were covered, so extending the hash did not move every existing snapshot's
+ * value — only those whose law it was failing to describe.
  *
  * @param {object} config The loaded boundary config.
  * @returns {string} A hex-encoded SHA-256 fingerprint.
@@ -180,11 +182,21 @@ export function computePolicyFingerprint(config) {
     suppressions: config.suppressions ?? [],
     ...(config.fitness === undefined ? {} : { fitness: config.fitness }),
     ...(config.customRules === undefined ? {} : { customRules: config.customRules }),
-    // The document track is law the same way the two blocks above are: it
+    // The acceptance channel is law the same way the blocks above are: a
+    // `coverage.unowned` row withdraws an unclaimed file's whole-file failure
+    // as a recorded acceptance (`../config.mjs`'s `findCoverageViolations`
+    // owns the shape, `../commands/coverage-acceptance.mjs` matches it), so a
+    // policy that records or removes an acceptance must not share a
+    // fingerprint with one that does not — `diff`'s policy-changed warning
+    // reads this hash (#709: the one block `policyFrom` sets that the hash
+    // skipped). Conditional, like the three above, so a policy recording no
+    // acceptance hashes exactly as it did before this key existed.
+    ...(config.coverage === undefined ? {} : { coverage: config.coverage }),
+    // The document track is law the same way the blocks above are: it
     // decides what this run judges, so a policy that adds or edits a
     // `markdown` block must not share a fingerprint with one that does not —
     // `diff`'s policy-changed warning reads this hash. Conditional, like the
-    // two above, so a policy declaring no block hashes exactly as it did
+    // three above, so a policy declaring no block hashes exactly as it did
     // before this key existed.
     ...(config.markdown === undefined ? {} : { markdown: config.markdown }),
     // The named selection is law identity the same way the blocks above are:
@@ -193,7 +205,7 @@ export function computePolicyFingerprint(config) {
     // resolved blocks converge are still two different named laws. Only
     // `check`'s report names the selection, so a hash blind to it would let a
     // `delta` across a switch report the law unchanged with nothing anywhere
-    // saying it moved. Conditional, like the three above, so a policy
+    // saying it moved. Conditional, like the four above, so a policy
     // selected by file or inline — no `profile` key at all — hashes exactly
     // as it did before the selection was covered.
     ...(config.profile === undefined ? {} : { profile: config.profile }),
