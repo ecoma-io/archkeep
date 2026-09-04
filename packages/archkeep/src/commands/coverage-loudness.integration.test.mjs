@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { check } from "../../cli.mjs";
+import { check, runCli } from "../../cli.mjs";
 
 // The loud-coverage contract (#599, #595, #601): a run that could not look
 // must never be mistaken for one that looked and found nothing.
@@ -32,6 +32,12 @@ import { check } from "../../cli.mjs";
 // Every assertion below pins the direction that can silently pass: each of
 // these fixtures produced a green `pass` / `complete: true` envelope on the
 // code this contract replaced.
+//
+// The zero-analyzable tree is also driven through `graph` (#612): the same
+// judged-nothing run reached the graph face and came out `ok` / `complete:
+// true` / exit 0 there after `check` had stopped reporting it — the contract
+// is per-command, and a face that did not take the axis stays green in CI
+// while the workspace it ran on judged nothing.
 
 const CONFIG = `export const depConstraints = [
   { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
@@ -134,6 +140,84 @@ describe("#599 — a run that judged nothing reports no verdict", () => {
       kind: "unsupported-language",
       files: ["libs/widget/src/lib.rb"],
     });
+  });
+});
+
+// #612 — the same judged-nothing tree through `graph`. The face that missed
+// the axis: `graph` derives its verdict through the shared constructor now,
+// so the zero-analysis run lands in the no-verdict lane here exactly as it
+// does in `check` above — and a run that DID judge a real file stays `ok`,
+// which is the over-refusal half that keeps the axis from flipping every
+// empty-imports tree red.
+describe("#612 — the zero-analyzable tree through graph", () => {
+  const zero = makeRoot("graph-zero-analyzable");
+  zero.write("nx.json", "{}\n");
+  zero.write("module-boundaries.config.mjs", CONFIG);
+  zero.write("libs/widget/src/lib.rb", 'require "other/thing"\n');
+
+  /** `graph` over a fixture tree: exit code, stdout, stderr, parsed envelope on the json runs. */
+  const runGraph = async (root, files, nodes, args = ["graph", "--format", "json"]) => {
+    const out = [];
+    const err = [];
+    const exit = await runCli(args, {
+      ...contextFor(root, files, nodes),
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+    });
+    const stdout = out.join("\n");
+    const jsonRun = args.includes("--format") && args[args.indexOf("--format") + 1] === "json";
+    return {
+      exit,
+      err: err.join("\n"),
+      stdout,
+      envelope: jsonRun && stdout !== "" ? JSON.parse(stdout) : null,
+    };
+  };
+
+  const files = ["nx.json", "module-boundaries.config.mjs", "libs/widget/src/lib.rb"];
+
+  it("a whole-tree run that judged nothing is no-verdict / exit 3, not a complete snapshot", async () => {
+    const { exit, envelope } = await runGraph(zero.root, files, widgetNode());
+    expect(envelope).not.toBeNull();
+    expect(exit).toBe(3);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.analyzedFiles).toBe(0);
+    // Nothing failed and no site went unresolved — the zero is the whole
+    // reason the verdict is withheld, so the refusal cannot point at rows
+    // that do not exist.
+    expect(envelope.coverage.notAnalyzed).toEqual([]);
+    expect(envelope.coverage.blindSpots).toEqual([]);
+  });
+
+  it("the text face names the zero-analysis clause, not a zero count of failures", async () => {
+    const { exit, stdout } = await runGraph(zero.root, files, widgetNode(), ["graph"]);
+    expect(exit).toBe(3);
+    expect(stdout).toContain("graph snapshot incomplete");
+    expect(stdout).toContain("no file in scope could be analyzed — coverage incomplete");
+  });
+
+  const clean = makeRoot("graph-clean-analyzed");
+  clean.write("nx.json", "{}\n");
+  clean.write("module-boundaries.config.mjs", CONFIG);
+  clean.write("libs/widget/src/util.js", "export const util = () => 1;\n");
+
+  it("a graph over a tree that judged a real file stays ok and exit 0", async () => {
+    // The anti-over-refusal direction: one analyzed file satisfies the axis,
+    // so a real tree with no findings keeps the answer it always gave. This
+    // half is what makes the #612 flip a zero-analysis rule and not a
+    // zero-imports rule.
+    const { exit, envelope } = await runGraph(
+      clean.root,
+      ["nx.json", "module-boundaries.config.mjs", "libs/widget/src/util.js"],
+      widgetNode(),
+    );
+    expect(envelope).not.toBeNull();
+    expect(exit).toBe(0);
+    expect(envelope.status).toBe("ok");
+    expect(envelope.coverage.complete).toBe(true);
+    expect(envelope.coverage.analyzedFiles).toBe(1);
   });
 });
 

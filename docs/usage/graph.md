@@ -37,11 +37,11 @@ this tool reads upstream, not facts about the consumer's architecture.
 
 ## Exit codes
 
-| code | meaning                                                                      |
-| ---- | ---------------------------------------------------------------------------- |
-| 0    | The snapshot was built, and coverage is complete.                            |
-| 2    | Usage error: unknown flag, wrong argument count.                             |
-| 3    | The graph has incomplete coverage — at least one file could not be analyzed. |
+| code | meaning                                                                                                                                 |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | The snapshot was built, and coverage is complete.                                                                                       |
+| 2    | Usage error: unknown flag, wrong argument count.                                                                                        |
+| 3    | The graph has incomplete coverage — a file could not be analyzed, an import site could not be resolved, or no file was analyzed at all. |
 
 `graph` never exits 1. That exit code belongs to `check` alone.
 

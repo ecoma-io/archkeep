@@ -12,11 +12,20 @@
  * The coverage claim sits ABOVE the listing, not below it, so the reader knows
  * whether the snapshot is complete before reading any entry — an incomplete
  * snapshot printed in full would have the "this may under-represent" warning
- * buried at the bottom.
+ * buried at the bottom. Under an incomplete claim sit the reason clauses the
+ * run withheld the verdict over, worded by `../verdict.mjs`'s
+ * `coverageIncompleteReasons` and rendered through `./text.mjs`'s
+ * `formatCoverageIncomplete` — the same clauses, in the same `⚠` rendering,
+ * `check`'s text report prints, so a terminal reader is told why the verdict
+ * is withheld whichever face ran. A zero-analysis run is the case that needs
+ * this: its `notAnalyzed` list is empty, so a count-bearing headline would
+ * blame zero failures for an incomplete snapshot.
  *
  * This module decides nothing. A formatter that filtered would be a rule
  * wearing a formatter's name (`../README.md`).
  */
+
+import { formatCoverageIncomplete } from "./text.mjs";
 
 /**
  * One project as a line: name, root, type, and tags.
@@ -44,7 +53,13 @@ function formatEdge(edge) {
  * The whole graph report.
  *
  * @param {{projects: object[], dependencies: object[], workspaceLayout: object,
- *   workspaceLayoutSource: string, coverage: object}} input
+ *   workspaceLayoutSource: string, coverage: object,
+ *   coverageIncomplete?: string[]}} input
+ *   `coverageIncomplete` is the withheld-verdict clause list
+ *   (`../verdict.mjs`'s `coverageIncompleteReasons`, handed through
+ *   `../../commands/graph.mjs`) — rendered below the incomplete headline,
+ *   empty exactly when the snapshot is complete, and optional because a
+ *   complete snapshot carries no clauses to render.
  * @returns {string}
  */
 export function formatGraphReport({
@@ -53,6 +68,7 @@ export function formatGraphReport({
   workspaceLayout,
   workspaceLayoutSource,
   coverage,
+  coverageIncomplete,
 }) {
   const sections = [];
 
@@ -66,11 +82,15 @@ export function formatGraphReport({
   if (coverage.complete) {
     sections.push(`✔ graph snapshot complete (${inspected})`);
   } else {
-    const notAnalyzedCount = coverage.notAnalyzed.length;
+    // The headline states the incompleteness and its consequence; the clauses
+    // below state WHY, one per failed coverage axis. Blaming the whole-file
+    // count in the headline alone would read "0 files could not be analyzed"
+    // over a zero-analysis run (#612) — incomplete, with a reason of nothing.
     sections.push(
-      `✖ graph snapshot incomplete — ${notAnalyzedCount} file${notAnalyzedCount === 1 ? "" : "s"} ` +
-        `could not be analyzed, so this snapshot may under-represent the architecture (${inspected})`,
+      `✖ graph snapshot incomplete — this snapshot may under-represent the architecture (${inspected})`,
     );
+    const clauses = formatCoverageIncomplete(coverageIncomplete ?? []);
+    if (clauses !== "") sections.push(clauses);
   }
 
   // Layout line
