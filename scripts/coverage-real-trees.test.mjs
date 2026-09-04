@@ -1,11 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildSummary, parseArgs, TREES, evaluate } from "./coverage-real-trees.mjs";
+import {
+  buildSummary,
+  parseArgs,
+  TREES,
+  classifyFailures,
+  evaluate,
+} from "./coverage-real-trees.mjs";
 
 /** A one-tree table, so a case states only what it is about. */
 const table = (expected) => [{ name: "tree", expected }];
-const pinned = { sources: 10, records: 40, unreadable: 2 };
+const pinned = { sources: 10, records: 40, unreadable: 2, disclosedExternal: 3 };
 const measured = (overrides = {}) => [{ name: "tree", ...pinned, ...overrides }];
 
 test("a measurement matching every pin is silent", () => {
@@ -45,8 +51,11 @@ test("a file count that moved is a breach even when the record count did not", (
 });
 
 test("every breached key is reported, not only the first", () => {
-  const breaches = evaluate(table(pinned), measured({ sources: 1, records: 1, unreadable: 1 }));
-  assert.equal(breaches.length, 3);
+  const breaches = evaluate(
+    table(pinned),
+    measured({ sources: 1, records: 1, unreadable: 1, disclosedExternal: 1 }),
+  );
+  assert.equal(breaches.length, 4);
 });
 
 test("a tree with no measurement at all is a breach naming that", () => {
@@ -61,7 +70,11 @@ test("a table pinning no sources is refused rather than passed", () => {
   // A tree pinned at zero would agree with a run that read nothing — the
   // placeholder green this repository's gates exist to catch.
   assert.throws(
-    () => evaluate(table({ sources: 0, records: 0, unreadable: 0 }), measured({ sources: 0 })),
+    () =>
+      evaluate(
+        table({ sources: 0, records: 0, unreadable: 0, disclosedExternal: 0 }),
+        measured({ sources: 0 }),
+      ),
     /measures nothing/u,
   );
 });
@@ -86,6 +99,11 @@ test("every shipped tree pins a sha, a license and a non-empty expectation", () 
     assert.ok(tree.license.length > 0, `${tree.name} names no license`);
     assert.ok(tree.expected.sources > 0, `${tree.name} pins no sources`);
     assert.ok(tree.expected.records > 0, `${tree.name} pins no records`);
+    assert.equal(
+      typeof tree.expected.disclosedExternal,
+      "number",
+      `${tree.name} pins no disclosed-external column`,
+    );
   }
 });
 
@@ -135,4 +153,102 @@ test("parseArgs accepts --summary-out alone and refuses anything else loudly", (
     /unrecognised argument/u,
   );
   assert.throws(() => parseArgs(["--summary-out"]), /needs a file path/u);
+});
+
+test("an external disclosure is counted disclosed, never unreadable", () => {
+  // #618's rows ride `coverage.blindSpots` and withhold no verdict — the
+  // analyzer read the file and judged it; what it names lives outside every
+  // declared project. An inline `failures.length` counts the disclosure
+  // anyway, which is what made every tree red the day #618 landed (#690):
+  // a tree whose whole import surface is third-party measured 100% unreadable.
+  const counts = classifyFailures([
+    {
+      sourceFile: "binding/route.go",
+      line: 7,
+      column: 9,
+      reason: "Go cannot resolve 'github.com/stretchr/testify/assert' from 'binding/route.go'",
+      external: true,
+    },
+  ]);
+  assert.deepEqual(counts, { unreadable: 0, disclosedExternal: 1 });
+});
+
+test("a mixed failure set puts every failure in its own column", () => {
+  // One row of each withholding class beside two disclosures. The whole-file
+  // refusal, the workspace-surface site and the dynamic declared limit all
+  // mean the analyzer could not fully read the file — `unreadable` is theirs.
+  // Only the `external: true` class is a disclosure, and it gets its own
+  // column rather than being swallowed or folded into either neighbour.
+  const counts = classifyFailures([
+    {
+      sourceFile: "src/lib.rs",
+      line: null,
+      column: null,
+      reason: "a `use` statement never reaches its `;` — the file is truncated or malformed",
+    },
+    {
+      sourceFile: "pkg/specifier.py",
+      line: 4,
+      column: 1,
+      reason:
+        "relative import '..' climbs past the top-level package of 'pkg/specifier.py', " +
+        "which leaves the project's import root — Python rejects it the same way",
+    },
+    {
+      sourceFile: "loader.py",
+      line: 12,
+      column: 3,
+      reason:
+        "dynamic import of 'name' has a non-literal argument, so its target is not knowable statically",
+      dynamic: true,
+    },
+    {
+      sourceFile: "internal/route.go",
+      line: 9,
+      column: 8,
+      reason: "Go cannot resolve 'github.com/stretchr/testify/assert' from 'internal/route.go'",
+      external: true,
+    },
+    {
+      sourceFile: "client.kt",
+      line: 20,
+      column: 5,
+      reason: "Java cannot resolve 'okio.ByteString' from 'client.kt'",
+      external: true,
+    },
+  ]);
+  assert.deepEqual(counts, { unreadable: 3, disclosedExternal: 2 });
+});
+
+test("no failures counts nothing in either column", () => {
+  assert.deepEqual(classifyFailures([]), { unreadable: 0, disclosedExternal: 0 });
+});
+
+test("disclosedExternal pins exactly like the other keys", () => {
+  // The disclosure column is a measurement, not a footnote. A disclosure that
+  // vanished is a read that went quiet (the silent direction — the analyzer
+  // stopped reporting what it saw); one that appeared is an event nobody
+  // measured. Exact in both directions, like every pinned count here.
+  const fewer = evaluate(table(pinned), measured({ disclosedExternal: 1 }));
+  assert.equal(fewer.length, 1);
+  assert.match(fewer[0], /disclosedExternal is 1, pinned at 3/u);
+  assert.match(fewer[0], /silent direction/u);
+  const more = evaluate(table(pinned), measured({ disclosedExternal: 9 }));
+  assert.equal(more.length, 1);
+  assert.match(more[0], /nobody measured it/u);
+});
+
+test("a measurement without the disclosure column is a breach naming it", () => {
+  // A measureTree that forgot to report the column must not pass by
+  // comparing nothing — the placeholder-green shape again.
+  const breaches = evaluate(table(pinned), [
+    /** @type {*} */ ({
+      name: "tree",
+      sources: pinned.sources,
+      records: pinned.records,
+      unreadable: pinned.unreadable,
+    }),
+  ]);
+  assert.equal(breaches.length, 1);
+  assert.match(breaches[0], /disclosedExternal is undefined, pinned at 3/u);
 });
