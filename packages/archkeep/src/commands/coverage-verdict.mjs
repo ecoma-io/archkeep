@@ -13,10 +13,17 @@
  * the shared construction the throw family now goes through, so the two
  * families cannot drift again:
  *
- * - `coverageVerdict` computes the one completeness the envelope law
- *   (`../report/json.mjs`) already enforces — no whole-file failure, no
- *   unjudged blind spot, at least one file analyzed — and the status/exit
- *   pair that completeness implies. The failure classes are read through
+ * - `coverageVerdict` computes the one completeness over three axes — no
+ *   whole-file failure, no unjudged blind spot, at least one file analyzed —
+ *   and the status/exit pair that completeness implies. The first two axes
+ *   ride the envelope law (`../report/json.mjs`), and there only in ONE
+ *   direction: the envelope refuses `complete: true` over a non-empty
+ *   `notAnalyzed` list or an unjudged blind-spot row, and deliberately
+ *   allows `complete: false` with both lists empty, so a run that judged
+ *   nothing is able to say so. The third axis — `analyzed > 0` — is the one
+ *   this constructor adds on top (#599, #612, #619): the envelope has no
+ *   zero-analysis refusal by design, which is WHY this constructor exists.
+ *   The failure classes are read through
  *   `../analysis/source-util.mjs`'s classifiers, never an inline filter: the
  *   class line is theirs alone to own.
  * - `coverageRefusal` builds the refusal result itself: the envelope through

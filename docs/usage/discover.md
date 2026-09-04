@@ -72,11 +72,11 @@ intent is a governance decision owned elsewhere.
 
 ## Exit codes
 
-| code | meaning                                                          |
-| ---- | ---------------------------------------------------------------- |
-| 0    | The observed side was reported, and coverage is complete.        |
-| 2    | Usage error: unknown flag, wrong argument count.                 |
-| 3    | Coverage is incomplete, or the workspace model cannot be loaded. |
+| code | meaning                                                                                                                             |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | The observed side was reported, and coverage is complete.                                                                           |
+| 2    | Usage error: unknown flag, wrong argument count.                                                                                    |
+| 3    | Coverage is incomplete — a file could not be analyzed, an import site could not be resolved, or no file was analyzed at all (#619). |
 
 `discover` never exits 1. It is descriptive: it answers questions about the
 architecture without claiming a violation.
@@ -88,8 +88,12 @@ exit-3 class:
 
 - The workspace model cannot be loaded (malformed `archkeep.json`, `nx graph`
   or `git` failure)
-- The observed side has incomplete coverage (whole files the analyzer could
-  not read)
+- The observed side has incomplete coverage — a whole file the analyzer could
+  not read, an import site it could not resolve, or no file analyzed at all
+  (#619). The completeness law is the shared constructor's
+  (`src/commands/coverage-verdict.mjs`), the same three-axis law `check` and
+  `graph` judge coverage over — a run that judged nothing is never mistaken
+  for one that judged everything
 - Under `--propose`, incomplete coverage is a **refusal**, not a warning — a
   proposal over an unread tree would be a fabrication wearing a proposal's
   name

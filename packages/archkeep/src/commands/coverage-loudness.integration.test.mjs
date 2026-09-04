@@ -221,6 +221,84 @@ describe("#612 — the zero-analyzable tree through graph", () => {
   });
 });
 
+// #619 — the same judged-nothing tree through `discover`. The face that
+// missed the axis after `graph` had already taken it: `discover` derives its
+// verdict through the shared constructor now, so the zero-analysis run lands
+// in the no-verdict lane here exactly as it does in `check` and `graph` —
+// and a run that DID judge a real file stays `ok`, the anti-over-refusal
+// half that keeps the axis from flipping every empty-imports tree red.
+describe("#619 — the zero-analyzable tree through discover", () => {
+  const zero = makeRoot("discover-zero-analyzable");
+  zero.write("nx.json", "{}\n");
+  zero.write("module-boundaries.config.mjs", CONFIG);
+  zero.write("libs/widget/src/lib.rb", 'require "other/thing"\n');
+
+  /** `discover` over a fixture tree: exit code, stdout, stderr, parsed envelope on the json runs. */
+  const runDiscover = async (root, files, nodes, args = ["discover", "--format", "json"]) => {
+    const out = [];
+    const err = [];
+    const exit = await runCli(args, {
+      ...contextFor(root, files, nodes),
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+    });
+    const stdout = out.join("\n");
+    const jsonRun = args.includes("--format") && args[args.indexOf("--format") + 1] === "json";
+    return {
+      exit,
+      err: err.join("\n"),
+      stdout,
+      envelope: jsonRun && stdout !== "" ? JSON.parse(stdout) : null,
+    };
+  };
+
+  const files = ["nx.json", "module-boundaries.config.mjs", "libs/widget/src/lib.rb"];
+
+  it("a whole-tree run that judged nothing is no-verdict / exit 3, not a complete discovery", async () => {
+    const { exit, envelope } = await runDiscover(zero.root, files, widgetNode());
+    expect(envelope).not.toBeNull();
+    expect(exit).toBe(3);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.analyzedFiles).toBe(0);
+    // Nothing failed and no site went unresolved — the zero is the whole
+    // reason the verdict is withheld, so the refusal cannot point at rows
+    // that do not exist.
+    expect(envelope.coverage.notAnalyzed).toEqual([]);
+    expect(envelope.coverage.blindSpots).toEqual([]);
+  });
+
+  it("the text face names the zero-analysis clause, not a zero count of failures", async () => {
+    const { exit, stdout } = await runDiscover(zero.root, files, widgetNode(), ["discover"]);
+    expect(exit).toBe(3);
+    expect(stdout).toContain("discovery incomplete");
+    expect(stdout).toContain("no file in scope could be analyzed — coverage incomplete");
+  });
+
+  const clean = makeRoot("discover-clean-analyzed");
+  clean.write("nx.json", "{}\n");
+  clean.write("module-boundaries.config.mjs", CONFIG);
+  clean.write("libs/widget/src/util.js", "export const util = () => 1;\n");
+
+  it("a discover over a tree that judged a real file stays ok and exit 0", async () => {
+    // The anti-over-refusal direction: one analyzed file satisfies the axis,
+    // so a real tree with no findings keeps the answer it always gave. This
+    // half is what makes the #619 flip a zero-analysis rule and not a
+    // zero-imports rule.
+    const { exit, envelope } = await runDiscover(
+      clean.root,
+      ["nx.json", "module-boundaries.config.mjs", "libs/widget/src/util.js"],
+      widgetNode(),
+    );
+    expect(envelope).not.toBeNull();
+    expect(exit).toBe(0);
+    expect(envelope.status).toBe("ok");
+    expect(envelope.coverage.complete).toBe(true);
+    expect(envelope.coverage.analyzedFiles).toBe(1);
+  });
+});
+
 describe("#601 — an unclaimed extension is disclosed, not failed", () => {
   const mixed = makeRoot("mixed-language");
   mixed.write("nx.json", "{}\n");

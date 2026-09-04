@@ -67,15 +67,19 @@ architecture is not a finding. The flags, the envelope and the refusals are
 repository usually fails first, and it fails loudly:
 
 ```text
-✖ discovery incomplete — 1 file could not be analyzed, so these observations
-may under-represent the workspace (2 imports in 3 files across 3 projects)
+✖ discovery incomplete — these observations may under-represent the workspace
+(2 imports in 3 files across 3 projects)
+⚠ 1 file could not be analyzed — coverage incomplete
 ```
 
 That run exits 3 even though it printed a full-looking report. The observations
 under it are real but incomplete, and a model derived from them would be missing
-whatever the unread file imports. Two ways to clear it, both of which put the
-answer on the record: give the file a project that owns it, or name it in
-`archkeep.json`'s `coverage.exempt` with a reason
+whatever the unread file imports. The clause below the headline names WHY the
+verdict was withheld — a file that could not be read, an import site that could
+not be resolved, or a run that analyzed no file at all (#619), each worded the
+same way `check` and `graph` word their own clauses. Two ways to clear a file
+failure, both of which put the answer on the record: give the file a project
+that owns it, or name it in `archkeep.json`'s `coverage.exempt` with a reason
 ([configuration.md](../reference/configuration.md)).
 
 Clear coverage first. Everything downstream inherits it.
