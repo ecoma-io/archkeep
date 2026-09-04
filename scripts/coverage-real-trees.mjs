@@ -13,8 +13,9 @@
 //
 // So the question this lane asks is a different one, and it needs no oracle:
 // **over thousands of files nobody here wrote, how much does each analyzer
-// read, and how much does it report it could not?** Both numbers are pinned at
-// a fixed commit, held EXACTLY in both directions:
+// read, how much does it report it could not, and how much of what it saw
+// names the world outside the tree?** Every number is pinned at a fixed
+// commit, held EXACTLY in both directions:
 //
 //   - fewer records than pinned is an analyzer that went quiet on a syntax it
 //     used to read — the silent direction, and the reason this lane exists;
@@ -22,6 +23,14 @@
 //     other side and equally worth a human deciding about;
 //   - fewer FAILURES than pinned is not automatically good either: a failure
 //     that stopped being reported is a file that now looks read.
+//
+// The failures arrive split (`classifyFailures`): what withheld WHILE READING
+// is `unreadable`, the count the pins have always held, and what merely names
+// the external dependency universe — the `external: true` rows every analyzer
+// discloses since #618 — is `disclosedExternal`, its own column. Folding the
+// disclosure into `unreadable` is the defect #690 recorded: it made a tree
+// whose imports are mostly third-party read as if the analyzer could read
+// none of it.
 //
 // A pinned sha is what makes exactness legitimate. The tree cannot move under
 // the harness, so any movement IS the harness changing.
@@ -52,6 +61,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { analyzeFile } from "../packages/archkeep/src/analysis/analyze.mjs";
+import { isExternalSiteFailure } from "../packages/archkeep/src/analysis/source-util.mjs";
 
 /**
  * The trees, pinned. Every entry is a public repository under a permissive
@@ -61,29 +71,42 @@ import { analyzeFile } from "../packages/archkeep/src/analysis/analyze.mjs";
  * The counts are MEASURED facts about the pinned commit — taken by running
  * this script's own reader on 2026-08-22 and 2026-08-29, with docker-cli and
  * spectre-console re-measured on 2026-09-04 after #480 and #481 fixed the
- * defects their first measurement had recorded (#606) — not targets anybody
- * chose. Each tree names why its `unreadable` count is what it is, because
- * an unexplained failure count is a number nobody can act on. Repin
- * discipline, the rule those two entries follow: a pin change must cite the
- * commit that moved the count, because a repinned number with no commit
- * behind it is the lane measuring its own staleness — which is exactly what
- * the 08-31 and 09-03 red runs were (#606).
+ * defects their first measurement had recorded (#606), and every tree
+ * re-measured twice on 2026-09-04, byte-identically, after #690 stopped the
+ * harness from hiding the tree's own manifests and split the failure count
+ * into `unreadable` and `disclosedExternal` — not targets anybody chose.
+ * Each tree names why its counts are what they are, because an unexplained
+ * count is a number nobody can act on. Repin discipline: a pin change must
+ * cite the commit that moved the count (#606, #690).
  *
- * - **gin** reads clean: 0 failures over 99 Go files. Every import in the tree
- *   is a plain quoted specifier, which is the shape the Go analyzer's declared
- *   limits are written around.
- * - **ripgrep** reads clean, and the first measurement is why. Before this lane
- *   existed the same tree reported 439 records and **29 failures**, every one
- *   of them the same shape: `use { a::b, c::d };`, a top-level brace group the
- *   Rust analyzer read as naming no crate. Nothing about that statement is
- *   ambiguous — it means exactly `use a::b; use c::d;` — so those 29 statements
- *   became 72 arm records, and the failures went to zero. This is the gap the
- *   lane was written to find, found on its first run; the counts here are the
- *   ones after the fix.
+ * - **gin** reads clean: 0 unreadable over 99 Go files. Every import in the
+ *   tree is a plain quoted specifier, which is the shape the Go analyzer's
+ *   declared limits are written around. The root `go.mod` declares
+ *   `module github.com/gin-gonic/gin`, so the tree's 31 intra-module imports
+ *   resolve internal and never reach the disclosure; the 487 disclosed rows
+ *   are the tree's third-party dependencies.
+ * - **ripgrep** reads clean, and its record count is a story in two parts.
+ *   Before this lane existed the same tree reported 439 records and **29
+ *   failures**, every one of them the same shape: `use { a::b, c::d };`, a
+ *   top-level brace group the Rust analyzer read as naming no crate. Reading
+ *   the group as the list of paths it is turned those 29 statements into 72
+ *   arm records, and the failures went to zero — the gap the lane was
+ *   written to find, found on its first run. Then #690's harness fix moved
+ *   the records again, 482 → 606, in the anti-silent direction: the Rust
+ *   analyzer records a crate's fully-qualified calls (`grep::Searcher::new()`
+ *   beside no `use` at all) only when it knows the workspace's crate names,
+ *   which it reads from the tree's `Cargo.toml` files — the old harness
+ *   handed the analyzer none, so that whole pass never ran and the 482 pin
+ *   measured a handicapped reader. The 606 are the pass running over the
+ *   tree the tree itself declares. The 247 disclosed rows are the third-party
+ *   crates; 0 unreadable.
  * - **requests** hits the analysis contract's own decision twice: a dynamic
  *   import whose argument is not a literal resolves to nothing and is reported
  *   unresolvable rather than dropped (`packages/archkeep/src/analysis/contract.md`).
- *   That is correct behaviour, and the count is pinned so it stays two.
+ *   That is correct behaviour, and the count is pinned so it stays two. The
+ *   tree's own packages resolve through the filesystem index its directory
+ *   layout already answers for, and its `pyproject.toml` declares a backend
+ *   this reader reads, so the 206 disclosed rows are genuinely third-party.
  * - **docker-cli** pinned the Go reader's keyword-vs-identifier limit three
  *   times: a line-head identifier whose name begins with `import`
  *   (`importContentType`, the vendored `importPath`, `imports`) read as the
@@ -92,18 +115,38 @@ import { analyzeFile } from "../packages/archkeep/src/analysis/analyze.mjs";
  *   bound the keyword to statement position, and all three disclosures went
  *   to zero while every other count held exactly — 2967 files and 12746
  *   records before and after — so the pin had recorded the analyzer's
- *   defect, not the tree's. Repinned 3 → 0 on 2026-09-04 (#606).
+ *   defect, not the tree's. Repinned 3 → 0 on 2026-09-04 (#606). The tree
+ *   declares exactly one Go module, `cmd/docker-trust/go.mod`'s
+ *   `github.com/docker/cli/cmd/docker-trust`, and those 29 intra-module
+ *   imports resolve internal; the root declares no module at this sha
+ *   (GOPATH layout), so the tree's remaining own-repo imports — 1180 of the
+ *   disclosed 12717 — sit beside its 7615 stdlib and 3951 third-party ones
+ *   with no manifest any reader could attribute them by. That is a fact the
+ *   tree states, not a blindness this harness introduces.
  * - **tokio** writes `use` statements inside macro bodies — `use
  *   #crate_path::…` and `use $crate::…` — which name no crate any resolver
  *   could check; all three are reported rather than guessed at, the refusal
- *   family ripgrep's brace groups landed in.
+ *   family ripgrep's brace groups landed in. Its record count moved for the
+ *   same reason ripgrep's did, 4786 → 10123 on 2026-09-04 (#690): the root
+ *   `Cargo.toml` is workspace-only, `tokio/Cargo.toml` names the crate, and
+ *   once those manifests reach the analyzer its fully-qualified-call pass
+ *   runs — tokio writes far more fully-qualified calls than `use` statements,
+ *   which is why the movement is the large one. The 2820 disclosed rows are
+ *   the third-party crates.
  * - **pytest** is the requests shape at scale: fifteen dynamic imports whose
  *   argument is a variable, plus two import-shaped texts that do not parse
  *   as imports once read in full. All seventeen are the reader refusing to
- *   guess, which is what the contract pins.
- * - **okhttp** reads clean: zero failures over 648 JVM sources, 71 `.java`
+ *   guess, which is what the contract pins. The 2283 disclosed rows are the
+ *   third-party imports; the tree's own `pytest`/`_pytest` packages resolve
+ *   through the filesystem index.
+ * - **okhttp** reads clean: zero unreadable over 648 JVM sources, 71 `.java`
  *   and 577 `.kt` — one package index over both extensions, which is the
- *   reason the lane wants a mixed tree.
+ *   reason the lane wants a mixed tree. The index is content-derived from the
+ *   sources' own `package` declarations, so #690's manifest fix changes
+ *   nothing here, and the 4517 disclosed rows match the pre-split count the
+ *   red CI runs reported — first-party imports (`okhttp3.*`, `mockwebserver3.*`)
+ *   were resolving all along; the disclosures are the tree's third-party
+ *   imports, okio and the Kotlin stdlib and JUnit at the head of them.
  * - **spectre-console** pinned the C# `using`-statement boundary three times:
  *   a `using var` declaration whose `;` sits behind an object-initializer
  *   brace group was read by the malformation scan as a directive that never
@@ -111,7 +154,11 @@ import { analyzeFile } from "../packages/archkeep/src/analysis/analyze.mjs";
  *   #481 (`cb1486d`) reads a declaration's initializer braces as statements,
  *   and the three disclosures went to zero while every other count held
  *   exactly — 466 files and 165 records before and after — the docker-cli
- *   event again, in C#. Repinned 3 → 0 on 2026-09-04 (#606).
+ *   event again, in C#. Repinned 3 → 0 on 2026-09-04 (#606). As with okhttp,
+ *   the namespace index is content-derived over the `.cs` sources, so the
+ *   manifest fix moves nothing: the 130 disclosed rows are the tree's
+ *   third-party `using` targets, first-party `Spectre.*` namespaces having
+ *   always resolved.
  */
 export const TREES = Object.freeze([
   Object.freeze({
@@ -121,7 +168,7 @@ export const TREES = Object.freeze([
     license: "MIT",
     language: "go",
     extensions: Object.freeze([".go"]),
-    expected: Object.freeze({ sources: 99, records: 518, unreadable: 0 }),
+    expected: Object.freeze({ sources: 99, records: 518, unreadable: 0, disclosedExternal: 487 }),
   }),
   Object.freeze({
     name: "docker-cli",
@@ -130,7 +177,12 @@ export const TREES = Object.freeze([
     license: "Apache-2.0",
     language: "go",
     extensions: Object.freeze([".go"]),
-    expected: Object.freeze({ sources: 2967, records: 12746, unreadable: 0 }),
+    expected: Object.freeze({
+      sources: 2967,
+      records: 12746,
+      unreadable: 0,
+      disclosedExternal: 12717,
+    }),
   }),
   Object.freeze({
     name: "ripgrep",
@@ -139,7 +191,7 @@ export const TREES = Object.freeze([
     license: "MIT",
     language: "rust",
     extensions: Object.freeze([".rs"]),
-    expected: Object.freeze({ sources: 110, records: 482, unreadable: 0 }),
+    expected: Object.freeze({ sources: 110, records: 606, unreadable: 0, disclosedExternal: 247 }),
   }),
   Object.freeze({
     name: "tokio",
@@ -148,7 +200,12 @@ export const TREES = Object.freeze([
     license: "MIT",
     language: "rust",
     extensions: Object.freeze([".rs"]),
-    expected: Object.freeze({ sources: 793, records: 4786, unreadable: 3 }),
+    expected: Object.freeze({
+      sources: 793,
+      records: 10123,
+      unreadable: 3,
+      disclosedExternal: 2820,
+    }),
   }),
   Object.freeze({
     name: "requests",
@@ -157,7 +214,7 @@ export const TREES = Object.freeze([
     license: "Apache-2.0",
     language: "python",
     extensions: Object.freeze([".py"]),
-    expected: Object.freeze({ sources: 37, records: 326, unreadable: 2 }),
+    expected: Object.freeze({ sources: 37, records: 326, unreadable: 2, disclosedExternal: 206 }),
   }),
   Object.freeze({
     name: "pytest",
@@ -166,7 +223,12 @@ export const TREES = Object.freeze([
     license: "MIT",
     language: "python",
     extensions: Object.freeze([".py"]),
-    expected: Object.freeze({ sources: 272, records: 4636, unreadable: 17 }),
+    expected: Object.freeze({
+      sources: 272,
+      records: 4636,
+      unreadable: 17,
+      disclosedExternal: 2283,
+    }),
   }),
   Object.freeze({
     name: "okhttp",
@@ -175,7 +237,12 @@ export const TREES = Object.freeze([
     license: "Apache-2.0",
     language: "java",
     extensions: Object.freeze([".java", ".kt"]),
-    expected: Object.freeze({ sources: 648, records: 7329, unreadable: 0 }),
+    expected: Object.freeze({
+      sources: 648,
+      records: 7329,
+      unreadable: 0,
+      disclosedExternal: 4517,
+    }),
   }),
   Object.freeze({
     name: "spectre-console",
@@ -184,7 +251,7 @@ export const TREES = Object.freeze([
     license: "MIT",
     language: "csharp",
     extensions: Object.freeze([".cs"]),
-    expected: Object.freeze({ sources: 466, records: 165, unreadable: 0 }),
+    expected: Object.freeze({ sources: 466, records: 165, unreadable: 0, disclosedExternal: 130 }),
   }),
 ]);
 
@@ -193,8 +260,48 @@ export const TREES = Object.freeze([
  * @property {string} name The tree's name.
  * @property {number} sources Files of the tree's language, tracked at the sha.
  * @property {number} records Import records the analyzer produced.
- * @property {number} unreadable Failure records the analyzer produced.
+ * @property {number} unreadable Failures that withheld while reading — the
+ *   whole-file refusals, workspace-surface and dynamic classes; external
+ *   disclosures excluded (`classifyFailures`).
+ * @property {number} disclosedExternal Positioned rows naming the external
+ *   dependency universe — disclosed, never unreadable (`classifyFailures`).
  */
+
+/**
+ * Splits an analyzer's failures into the lane's two counters, and nothing
+ * else:
+ *
+ * - `unreadable` — everything that WITHHELD while reading: a whole-file
+ *   refusal, an unresolvable workspace-surface site, a dynamic declared
+ *   limit. This is the count the pins have always held, and it keeps that
+ *   meaning;
+ * - `disclosedExternal` — positioned rows naming the external dependency
+ *   universe, the class #618 added. Such a row rides
+ *   `coverage.blindSpots` and withholds nothing — the file was read and
+ *   judged, and what it names lives outside every declared project — so it
+ *   is not an unreadable record. It is also a real signal, each tree's
+ *   external import share, so it is pinned as its own column rather than
+ *   swallowed.
+ *
+ * The class line comes from the engine's `isExternalSiteFailure` rather than
+ * a local `external === true` test, so the lane's classification cannot
+ * drift from the one every verdict lane reads. This function sits outside
+ * `measureTree` because counting is exactly the judgement #618 could land
+ * inline and green (#690) — the network reader is deliberately untested, the
+ * predicate it counts by is not.
+ *
+ * @param {object[]} failures
+ * @returns {{ unreadable: number, disclosedExternal: number }}
+ */
+export function classifyFailures(failures) {
+  let unreadable = 0;
+  let disclosedExternal = 0;
+  for (const failure of failures) {
+    if (isExternalSiteFailure(failure)) disclosedExternal += 1;
+    else unreadable += 1;
+  }
+  return { unreadable, disclosedExternal };
+}
 
 /**
  * Every way a measurement can breach its pin, named.
@@ -204,7 +311,7 @@ export const TREES = Object.freeze([
  * failure this lane exists to catch.
  *
  * @param {readonly {name: string, expected: {sources: number, records: number,
- *   unreadable: number}}[]} trees
+ *   unreadable: number, disclosedExternal: number}}[]} trees
  * @param {Measurement[]} measurements
  * @returns {string[]} One sentence per breach; empty when every tree matches.
  */
@@ -228,7 +335,12 @@ export function evaluate(trees, measurements) {
       breaches.push(`${tree.name}: no measurement at all — the run could not look at this tree`);
       continue;
     }
-    for (const key of /** @type {const} */ (["sources", "records", "unreadable"])) {
+    for (const key of /** @type {const} */ ([
+      "sources",
+      "records",
+      "unreadable",
+      "disclosedExternal",
+    ])) {
       if (measurement[key] !== tree.expected[key]) {
         breaches.push(
           `${tree.name}: ${key} is ${measurement[key]}, pinned at ${tree.expected[key]} — ` +
@@ -251,10 +363,18 @@ export function evaluate(trees, measurements) {
  * repository would measure yesterday's analyzers under today's numbers.
  *
  * The workspace handed to the analyzers declares ONE project rooted at the
- * repository root. That is enough for what is being measured — how much source
- * the analyzer reads — and deliberately not enough to make resolution
- * meaningful: these repositories declare no project model, and inventing one
- * would make the numbers a fact about the invention.
+ * repository root, and `filesOf` hands that project its real tracked files —
+ * sources AND manifests. The manifest half is not decoration: each analyzer
+ * reads its own module context out of the tree it is measuring, through the
+ * same primitives it runs in a real workspace — the Go analyzer's module
+ * paths from `go.mod`, the Rust analyzer's crate names from `Cargo.toml`, the
+ * Python analyzer's declared import bases from `pyproject.toml` (the JVM and
+ * C# indexes are content-derived over the sources and need no manifest at
+ * all). Narrowing `filesOf` to the language's source files hid every manifest,
+ * so no analyzer could resolve the tree's OWN intra-module imports and every
+ * one of them was disclosed as external (#690) — a number that answered
+ * nothing about the tree. Nothing is invented here: the manifests are facts
+ * the tree itself declares, read by the engine's own readers.
  *
  * @param {{name: string, url: string, sha: string, extensions: readonly string[]}} tree
  * @returns {Measurement}
@@ -290,12 +410,17 @@ export function measureTree(tree) {
     const workspace = {
       root: dir,
       projects: [{ name: tree.name, root: "" }],
-      filesOf: () => sources,
+      // The project's TRACKED files — the `Workspace` contract's own words —
+      // not only the tree's source extensions. See this method's JSDoc: the
+      // narrowed form is what starved the analyzers' module resolution of the
+      // manifests they read it from (#690).
+      filesOf: () => tracked,
       readFile,
     };
 
     let records = 0;
     let unreadable = 0;
+    let disclosedExternal = 0;
     for (const file of sources) {
       const text = readFile(file);
       if (text === null) {
@@ -305,9 +430,11 @@ export function measureTree(tree) {
       }
       const result = analyzeFile({ sourceFile: file, text, workspace });
       records += result.imports.length;
-      unreadable += result.failures.length;
+      const counts = classifyFailures(result.failures);
+      unreadable += counts.unreadable;
+      disclosedExternal += counts.disclosedExternal;
     }
-    return { name: tree.name, sources: sources.length, records, unreadable };
+    return { name: tree.name, sources: sources.length, records, unreadable, disclosedExternal };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -412,7 +539,8 @@ function main() {
       measurements.push(measurement);
       console.log(
         `${measurement.name.padEnd(10)} ${measurement.sources} ${tree.language} files, ` +
-          `${measurement.records} import records, ${measurement.unreadable} reported unreadable`,
+          `${measurement.records} import records, ${measurement.unreadable} reported unreadable, ` +
+          `${measurement.disclosedExternal} disclosed external`,
       );
     } catch (error) {
       // Could not look: the network, the host, or the checkout. Loud, and its
