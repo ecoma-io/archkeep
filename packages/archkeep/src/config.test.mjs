@@ -263,6 +263,18 @@ describe("findBoundaryConfigViolations", () => {
     ).toEqual([]);
   });
 
+  // Two ends of the same shared table, through this face: a lone `(` is
+  // refused exactly like `*` because the refusal is per character, and a
+  // backslash is admitted because the table does not carry it — the same
+  // asymmetry `../rules/match.test.mjs` pins for `projectPatternError`, read
+  // here through the `GLOB_METACHARACTERS` re-export in `../config.mjs`.
+  it("refuses a parenthesised buildTargets entry and admits a backslashed one", () => {
+    expect(findBoundaryConfigViolations(withOptions({ buildTargets: ["a(b"] }))[0]).toMatch(
+      /moduleBoundaryOptions\.buildTargets\[0\]: 'a\(b' is a glob/,
+    );
+    expect(findBoundaryConfigViolations(withOptions({ buildTargets: ["a\\b"] }))).toEqual([]);
+  });
+
   it("rejects an option the rule does not have, which would otherwise read as configured", () => {
     expect(
       findBoundaryConfigViolations(withOptions({ enforceBuildableLibDependencies: true }))[0],

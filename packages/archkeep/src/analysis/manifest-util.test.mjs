@@ -166,4 +166,57 @@ describe("basenameMatches", () => {
     expect(basenameMatches("foo[1]", ["foo[1]"], posix.matchesGlob)).toBe(false);
     expect(basenameMatches("foo1", ["foo[1]"], posix.matchesGlob)).toBe(true);
   });
+
+  it("routes a pattern carrying any carried character to the matcher, and nothing else", () => {
+    // The routing table is `[*?[{\\]` — one row per carried character below,
+    // then the characters it deliberately does not carry. The two tables named
+    // `GLOB_METACHARACTERS` (`../rules/match.mjs` carries the other) disagree
+    // on purpose: here the only wrong answer is sending a glob to equality —
+    // the silent direction — so the table must carry every character that can
+    // change the glob's answer, while admitting an extra literal costs
+    // nothing, because a pattern without metacharacters answers identically
+    // through the matcher and by equality.
+    const routed = [];
+    const spy = (base, pattern) => {
+      routed.push(pattern);
+      return base === pattern;
+    };
+    for (const pattern of ["*.mod", "a?b", "[ab]", "{x,y}", "a\\b"]) {
+      expect(basenameMatches("zzz", [pattern], spy)).toBe(false);
+    }
+    expect(routed).toEqual(["*.mod", "a?b", "[ab]", "{x,y}", "a\\b"]);
+    routed.length = 0;
+    for (const pattern of ["go.mod", "a(b", "a)b", "a]b", "a}b", "!go.mod"]) {
+      expect(basenameMatches("zzz", [pattern], spy)).toBe(false);
+    }
+    expect(routed).toEqual([]);
+  });
+
+  it("answers a backslashed pattern through the matcher even against its own literal spelling", () => {
+    // Same shape as the `foo[1]` row above: the glob grammar answers false for
+    // `a\b` against a file literally named `a\b` (measured), so routing to
+    // equality would answer true where the pre-fast-path semantics answered
+    // false. This row is why the table must keep carrying the backslash.
+    expect(basenameMatches("a\\b", ["a\\b"], posix.matchesGlob)).toBe(false);
+  });
+
+  it("answers an extglob pattern from the literal table — the divergence issue #652 records", () => {
+    // `path.posix.matchesGlob` implements extglob: measured on Node v24,
+    // `+(x).txt` matches `x.txt`, `@(x).txt` matches `x.txt`, and `!(x).txt`
+    // matches `y.txt` — while an unbalanced `a(b` is literal, so the `a(b`
+    // row above is safe to route by equality. `(` is therefore the one
+    // character missing from the routing table that can change the glob's
+    // answer (`?(…)` already rides the `?`), and the doc comment on
+    // `basenameMatches` — "semantics are unchanged … every other pattern
+    // still reaches the glob" — does not hold for these patterns. Both
+    // directions are pinned as the function behaves TODAY, each beside the
+    // raw glob's contrary answer, so the day either the table or that
+    // contract moves, a half fails here and names the decision.
+    expect(basenameMatches("x.txt", ["+(x).txt"], posix.matchesGlob)).toBe(false);
+    expect(posix.matchesGlob("x.txt", "+(x).txt")).toBe(true);
+    expect(basenameMatches("+(x).txt", ["+(x).txt"], posix.matchesGlob)).toBe(true);
+    expect(posix.matchesGlob("+(x).txt", "+(x).txt")).toBe(false);
+    expect(basenameMatches("y.txt", ["!(x).txt"], posix.matchesGlob)).toBe(false);
+    expect(posix.matchesGlob("y.txt", "!(x).txt")).toBe(true);
+  });
 });
