@@ -193,10 +193,13 @@ presence.
 
 No positional arguments. `discover` is descriptive: it never exits 1, only 0 on
 a completed observation and 3 when coverage is incomplete, the model cannot be
-loaded, or the plugin gap refuses the graph. Under `--propose`, incomplete
-coverage is a refusal — a proposal over an unread tree would be a fabrication
-wearing a proposal's name. Every candidate carries the markers `proposed: true`
-and `notAuthoritative: true` and is never written to `architecture-intent.json`.
+loaded, the plugin gap refuses the graph, or a `--write-intent` write was
+refused (target exists) or failed. Under `--propose`, incomplete coverage is a
+refusal — a proposal over an unread tree would be a fabrication wearing a
+proposal's name. Every candidate carries the markers `proposed: true` and
+`notAuthoritative: true`; the one write that materializes them is the
+`--write-intent <file>` above — explicit, named by the operator, never
+overwriting — and [discovery.md](discovery.md) owns the contract.
 
 ### `reconcile`
 

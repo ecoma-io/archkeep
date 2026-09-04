@@ -249,9 +249,10 @@ confirm it.
   a violation, say so explicitly. A silent violation is worse than a loud one.
 - **Proposed is not authoritative.** `reconcile --propose` and
   `discover --propose` derive candidate architecture or repair edits, and mark
-  them as proposals that are never written. Nothing in `drift`, `diff`,
-  `reconcile`, or `discover` writes to the Intent — proposals are for
-  surfacing, and a human decides the architecture.
+  them as proposals. `drift`, `diff` and `reconcile` write nothing to the
+  Intent, and `discover`'s only write is `--write-intent <file>` — the file
+  the operator names, never an overwrite, still a proposal to review. A human
+  decides the architecture.
 
 ## What to do if it fails
 
