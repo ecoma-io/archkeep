@@ -149,17 +149,19 @@ never a rule that found nothing.
 | `decisions`  | Walks the full chain behind one recorded decision — decision to bound rows, projects, findings, verification level | no               |
 | `adr`        | Lists recorded architecture decisions and what each binds (`docs/adr/`)                                            | no               |
 | `rules`      | Lists official rules, shows details, verifies catalog integrity, or adds a rule                                    | no               |
-| `scenario`   | Evaluates a hypothetical change against the current architecture                                                   | no               |
 
-`check` is the only command that exits 1 on boundary findings — with three
-companions: `fitness` exits 1 when a declared function fails (a failing fitness
-function is a finding, not a print job), `delta` exits 1 when the compared
-change introduced a violation no active waiver covers, and `change` exits 1
-when the change produced architectural consequences its declaration did not
-cover (or skipped ones it did). The other twenty are
-descriptive or
-proposal-only: they answer questions about the architecture without claiming a
-violation. `context` answers the question an agent asks _before_ editing (what
+Five command verdicts can exit 1, and
+[../reference/exit-codes.md](../reference/exit-codes.md) owns that roster:
+`check` is the only command that exits 1 on boundary findings, `fitness` exits 1
+when a declared function fails (a failing fitness function is a finding, not a
+print job), `delta` exits 1 when the compared change introduced a violation no
+active waiver covers, `change` exits 1 when the change produced architectural
+consequences its declaration did not cover (or skipped ones it did), and
+`rules verify` exits 1 when a rule artifact does not match the bytes its
+catalog recorded — the only `rules` verb whose verdict carries an exit. The
+rest are descriptive or proposal-only: they answer questions about the
+architecture without claiming a violation. `context` answers the question an
+agent asks _before_ editing (what
 is this project allowed to reach?); `impact` answers the question during
 planning (what depends on this?); `scenario` answers the question during
 planning too (what if this dependency changed?); `explain` answers the question after a
