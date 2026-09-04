@@ -25,10 +25,7 @@
  * to reach it.
  */
 
-export { isPlainObject } from "../values.mjs";
-
-/** @type {(value: unknown) => boolean} */
-export const isNonEmptyString = (value) => typeof value === "string" && value.trim() !== "";
+export { isPlainObject, isNonEmptyString } from "../values.mjs";
 
 /**
  * A value's type, for a refusal that shows what was actually there.

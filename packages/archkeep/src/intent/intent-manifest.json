@@ -40,7 +40,7 @@
           "type": "behavioral-test",
           "path": "src/report/json.test.mjs",
           "assertion": "JSON envelope throws on status=ok + incomplete coverage, status/exitCode disagreement, coverage.complete/notAnalyzed disagreement",
-          "sha256": "a371d36b89b10c5a4bda4d9e9a2e3bde114256c1377eb95699c9f0f195aabc4a"
+          "sha256": "8f587d3bd3f06519b90f760e7eafc091ca4e4cf26b67929ab180abe35c36c8f0"
         },
         {
           "type": "source-evidence",

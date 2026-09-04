@@ -67,7 +67,11 @@ describe("buildDecision — the executable verdict contract", () => {
     // is exactly what this test pins red.
     for (const verdict of ["perhaps", "PASS", "pass ", "skipped", "", 42, true, {}]) {
       expect(() =>
-        buildDecision({ ...complete, verdict, notApplicableReason: "did not apply" }),
+        buildDecision({
+          ...complete,
+          verdict: /** @type {any} */ (verdict),
+          notApplicableReason: "did not apply",
+        }),
       ).toThrow(/expected one of/);
     }
   });
@@ -77,7 +81,12 @@ describe("buildDecision — the executable verdict contract", () => {
     // the reason an envelope ships — byte-present, semantically absent.
     for (const reason of ["", "   ", 42, {}]) {
       expect(() =>
-        buildDecision({ coverageComplete: false, findings: 0, status: "no-verdict", reason }),
+        buildDecision({
+          coverageComplete: false,
+          findings: 0,
+          status: "no-verdict",
+          reason: /** @type {any} */ (reason),
+        }),
       ).toThrow(/non-empty reason/);
     }
   });
@@ -97,7 +106,11 @@ describe("buildDecision — the executable verdict contract", () => {
     // 42 — a whitespace reason is a byte-present, semantically absent one.
     for (const notApplicableReason of ["", "   ", 42, null]) {
       expect(() =>
-        buildDecision({ ...complete, verdict: "not_applicable", notApplicableReason }),
+        buildDecision({
+          ...complete,
+          verdict: "not_applicable",
+          notApplicableReason: /** @type {any} */ (notApplicableReason),
+        }),
       ).toThrow(/notApplicableReason/);
     }
   });
@@ -132,7 +145,11 @@ describe("fitnessVerdict — the row-level verdict constructor", () => {
     // the row looked judged while the reader was told nothing.
     for (const notApplicableReason of ["", "   ", 42]) {
       expect(() =>
-        fitnessVerdict({ ...base, verdict: "not_applicable", notApplicableReason }),
+        fitnessVerdict({
+          ...base,
+          verdict: "not_applicable",
+          notApplicableReason: /** @type {any} */ (notApplicableReason),
+        }),
       ).toThrow(/notApplicableReason/);
     }
   });
