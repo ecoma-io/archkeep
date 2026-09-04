@@ -191,7 +191,8 @@ answer is to surface it, never to ignore it.
    when one `fail`s;
    `archkeep adr` lists the recorded architecture decisions and what each binds;
    and `archkeep reconcile --propose` / `archkeep discover --propose` shape a stale
-   model or a blank one — all proposals, never written. Consult them for
+   model or a blank one — all proposals; the only write is
+   `discover --propose --write-intent <file>`, to a file the operator names. Consult them for
    context, and let their zero-verdict exits stay out of the change's clean/not
    verdict: `check` is the only command that exits 1 on boundary findings —
    `fitness` also exits 1 when a declared function `fail`s.

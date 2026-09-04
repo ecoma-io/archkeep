@@ -102,11 +102,14 @@ Three consequences follow directly:
 
 ## Absence
 
-A workspace predating this feature, and any non-`check` command, is unaffected:
-`decision` is absent from those envelopes, and the bytes of the rest of the
-envelope are unchanged. `schemaVersion` stays `2` — additive fields do not move
-it; only a rename, retype, or removal does (see
-[json-output.md](json-output.md)'s stability promise).
+`decision` rides the `check`, `delta` and `change` envelopes — and no others;
+[json-output.md](json-output.md)'s `decision` row owns that carrier roster, so
+a fourth carrier is a change there first. Every other command's envelope has
+no `decision` key, and on the three that carry it the field is additive: the
+bytes of the rest of the envelope are unchanged by its presence.
+`schemaVersion` stays `2` — additive fields do not move it; only a rename,
+retype, or removal does (see [json-output.md](json-output.md)'s stability
+promise).
 
 ## Where the vocabulary lives in code
 
@@ -119,5 +122,9 @@ the wall clock. `buildDecision`, the executable form of I1–I5, lives in
 `src/report/evidence.mjs` re-exports it under the same name for the
 render-side callers (`src/commands/*`) that build a decision while composing
 the payload they render — a path kept, never a second implementation. The
-engine's own `check` command is the only caller today, and
-it emits only `pass` / `fail` / `unknown`.
+callers today are `delta` and `change` directly, plus
+`src/commands/coverage-verdict.mjs`, the shared coverage-refusal builder that
+attaches a `decision` for the commands declaring `decision: true` (the same
+two); `check` reaches `buildDecision` through `verdictFor` (`src/verdict.mjs`),
+which imports the governance module directly. Every envelope `decision` is
+`pass` / `fail` / `unknown`.

@@ -70,8 +70,11 @@ for them, only the discipline that a rule which could not be run is never a
 rule that passed ([../concepts/custom-rules.md](../concepts/custom-rules.md)).
 Every command outside that five-verb roster is descriptive or proposal-only —
 it exits 0 when the run completes and 3 when it could not fully look — and both
-`--propose` surfaces mark their output as proposals that are never written — no
-command writes to the Intent.
+`--propose` surfaces mark their output as proposals. The one command that
+writes an Intent file is `discover --propose --write-intent <file>`: the
+operator names the target, the command refuses to overwrite, and what lands is
+a proposal to review, never an enacted law
+([discovery.md](../reference/discovery.md)).
 Reconciling a stale declared architecture with the observed one is a human
 decision the CLI can only shape, never make.
 

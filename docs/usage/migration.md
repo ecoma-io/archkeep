@@ -26,8 +26,11 @@ written — by hand.
 | [5. Converge](#5-converge)                     | `archkeep reconcile --propose`     | the operator, each round                 |
 | [6. Enforce](#6-enforce)                       | `archkeep drift`, `archkeep check` | CI gates on the verdict                  |
 
-Every command in that table is read-only: none of them writes a byte of the
-model, at any step, under any flag. Steps 3 and 4 are where the architecture is
+Every command in that table is read-only, with the one exception its own step
+names: `discover --propose --write-intent <file>` writes the proposal to the
+file the operator names, refusing to overwrite
+([discovery.md](../reference/discovery.md)). Nothing writes unprompted, at any
+step, under any other flag. Steps 3 and 4 are where the architecture is
 actually decided, and they are the two with no command beside them —
 deliberately, because [architecture-authority.md](../doctrine/architecture-authority.md)
 owns the line that keeps the deciding on the human side of it.
@@ -106,8 +109,13 @@ The four candidate classes and the derivations behind them are
 
 Two properties of this step matter more than its output:
 
-- **It writes nothing.** No `architecture-intent.json` appears, and the working
-  tree is unchanged after the run. There is no flag that applies a proposal.
+- **It writes no model file — unless the operator names a target.** Under plain
+  `--propose`, no `architecture-intent.json` appears. The one flag that writes
+  the proposal as a model file is `--write-intent <file>`: the proposal
+  serialized into a valid intent document at the path you name, refusing to
+  overwrite a file already there. What lands is still a proposal to review
+  like a diff, never an enacted law
+  ([discovery.md](../reference/discovery.md)).
 - **Incomplete coverage is a refusal here, not a warning.** Where plain
   `discover` prints an incomplete report and exits 3, `--propose` declines to
   produce candidates at all:
@@ -145,8 +153,8 @@ adopt a proposal on its own authority
 
 ## 4. Write back
 
-The operator writes two files by hand. Both are reviewed like code, because both
-are law.
+The operator writes two files, and both are reviewed like code, because both
+are law. One of them has a tool-assisted path.
 
 - **`architecture-intent.json`** — what the architecture _is_: the boundaries,
   and the relationships the team holds sacred. Schema, sections and judgment
@@ -155,8 +163,12 @@ are law.
   and shape: [policies.md](../concepts/policies.md); what to put in it:
   [boundaries.md](../concepts/boundaries.md).
 
-Nothing copies the proposal into either file. The candidate list is evidence for
-a decision; the file is the decision.
+`discover --propose --write-intent architecture-intent.json` drafts the intent
+file straight from the proposal, refusing to overwrite a file already at the
+target — what lands is a draft to review as a diff, not a decision
+([discovery.md](../reference/discovery.md)). The boundary config has no writer
+at all: no flag copies the proposal into it, and every row of it is typed by
+hand. The candidate list is evidence for a decision; the file is the decision.
 
 **Write the boundary config before you run `drift`.** `discover` and
 `reconcile` both complete without one, but `drift` resolves the boundary law and
@@ -276,8 +288,12 @@ migration through the boundary config file itself.
 
 ## What never happens
 
-- No command writes `architecture-intent.json`, at any step, under any flag.
+- No command writes `architecture-intent.json` unprompted: the one writer is
+  `discover --propose --write-intent <file>`, named by the operator, refusing
+  to overwrite — and what it writes is still a proposal to review.
 - No command writes the boundary config.
-- A proposal is never an instruction, and `proposed` is never authoritative.
+- A proposal is never authoritative, and no command enacts one: even
+  `--write-intent` writes a draft whose own stderr line says it is "a
+  proposal, not the law".
 - An incomplete read is never a clean answer — every step above refuses rather
   than describing a tree it could not finish reading.
