@@ -23,7 +23,11 @@ import { stripTrailingSlashes } from "../path-util.mjs";
 import { suppressionCovers } from "../config.mjs";
 import { referenceTime } from "../governance/clock.mjs";
 import { suppressionFate } from "../governance/waiver.mjs";
-import { resolveCommandContext, unownedGapWithoutRunConfiguration } from "./context.mjs";
+import {
+  resolveCommandContext,
+  unownedGapWithoutRunConfiguration,
+  untrackedOwnedFiles,
+} from "./context.mjs";
 import { partitionUnownedCoverage } from "./coverage-acceptance.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
@@ -44,7 +48,7 @@ import { evaluateRun, exemptResolvedFile } from "../rules/index.mjs";
 import { orphanedNotDependOnTags, unmatchedConstraintRows } from "../rules/tags.mjs";
 import { judgeTsconfigPaths } from "../tsconfig-paths.mjs";
 import { verdictFor } from "../verdict.mjs";
-import { listTrackedFiles } from "../workspace.mjs";
+import { listTrackedFiles, listUntrackedFiles } from "../workspace.mjs";
 
 /**
  * A total order over violations, so a report's byte sequence is an invariant
@@ -184,10 +188,21 @@ function declaredEdgeManifest({ provider, graph }, sourceProject) {
  * readers: a test drives the real analysis, the real rules and the real
  * report over a fixture tree, and pins the exact `file:line:column` a
  * developer would act on, without an Nx installation or a git repository.
+ * `listUntracked` is the third git seam, the one the tracked universe is
+ * audited against (#675): it answers with the worktree files the universe
+ * left out (`../workspace.mjs`'s `listUntrackedFiles`). It is injected
+ * separately rather than derived from `listFiles` because the two are only
+ * paired when BOTH are git's — a caller that injected a tracked universe has
+ * already decided what the whole tree is, and asking git what else exists
+ * would answer a different tree than the one `listFiles` named. That is why
+ * the default below resolves the real listing only when `listFiles` is also
+ * the real one, and treats an injected universe as the whole story: its
+ * untracked complement is empty by construction, not by claim.
  *
  * @param {{format: string, config: string|null, paths: string[],
  *   evidenceOut?: string|null}} options
- * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} context
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function,
+ *   listUntracked?: Function}} context
  * @returns {Promise<{report: string, violations: number, declaredEdgeFindings: number,
  *   goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number,
  *   intentUnresolved: number, intentUnresolvedDecisionRefs: number, fitnessFail: number,
@@ -195,7 +210,10 @@ function declaredEdgeManifest({ provider, graph }, sourceProject) {
  *   customRuleEvidence: {rule: string, bytes: Uint8Array}[], customRulesDeclared: boolean,
  *   analyzed: number, unchecked: number, blindSpots: number, waived?: number}>}
  */
-export async function check(options, { cwd, readGraph, listFiles = listTrackedFiles }) {
+export async function check(
+  options,
+  { cwd, readGraph, listFiles = listTrackedFiles, listUntracked },
+) {
   const commandContext = resolveCommandContext(
     { cwd, paths: options.paths },
     { readGraph, listFiles },
@@ -791,6 +809,45 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     ...(unconstrainedImportNote === null ? [] : [unconstrainedImportNote]),
   ];
 
+  // The tracked-universe boundary, audited (#675): every file a project owns,
+  // that an analyzer could judge, and that this run never read because git
+  // does not track it yet. The universe above is `listFiles(root)` —
+  // `git ls-files` verbatim — so a file that was never `git add`-ed never
+  // entered it, and before this audit a run over such a tree printed the same
+  // clean verdict as a run over the whole tree, byte for byte, with nothing
+  // anywhere naming what the universe had left out. `untrackedOwnedFiles`
+  // (`./context.mjs`) narrows the complement to the files whose absence can
+  // change what the verdict claims; the ownership and language tests are the
+  // two this module already runs over the tracked list, reused rather than
+  // re-derived.
+  //
+  // The verdict posture is the `unowned-files` bargain, and the completeness
+  // law decides it: the three no-verdict axes (`verdictFor`'s `unchecked`,
+  // `blindSpots`, `analyzed`) are all about files the universe CONTAINED —
+  // a whole-file failure, an unjudged site, a run that judged nothing —
+  // and the precedent for withholding (zero analysis, #619/#620/#634) is a
+  // verdict that was VACUOUS, not one that was scoped. This run judged every
+  // file its universe held, so the verdict over that universe stands — exit
+  // code and `coverage.complete` unchanged, exactly as the `coverageGaps`
+  // channel's contract states (`../../../../docs/reference/json-output.md`:
+  // "no kind changes `complete`, `status`, or the exit code") — but the clean
+  // verdict over a partial universe is now distinguishable from a clean
+  // verdict over the whole one, in both faces, with the full list a parser
+  // can act on. What is forbidden here is not exit 0; it is silence.
+  //
+  // Workspace-wide on purpose, the same posture `unownedGap` holds: a
+  // `check <path>` run must not be able to hide an unread file elsewhere in
+  // the tree by naming a path that excludes it. And resolved through the
+  // `listUntracked` seam's conditional default — an injected universe is the
+  // whole story (see this function's doc), so the audit asks git only when
+  // git also built the universe.
+  const untrackedListing =
+    listUntracked ?? (listFiles === listTrackedFiles ? listUntrackedFiles : null);
+  const untrackedOwned = untrackedOwnedFiles({
+    untracked: untrackedListing === null ? [] : untrackedListing(root),
+    projects: commandContext.workspace.projects,
+  });
+
   // A polyglot coverage gap: the Nx graph carries no polyglot edges because
   // the plugin is not registered, but polyglot manifests exist under project
   // roots. The checker still judged every import it found — this is not a
@@ -864,6 +921,13 @@ export async function check(options, { cwd, readGraph, listFiles = listTrackedFi
     ...(unsupportedLanguageFiles.length > 0
       ? [{ kind: "unsupported-language", files: [...unsupportedLanguageFiles].sort() }]
       : []),
+    // The universe audit above (#675): project-owned, analyzable files the
+    // worktree holds that this run never read, because the universe is the
+    // tracked set. Contributed only when the list is non-empty, so a tree
+    // with nothing beyond its index reports exactly the bytes it reported
+    // before; sorted already, by the one function that built it, so the row's
+    // bytes cannot vary with git's worktree-traversal order (E-F10).
+    ...(untrackedOwned.length > 0 ? [{ kind: "untracked-files", files: untrackedOwned }] : []),
   ];
 
   // One verdict computation for both faces: the JSON envelope spreads it and

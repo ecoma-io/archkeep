@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { markersAt, resolveCommandContext } from "./context.mjs";
+import { markersAt, resolveCommandContext, untrackedOwnedFiles } from "./context.mjs";
 
 /** Every tmpdir this file creates, cleaned up after each test that made one. */
 const roots = [];
@@ -926,6 +926,55 @@ describe("resolveCommandContext — unownedGap, the tolerated half of the same q
     expect(
       context.analysis.failures.some((failure) => failure.sourceFile === "tooling.config.mjs"),
     ).toBe(true);
+  });
+});
+
+describe("untrackedOwnedFiles — the population the tracked universe left out (#675)", () => {
+  // The spelling `createWorkspace` emits: a root-level project's root is
+  // normalized to "" at ingestion (`../workspace.mjs`), and this function
+  // takes that list as its input, never a raw graph.
+  const projects = [
+    { name: "alpha", root: "libs/alpha" },
+    { name: "root", root: "" },
+  ];
+
+  it("keeps the analyzable files a project owns, in sorted order", () => {
+    // Fed in the reverse of the reported order: the row's bytes must not vary
+    // with the order git happens to answer in (E-F10).
+    const files = untrackedOwnedFiles({
+      untracked: ["libs/alpha/zeta.go", "libs/alpha/alpha.ts", "libs/alpha/one.py"],
+      projects,
+    });
+    expect(files).toEqual(["libs/alpha/alpha.ts", "libs/alpha/one.py", "libs/alpha/zeta.go"]);
+  });
+
+  it("drops files no project owns, and files no analyzer could judge", () => {
+    // No root-level project here: with one (root ""), every path is owned.
+    const files = untrackedOwnedFiles({
+      untracked: [
+        "elsewhere/stray.go", // owned by no project
+        "libs/alpha/notes.md", // furniture, not analyzable
+        "libs/alpha/data.json", // still furniture
+        "libs/alpha/alpha.go", // owned and analyzable — the one that stays
+      ],
+      projects: [projects[0]],
+    });
+    expect(files).toEqual(["libs/alpha/alpha.go"]);
+  });
+
+  it("attributes a root-level project's files the way the tracked list is attributed", () => {
+    // The workspace-root project (root "") owns a new file at any depth —
+    // the same longest-prefix answer `createWorkspace` gave the tracked list.
+    const files = untrackedOwnedFiles({
+      untracked: ["scripts/new-tool.mjs", "deep/nested/other.go"],
+      projects,
+    });
+    expect(files).toEqual(["deep/nested/other.go", "scripts/new-tool.mjs"]);
+  });
+
+  it("answers empty exactly when the universe omitted nothing a verdict could reach", () => {
+    expect(untrackedOwnedFiles({ untracked: [], projects })).toEqual([]);
+    expect(untrackedOwnedFiles({ untracked: ["libs/alpha/notes.md"], projects })).toEqual([]);
   });
 });
 

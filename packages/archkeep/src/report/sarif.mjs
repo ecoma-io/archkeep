@@ -705,6 +705,30 @@ export function sarifCoverageGapNotification(gap) {
       },
     };
   }
+  // Files a project owns that git does not track (#675) — present in the
+  // worktree, absent from the `git ls-files` universe this run was built
+  // from. Bounded the same way the two unowned arms above bound their own
+  // lists, and for the same reason: the count is the fact an uploader acts
+  // on, the paths its sample, and the remainder is named rather than dropped.
+  if (gap.kind === "untracked-files") {
+    const files = gap.files ?? [];
+    const shown = files.slice(0, UNOWNED_SAMPLE_LIMIT);
+    const remaining = files.length - shown.length;
+    const listed =
+      shown.length > 0
+        ? `: ${shown.join(", ")}${remaining > 0 ? `, and ${remaining} more` : ""}`
+        : "";
+    return {
+      level: "warning",
+      message: {
+        text:
+          `${files.length} project-owned file${files.length === 1 ? "" : "s"} ` +
+          `${files.length === 1 ? "is" : "are"} not tracked by git — never read by this run, ` +
+          `so no boundary verdict in this run covers ` +
+          `${files.length === 1 ? "it" : "them"}${listed}`,
+      },
+    };
+  }
   return {
     level: "warning",
     message: {
@@ -793,8 +817,9 @@ export function sarifDecisionRefNotification(decisionRef) {
  *   `check` exiting 3 on an intent it could not establish uploaded SARIF
  *   byte-identical to a clean run's.
  * - `coverageGaps` — coverage this run knows it did not provide: the polyglot
- *   edges nothing in the workspace covers, and the tracked analyzable files no
- *   project owns (`sarifCoverageGapNotification`).
+ *   edges nothing in the workspace covers, the tracked analyzable files no
+ *   project owns, and the project-owned files git does not track that this
+ *   run therefore never read (`sarifCoverageGapNotification`).
  * - `unresolvedDecisionRefs` — every citation no ADR, rule, or fitness record
  *   answers (`sarifDecisionRefNotification`), sorted, which is the order
  *   `../../cli.mjs`'s JSON envelope lists the same set in: two faces of one
