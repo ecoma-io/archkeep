@@ -48,6 +48,7 @@
 import { readFileSync } from "node:fs";
 
 import { canonicalJsonReplacer } from "../canonical.mjs";
+import { isPlainObject } from "../values.mjs";
 import { buildDependencies, buildProjects } from "./graph.mjs";
 
 /** The only snapshot schemaVersion this module writes and reads. */
@@ -516,11 +517,6 @@ export function providerMismatch(baselineProvider, currentProvider) {
     `'${currentProvider}' — the two project models may attribute the same tree to different ` +
     `projects, so structural differences may be provider artefacts rather than real changes`
   );
-}
-
-/** Non-empty plain-object guard used across validation. */
-function isPlainObject(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 /** Describes a value for error messages without dumping it. */

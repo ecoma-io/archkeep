@@ -71,6 +71,8 @@
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
+import { isPlainObject } from "./values.mjs";
+
 /** The severities ESLint itself recognises for a rule entry. */
 const KNOWN_SEVERITIES = new Set(["off", "warn", "error", 0, 1, 2]);
 const OFF_SEVERITIES = new Set(["off", 0]);
@@ -93,11 +95,6 @@ const OFF_SEVERITIES = new Set(["off", 0]);
 // brace-form `files` entry is refused as scoped, same as a directory-scoped
 // one — a stricter refusal than strictly necessary, not a silent guess.
 const BARE_EXTENSION_GLOB = /^\*\*\/\*\.[A-Za-z0-9]+$/u;
-
-/** @type {(value: unknown) => value is Record<string, unknown>} */
-function isPlainObject(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /** A rule entry's severity — the bare value itself, or the `[severity, …]` pair's first element. */
 function severityOf(value) {
