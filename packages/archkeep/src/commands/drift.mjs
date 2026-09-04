@@ -250,7 +250,7 @@ export async function driftForCheck(commandContext, io = {}) {
  * @param {object} intent The normalized intent model.
  * @returns {{kind: string, row: object}[]}
  */
-export function intentDecisionRefRows(intent) {
+function intentDecisionRefRows(intent) {
   return governanceIntentRows(intent).filter(
     ({ row }) => typeof row?.decisionRef === "string" && row.decisionRef.trim() !== "",
   );

@@ -227,17 +227,20 @@ import {
 
 /** PEP 503 name normalization: case-insensitive, runs of `-_.` collapse to `-`. */
 export function normalizePackageName(name) {
+  // used by its own test
   return name.toLowerCase().replace(/[-_.]+/g, "-");
 }
 
 /** The package name a PEP 508 requirement string refers to, or null. */
 export function parseRequirementName(requirement) {
+  // used by its own test
   const match = requirement.trim().match(/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?/);
   return match ? normalizePackageName(match[0]) : null;
 }
 
 /** Every dependency name a pyproject manifest declares, deduped. */
 export function collectDeclaredDependencies(manifest) {
+  // used by its own test
   const names = new Set();
   const groups = [
     manifest.project?.dependencies ?? [],
@@ -630,6 +633,7 @@ const READ_BUILD_BACKENDS = new Set([
  * @returns {{ directories: string[], unmodelled: string[] }}
  */
 export function pythonPackageLayout(manifestText) {
+  // used by its own test
   if (manifestText === null) return { directories: [], unmodelled: [] };
   const manifest = parseManifest(manifestText);
   if (manifest === null) {
@@ -730,6 +734,7 @@ function ownPackageOf(file, projectRoot, directories) {
  * @returns {Map<string, { file: string|null, namespace: boolean }>}
  */
 export function pythonModuleIndex(projectRoot, files, directories = []) {
+  // used by its own test
   const index = new Map();
   for (const file of files) {
     if (!file.endsWith(".py")) continue;
@@ -755,6 +760,7 @@ export function pythonModuleIndex(projectRoot, files, directories = []) {
  * @returns {string[]}
  */
 export function pythonImportRoots(projectRoot, files, directories = []) {
+  // used by its own test
   return [...pythonModuleIndex(projectRoot, files, directories).keys()]
     .filter((name) => !name.includes("."))
     .sort();
@@ -1059,6 +1065,7 @@ function joinContinuedStatement(physicalLines, lineOffsets, index) {
  *   continuation?: boolean }[]}
  */
 export function parsePythonImportSites(pythonText) {
+  // used by its own test
   const sites = [];
   // Byte tolerance (`contract.md`): the lines a CRLF file splits into still
   // carry their `\r`, and a BOM-prefixed file's first line starts with
@@ -1166,6 +1173,7 @@ export function parsePythonImportSites(pythonText) {
  * @returns {string[]} Reasons, at most one per malformation kind.
  */
 export function pythonImportMalformations(pythonText) {
+  // used by its own test
   /** @type {string[]} */
   const reasons = [];
   // A bare `import` or `from` at the end of the file, or on a line with

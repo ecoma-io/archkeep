@@ -29,7 +29,7 @@ import { tagMatches } from "./match.mjs";
 import { getPath, pathExists } from "./reachability.mjs";
 
 /** `"a", "b"` — how upstream renders a tag list inside a message. */
-export function stringifyTags(tags) {
+function stringifyTags(tags) {
   return tags.map((t) => `"${t}"`).join(", ");
 }
 
@@ -55,7 +55,7 @@ export function hasTag(project, tag) {
 }
 
 /** True when the project carries NONE of these tags — upstream's spelling. */
-export function hasNoneOfTheseTags(project, tags) {
+function hasNoneOfTheseTags(project, tags) {
   return tags.filter((tag) => hasTag(project, tag)).length === 0;
 }
 
@@ -165,6 +165,7 @@ export function orphanedNotDependOnTags(depConstraints, graph) {
  * are what the message prints so a reader can see the hop that did it.
  */
 export function findDependenciesWithTags(targetProject, tags, graph, reach) {
+  // used by its own test
   const reachable = Object.keys(graph.nodes)
     .sort()
     .filter(

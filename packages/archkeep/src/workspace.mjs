@@ -721,6 +721,7 @@ const DOTLESS_FURNITURE = Object.freeze(
  * @returns {boolean}
  */
 export function exemptFromUnsupportedLanguage(sourceFile) {
+  // used by its own test
   const base = sourceFile.slice(sourceFile.lastIndexOf("/") + 1);
   // Dotfiles are editor and tool state (`.gitignore`, `.env`, `.npmrc`).
   if (base.startsWith(".")) return true;

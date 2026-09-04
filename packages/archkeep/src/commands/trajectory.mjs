@@ -107,7 +107,7 @@ const OBSERVATION_BASIS = "graph_snapshots";
  * constant in the envelope, so a consumer branches on a documented value
  * rather than on prose.
  */
-export const INSUFFICIENT_HISTORY = "insufficient_history";
+export const INSUFFICIENT_HISTORY = "insufficient_history"; // used by its own test
 
 /**
  * The derived-number block for one structural axis (projects keyed by name,
@@ -187,6 +187,7 @@ export const INSUFFICIENT_HISTORY = "insufficient_history";
  *   trends: TrajectoryTrends|null}}
  */
 export function computeTrajectory(files) {
+  // used by its own test
   const n = files.length;
   const available = n >= 2;
 

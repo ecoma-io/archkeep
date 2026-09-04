@@ -191,6 +191,7 @@ function parseArchkeepJson(text) {
  * for a tree that kept Nx-shaped project boundaries without keeping Nx.
  */
 export const DEFAULT_MANIFEST_NAMES = Object.freeze([
+  // used by its own test
   "project.json",
   "package.json",
   "go.mod",
@@ -255,6 +256,7 @@ const PROJECT_TYPES = ["app", "lib", "e2e"];
  * @see DEFAULT_MANIFEST_NAMES
  */
 export const DEFAULT_INFER_EXCLUDE = Object.freeze([
+  // used by its own test
   "**/docs/**",
   "**/fixtures/**",
   "**/__fixtures__/**",
@@ -549,6 +551,7 @@ const TOP_LEVEL_KEYS = [
  * @returns {string[]}
  */
 export function findNativeModelViolations(raw) {
+  // used by its own test
   if (!isPlainObject(raw)) return [`archkeep.json: expected an object, got ${describe(raw)}`];
 
   const violations = [];
@@ -699,6 +702,7 @@ export function findNativeModelViolations(raw) {
  * @returns {object} `NativeModel` — see `./index.mjs`.
  */
 export function normalizeNativeModel(raw) {
+  // used by its own test
   // `raw.projects` may be absent — `findNativeModelViolations` above validates
   // that shape the same way it validates `projects: {}`, so this has to read
   // it back the same way rather than assume the key is always present.

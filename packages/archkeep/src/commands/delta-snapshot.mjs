@@ -52,7 +52,7 @@ import { isPlainObject } from "../values.mjs";
 import { buildDependencies, buildProjects } from "./graph.mjs";
 
 /** The only snapshot schemaVersion this module writes and reads. */
-export const EVIDENCE_SNAPSHOT_SCHEMA_VERSION = 1;
+export const EVIDENCE_SNAPSHOT_SCHEMA_VERSION = 1; // used by its own test
 
 /**
  * Builds the snapshot object from already-captured evidence.
@@ -338,6 +338,7 @@ export function readEvidenceSnapshot(path, io = {}) {
  * @throws {Error} on every condition above.
  */
 export function parseEvidenceSnapshot(text, path) {
+  // used by its own test
   let parsed;
   try {
     parsed = JSON.parse(text);

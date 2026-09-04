@@ -188,7 +188,7 @@ function withoutGenericArguments(rhs) {
  * @returns {{ specifier: string, importableName: string|null, specifierStartInBody: number }|null} `null`
  *   when the body is a using STATEMENT's shape, not a directive's.
  */
-export function classifyUsingBody(body) {
+function classifyUsingBody(body) {
   const trimmed = body.trim();
   if (trimmed === "") return null;
   const staticForm = STATIC_FORM.exec(trimmed);
@@ -236,6 +236,7 @@ export function classifyUsingBody(body) {
  * @returns {{ specifier: string, importableName: string|null, offset: number }[]}
  */
 export function parseCSharpDirectiveSites(csharpText) {
+  // used by its own test
   const source = maskCSharpComments(csharpText);
   const sites = [];
   for (const match of source.matchAll(CS_USING_BODY)) {
@@ -305,6 +306,7 @@ export function parseCSharpDirectiveSites(csharpText) {
  *   each naming its line. Empty when the directives read fully.
  */
 export function csharpDirectiveMalformations(csharpText) {
+  // used by its own test
   const source = maskCSharpComments(csharpText);
   /** @type {string[]} */
   const reasons = [];

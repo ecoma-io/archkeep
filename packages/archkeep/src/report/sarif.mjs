@@ -62,15 +62,15 @@ import { TSCONFIG_PATHS_MESSAGE_IDS, TSCONFIG_PATHS_MESSAGES } from "../tsconfig
 import { formatConstraint } from "./text.mjs";
 
 /** The schema every consumer of this file validates against. */
-export const SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json";
-export const SARIF_VERSION = "2.1.0";
+const SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json";
+const SARIF_VERSION = "2.1.0";
 
 /**
  * The single rule id every failing fitness function's result shares — see
  * `sarifRules()`'s own comment for why one id stands in for the whole
  * open-ended, workspace-declared set.
  */
-export const FITNESS_FAILED_RULE_ID = "fitnessFunctionFailed";
+export const FITNESS_FAILED_RULE_ID = "fitnessFunctionFailed"; // used by its own test
 
 /**
  * A workspace-relative path as a URI reference: each segment percent-encoded,
@@ -106,6 +106,7 @@ export const FITNESS_FAILED_RULE_ID = "fitnessFunctionFailed";
  * @returns {string}
  */
 export function toUriReference(path) {
+  // used by its own test
   return path.split("/").map(encodeURIComponent).join("/");
 }
 
@@ -139,6 +140,7 @@ export function toUriReference(path) {
  * @returns {object[]}
  */
 export function sarifRules(customCatalogue = []) {
+  // used by its own test
   return [
     ...MESSAGE_IDS.map((id) => ({
       id,
@@ -231,6 +233,7 @@ const CUSTOM_RULE_INDEX_BASE =
  * @returns {object}
  */
 export function sarifCustomRuleResult(finding, ruleIndex) {
+  // used by its own test
   const physicalLocation =
     finding.sourceFile === undefined
       ? null
@@ -283,6 +286,7 @@ export function sarifCustomRuleResult(finding, ruleIndex) {
  * @returns {object}
  */
 export function sarifCustomRuleNotification(decision) {
+  // used by its own test
   const posture =
     decision.verdict === "not_applicable" ? "did not apply to this run" : "could not be judged";
   return {
@@ -305,6 +309,7 @@ export function sarifCustomRuleNotification(decision) {
  * @returns {object}
  */
 export function sarifResult(violation) {
+  // used by its own test
   const detail =
     `Import ${JSON.stringify(violation.specifier)} (${violation.kind}) ` +
     `from ${violation.sourceProject ?? "(no project)"} ` +
@@ -364,7 +369,7 @@ export function sarifResult(violation) {
  * @param {object} finding A finding from `../go-work.mjs` `compareGoWork`.
  * @returns {object}
  */
-export function sarifGoWorkResult(finding) {
+function sarifGoWorkResult(finding) {
   const physicalLocation = { artifactLocation: { uri: toUriReference(finding.file) } };
   if (finding.line !== null) {
     physicalLocation.region = { startLine: finding.line, startColumn: finding.column };
@@ -395,7 +400,7 @@ export function sarifGoWorkResult(finding) {
  * @param {object} finding A finding from `../tsconfig-paths.mjs`.
  * @returns {object}
  */
-export function sarifTsconfigPathsResult(finding) {
+function sarifTsconfigPathsResult(finding) {
   return {
     ruleId: finding.messageId,
     ruleIndex:
@@ -444,7 +449,7 @@ export function sarifTsconfigPathsResult(finding) {
  *   `declaredEdgeViolationsForCheck`, extended with `file` — workspace-relative.
  * @returns {object}
  */
-export function sarifDeclaredEdgeResult(finding) {
+function sarifDeclaredEdgeResult(finding) {
   return {
     ruleId: finding.messageId,
     ruleIndex: MESSAGE_IDS.indexOf(finding.messageId),
@@ -472,6 +477,7 @@ export function sarifDeclaredEdgeResult(finding) {
  * @returns {object}
  */
 export function sarifIntentResult(finding) {
+  // used by its own test
   return {
     ruleId: finding.rule,
     ruleIndex:
@@ -516,6 +522,7 @@ export function sarifIntentResult(finding) {
  * @returns {object}
  */
 export function sarifFitnessResult(decision, policySource = null) {
+  // used by its own test
   const result = {
     ruleId: FITNESS_FAILED_RULE_ID,
     ruleIndex:
@@ -548,6 +555,7 @@ export function sarifFitnessResult(decision, policySource = null) {
  * @returns {object}
  */
 export function sarifFitnessNotification(decision) {
+  // used by its own test
   return {
     level: "warning",
     message: {
@@ -567,7 +575,7 @@ export function sarifFitnessNotification(decision) {
  * @param {object} failure An `AnalysisFailure`.
  * @returns {object}
  */
-export function sarifNotification(failure) {
+function sarifNotification(failure) {
   const physicalLocation = { artifactLocation: { uri: toUriReference(failure.sourceFile) } };
   if (failure.line !== null) {
     physicalLocation.region = { startLine: failure.line, startColumn: failure.column };
@@ -601,6 +609,7 @@ export function sarifNotification(failure) {
  * @returns {object}
  */
 export function sarifIntentNotification(entry) {
+  // used by its own test
   return {
     level: "warning",
     message: {
@@ -641,6 +650,7 @@ const UNOWNED_SAMPLE_LIMIT = 10;
  * @returns {object}
  */
 export function sarifCoverageGapNotification(gap) {
+  // used by its own test
   const manifests = gap.manifests ?? [];
   const found = manifests.length > 0 ? `: ${manifests.join(", ")}` : "";
   if (gap.kind === "unregistered-plugin") {
@@ -760,7 +770,7 @@ export function sarifCoverageGapNotification(gap) {
  * @param {string} decisionRef The cited value, exactly as the row spelled it.
  * @returns {object}
  */
-export function sarifDecisionRefNotification(decisionRef) {
+function sarifDecisionRefNotification(decisionRef) {
   return {
     level: "warning",
     message: {
@@ -853,6 +863,7 @@ export function sarifDecisionRefNotification(decisionRef) {
  * @returns {object} A SARIF 2.1.0 log, ready to `JSON.stringify`.
  */
 export function buildSarifLog({
+  // used by its own test
   violations,
   failures,
   goWork,
@@ -1016,6 +1027,7 @@ export function buildSarifLog({
  * @returns {object}
  */
 export function sarifDeltaResult(entry, site) {
+  // used by its own test
   const target = entry.targetIsSpecifier
     ? `specifier ${JSON.stringify(entry.target)}`
     : entry.target;
@@ -1102,6 +1114,7 @@ export function sarifDeltaResult(entry, site) {
  * @returns {object} A SARIF 2.1.0 log, ready to `JSON.stringify`.
  */
 export function buildDeltaSarifLog({ delta, coverage, customCatalogue = [] }) {
+  // used by its own test
   const customRuleIndex = new Map(
     customCatalogue.map((entry, index) => [entry.ruleId, CUSTOM_RULE_INDEX_BASE + index]),
   );

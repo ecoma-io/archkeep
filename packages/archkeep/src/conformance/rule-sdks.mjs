@@ -52,6 +52,7 @@
  * other three to follow in the same change.
  */
 export const RULE_SDKS = Object.freeze([
+  // used by its own test
   Object.freeze({
     name: "rust",
     origin: true,
@@ -79,7 +80,7 @@ export const RULE_SDKS = Object.freeze([
 ]);
 
 /** The rule every SDK's reference artifact implements, by its declared name. */
-export const REFERENCE_RULE_NAME = "forbidden-tag-dependency";
+export const REFERENCE_RULE_NAME = "forbidden-tag-dependency"; // used by its own test
 
 /**
  * Every fixture, with the verdict the reference rule must answer it with.
@@ -97,6 +98,7 @@ export const REFERENCE_RULE_NAME = "forbidden-tag-dependency";
  * @type {Readonly<Record<string, "pass"|"fail"|"unknown"|"not_applicable">>}
  */
 export const EXPECTED_VERDICTS = Object.freeze({
+  // used by its own test
   "edge-into-an-undeclared-project": "unknown",
   "edge-into-forbidden-tag": "fail",
   "every-edge-clean": "pass",
@@ -110,6 +112,7 @@ export const EXPECTED_VERDICTS = Object.freeze({
  * @returns {string[]}
  */
 export function fixtureNames() {
+  // used by its own test
   return Object.keys(EXPECTED_VERDICTS);
 }
 
@@ -126,6 +129,7 @@ export function fixtureNames() {
  * @returns {string[]} One sentence per disagreement; empty when all agree.
  */
 export function disagreements(documents) {
+  // used by its own test
   if (!Array.isArray(documents) || documents.length < 2) {
     throw new Error(
       `archkeep: disagreements needs at least two documents to compare, got ` +

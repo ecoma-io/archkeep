@@ -52,7 +52,7 @@ import { clockViolations } from "./clock.mjs";
 import { describe, isPlainObject } from "../values.mjs";
 
 /** The only keys a validated `origin` may carry. */
-export const ORIGIN_KEYS = Object.freeze(["by", "tool", "on"]);
+export const ORIGIN_KEYS = Object.freeze(["by", "tool", "on"]); // used by its own test
 
 /**
  * @typedef {object} OriginRecord
@@ -135,6 +135,7 @@ export function originViolations(raw, io = {}) {
  * @throws {Error} naming every violation at once, prefixed by `at`.
  */
 export function validateOrigin(raw, io = {}, at = "origin") {
+  // used by its own test
   const violations = originViolations(raw, io).map((message) =>
     message.startsWith("origin.")
       ? `${at}.${message.slice("origin.".length)}`
@@ -181,6 +182,7 @@ export function recordOrigin({ by, tool, clock }) {
  * change, supersession, and bindings change is recorded as one of these.
  */
 export const DECISION_LIFECYCLE_KINDS = Object.freeze([
+  // used by its own test
   "status-transition",
   "supersession",
   "bindings-change",
@@ -234,6 +236,7 @@ export const DECISION_LIFECYCLE_KINDS = Object.freeze([
  *   the registry's `ADR_STATUSES`, a no-op event, or an invalid origin/clock.
  */
 export function recordDecisionLifecycle({
+  // used by its own test
   kind,
   decisionId,
   from = null,

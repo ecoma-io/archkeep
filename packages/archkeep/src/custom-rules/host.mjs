@@ -124,17 +124,17 @@ export const CUSTOM_RULE_TIMEOUT_MS = 10_000;
  * bundle for a large workspace is smaller — and it is what stops a claimed
  * length from being an allocation instruction.
  */
-export const CUSTOM_RULE_MAX_VERDICT_BYTES = 8 * 1024 * 1024;
+export const CUSTOM_RULE_MAX_VERDICT_BYTES = 8 * 1024 * 1024; // used by its own test
 
 /**
  * The most linear memory a rule may hold at the two boundaries the worker
  * measures. 256 MiB is far past what reading an evidence bundle needs and far
  * short of what a workspace's CI runner can absorb without noticing.
  */
-export const CUSTOM_RULE_MEMORY_LIMIT_BYTES = 256 * 1024 * 1024;
+export const CUSTOM_RULE_MEMORY_LIMIT_BYTES = 256 * 1024 * 1024; // used by its own test
 
 /** The four ABI symbols a rule module must export, and the kind each must be. */
-export const REQUIRED_EXPORTS = Object.freeze({
+const REQUIRED_EXPORTS = Object.freeze({
   memory: "memory",
   archkeep_alloc: "function",
   archkeep_describe: "function",

@@ -94,6 +94,7 @@ export const GOVERNANCE_ROW_KEYS = Object.freeze([
  * @returns {string[]}
  */
 export function governanceBlockViolations(raw, at) {
+  // used by its own test
   if (!isPlainObject(raw)) return [];
   const violations = [];
 

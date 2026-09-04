@@ -235,6 +235,7 @@ function parseRuleValue(value, index) {
  *   severity-only fallback has been applied.
  */
 export function extractBoundaryRule(flatConfig, readerOptions = {}) {
+  // used by its own test
   const pathScopedMode = readerOptions.pathScoped ?? "refuse";
   if (pathScopedMode !== "refuse" && pathScopedMode !== "bind-tree-wide") {
     throw new Error(

@@ -35,7 +35,7 @@ export function sanitize(text) {
  * @param {{name: string, root: string, tags: string[]}} project
  * @returns {string}
  */
-export function formatProject(project) {
+function formatProject(project) {
   const tags =
     project.tags.length > 0 ? ` [${project.tags.map((t) => sanitize(t)).join(", ")}]` : "";
   return `  ${sanitize(project.name)}  ${sanitize(project.root)}${tags}`;
@@ -47,7 +47,7 @@ export function formatProject(project) {
  * @param {{source: string, target: string, type: string}} edge
  * @returns {string}
  */
-export function formatEdge(edge) {
+function formatEdge(edge) {
   return `  ${sanitize(edge.source)} → ${sanitize(edge.target)} (${sanitize(edge.type)})`;
 }
 
@@ -57,7 +57,7 @@ export function formatEdge(edge) {
  * @param {{field: string, baseline: *, head: *}} change
  * @returns {string}
  */
-export function formatChange(change) {
+function formatChange(change) {
   const formatValue = (v) => {
     if (Array.isArray(v)) return v.length > 0 ? v.map((x) => sanitize(x)).join(", ") : "(none)";
     if (v === null || v === undefined) return "(none)";

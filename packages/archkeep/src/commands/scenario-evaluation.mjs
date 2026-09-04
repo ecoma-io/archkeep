@@ -55,7 +55,7 @@ import {
 // ---------------------------------------------------------------------------
 
 /** The supported scenario change types. */
-export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "dependency_removed"]);
+export const SCENARIO_CHANGE_TYPES = Object.freeze(["dependency_added", "dependency_removed"]); // used by its own test
 
 // ---------------------------------------------------------------------------
 // Input schema types

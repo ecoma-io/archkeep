@@ -113,7 +113,7 @@ const IDENTIFIER_BOUNDARY = new Set([" ", "\t", "\r", '"', "`", "(", ")"]);
  * @throws {Error} on an unterminated string — a string left open would
  *   otherwise swallow the rest of the line silently.
  */
-export function tokenizeGoWorkLine(line, lineNumber) {
+function tokenizeGoWorkLine(line, lineNumber) {
   const tokens = [];
   let at = 0;
   while (at < line.length) {

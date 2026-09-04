@@ -132,6 +132,7 @@ import {
  * character shifts nothing any record points at.
  */
 export function parseGoModulePath(goModText) {
+  // used by its own test
   const match = goModText.replace(/^\uFEFF/, "").match(/^module\s+(\S+)/m);
   if (!match) return null;
   const token = match[1];
@@ -170,6 +171,7 @@ const LEXICAL_START = /\/\/|\/\*|["'`]/g;
  * @returns {string} Same length as `goText`.
  */
 export function maskGoComments(goText) {
+  // used by its own test
   const scan = new RegExp(LEXICAL_START.source, "g");
   let masked = "";
   let copied = 0;
@@ -298,6 +300,7 @@ const GO_ALIAS_AT = /[\p{L}_.][\p{L}\p{Nd}_.]*\s+/uy;
  *   seen on. Empty when the imports read fully.
  */
 export function goImportMalformations(goText) {
+  // used by its own test
   const source = blankGoStringContents(maskGoComments(goText));
   /** @type {string[]} */
   const reasons = [];
@@ -417,6 +420,7 @@ const GO_IMPORT_ALIAS = "[\\p{L}_.][\\p{L}\\p{Nd}_.]*";
  * @returns {{ specifier: string, offset: number }[]}
  */
 export function parseGoImportSites(goText) {
+  // used by its own test
   const source = maskGoComments(goText);
   const sites = [];
   // import "p" | import alias "p" | import _ "p" | import . "p" — the path
@@ -457,6 +461,7 @@ export function parseGoImportSites(goText) {
 
 /** Every import path in a .go file (single-form and block-form), deduped. */
 export function parseGoImports(goText) {
+  // used by its own test
   return [...new Set(parseGoImportSites(goText).map((site) => site.specifier))];
 }
 
@@ -604,6 +609,7 @@ const isUnderModule = (importPath, modulePath) =>
  *   no module claims `importPath`.
  */
 export function resolveGoModule(importPath, modules) {
+  // used by its own test
   let matched = "";
   let project = null;
   for (const { modulePath, project: target } of modules) {

@@ -292,6 +292,7 @@ const POLYGLOT_GRAPH_MANIFESTS = Object.freeze([
  * @returns {readonly string[]}
  */
 export function watchedFilesFor(options, { unresolved = false } = {}) {
+  // used by its own test
   return Object.freeze([
     ...(typeof options.boundaryConfig === "string" ? [options.boundaryConfig] : []),
     ...(unresolved
@@ -376,6 +377,7 @@ function markersAt(root) {
  *   convention chain can find while carrying files that need one.
  */
 export function readWorkspaceOptions(root) {
+  // used by its own test
   const { hasNx, hasNative } = markersAt(root);
   if (hasNx && hasNative) {
     throw new Error(
@@ -450,6 +452,7 @@ const WATCHER_REGISTRATION_ID = "archkeep/watched-files";
  * text than the one on screen.
  */
 export const SERVER_CAPABILITIES = Object.freeze({
+  // used by its own test
   textDocumentSync: Object.freeze({
     openClose: true,
     change: TEXT_DOCUMENT_SYNC_KIND.full,

@@ -61,6 +61,7 @@ import { hasAuthority } from "./adr-registry.mjs";
 
 /** The closed set of per-decision fitness levels `computeDecisionFitness` emits. */
 export const DECISION_FITNESS_LEVELS = Object.freeze([
+  // used by its own test
   "enforced",
   "partially-enforced",
   "violated",
@@ -70,6 +71,7 @@ export const DECISION_FITNESS_LEVELS = Object.freeze([
 
 /** Whether a level names a red (never-healthy) direction. */
 export function isRedDirection(level) {
+  // used by its own test
   return level === "violated" || level === "unverifiable";
 }
 

@@ -87,7 +87,7 @@ import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/a
 import { formatPlanContextReport } from "../report/plan-context-text.mjs";
 
 /** How many dependents are listed before an explicit overflow note. */
-export const DEPENDENT_CAP = 10;
+export const DEPENDENT_CAP = 10; // used by its own test
 
 /**
  * The projects a change touches: the target project, plus every project whose
@@ -100,6 +100,7 @@ export const DEPENDENT_CAP = 10;
  * @returns {string[]} Distinct affected project names, sorted.
  */
 export function collectAffectedProjects(commandContext, paths) {
+  // used by its own test
   const affected = new Set();
   for (const { file, project } of commandContext.owned ?? []) {
     for (const p of paths) {
@@ -124,6 +125,7 @@ export function collectAffectedProjects(commandContext, paths) {
  * @returns {object[]}
  */
 export function collectImpact(projectName, affected, graph) {
+  // used by its own test
   const targets = [...new Set([projectName, ...affected])].sort((a, b) =>
     a < b ? -1 : a > b ? 1 : 0,
   );
@@ -172,6 +174,7 @@ function scopedFiles(commandContext, affected) {
  * @returns {{goWork: object|null, tsconfigPaths: object|null, failures: object[]}}
  */
 export function collectDrift(commandContext) {
+  // used by its own test
   const { root, tracked, workspace } = commandContext;
   const failures = [];
 

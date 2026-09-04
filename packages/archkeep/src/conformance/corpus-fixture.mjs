@@ -66,13 +66,13 @@ import { dirname, join } from "node:path";
 import { ADR_DIR, ADR_ID_PATTERN, ADR_STATUSES } from "../governance/adr-registry.mjs";
 
 /** The boundary law each case declares, under the default name a workspace gets. */
-export const BOUNDARY_CONFIG_FILE = "module-boundaries.config.mjs";
+export const BOUNDARY_CONFIG_FILE = "module-boundaries.config.mjs"; // used by its own test
 
 /** The forbid-everything law every case tree also carries — see the header. */
-export const DENY_ALL_CONFIG_FILE = "deny-all.config.mjs";
+export const DENY_ALL_CONFIG_FILE = "deny-all.config.mjs"; // used by its own test
 
 /** The shared TypeScript config, written only for a case that declares aliases. */
-export const TS_CONFIG_FILE = "tsconfig.base.json";
+const TS_CONFIG_FILE = "tsconfig.base.json";
 
 /**
  * The tag the deny-all policy demands and no case may declare.
@@ -82,7 +82,7 @@ export const TS_CONFIG_FILE = "tsconfig.base.json";
  * would make its own deny-all run permissive, and every `denyAll: 0` in it
  * would then be measuring nothing.
  */
-export const DENY_ALL_TAG = "corpus-tag-no-project-carries";
+export const DENY_ALL_TAG = "corpus-tag-no-project-carries"; // used by its own test
 
 /**
  * The eight `@nx/enforce-module-boundaries` options, all in their inert
@@ -100,7 +100,7 @@ export const DENY_ALL_TAG = "corpus-tag-no-project-carries";
  * buildable-library rule looks for, and it only ever acts in a case that also
  * turns `enforceBuildableLibDependency` on.
  */
-export const NEUTRAL_OPTIONS = Object.freeze({
+const NEUTRAL_OPTIONS = Object.freeze({
   allow: [],
   buildTargets: ["build"],
   enforceBuildableLibDependency: false,
@@ -129,7 +129,7 @@ function write(root, relative, text) {
  * @param {object} options The eight options, already merged.
  * @returns {string}
  */
-export function renderPolicyModule(depConstraints, options) {
+function renderPolicyModule(depConstraints, options) {
   return (
     `export const depConstraints = ${JSON.stringify(depConstraints, null, 2)};\n` +
     `export const moduleBoundaryOptions = ${JSON.stringify(options, null, 2)};\n`
@@ -143,7 +143,7 @@ export function renderPolicyModule(depConstraints, options) {
  * @param {object} [overrides]
  * @returns {object}
  */
-export function optionsFor(overrides) {
+function optionsFor(overrides) {
   return { ...NEUTRAL_OPTIONS, ...(overrides ?? {}) };
 }
 
@@ -158,7 +158,7 @@ export function optionsFor(overrides) {
  *
  * @returns {object[]}
  */
-export function denyAllConstraints() {
+function denyAllConstraints() {
   return [
     {
       sourceTag: "*",
@@ -176,6 +176,7 @@ export function denyAllConstraints() {
  * @throws {Error} naming the case and project that claimed it.
  */
 export function assertDenyAllTagIsUnclaimed(cases) {
+  // used by its own test
   for (const spec of cases) {
     for (const project of spec.projects) {
       if ((project.tags ?? []).includes(DENY_ALL_TAG)) {
@@ -198,7 +199,7 @@ export function assertDenyAllTagIsUnclaimed(cases) {
  * is reproducible across runs and machines. `created` is the registry's key
  * for a record's date — `date` is not a frontmatter key the registry accepts.
  */
-export const DECISION_RECORD_CREATED = "2026-08-30";
+export const DECISION_RECORD_CREATED = "2026-08-30"; // used by its own test
 
 /**
  * One decision record's bytes, as the fixture writes them into `docs/adr/`.
@@ -224,6 +225,7 @@ export const DECISION_RECORD_CREATED = "2026-08-30";
  * @returns {string}
  */
 export function renderAdrRecord(slug, status, bindings, supersedes = []) {
+  // used by its own test
   const list = bindings.map((binding) => `  - ${binding}`).join("\n");
   const bindingsLine = list === "" ? "bindings:" : `bindings:\n${list}`;
   const supersedesList = supersedes.map((id) => `  - ${id}`).join("\n");
@@ -254,6 +256,7 @@ export function renderAdrRecord(slug, status, bindings, supersedes = []) {
  * @returns {string[]}
  */
 export function decisionGovernanceViolations(spec) {
+  // used by its own test
   const violations = [];
   const decisions = spec.decisions ?? [];
   const declared = new Set(decisions.map((decision) => decision.slug));
@@ -355,6 +358,7 @@ function nativeModel(spec) {
  *   place of `git ls-files`, so the corpus needs no git repository.
  */
 export function materializeCase(spec) {
+  // used by its own test
   // Checked before anything is created, so a refused case leaves no directory
   // behind — a case that declares governance this module cannot render (a
   // record it could not load, or a `docs/adr/` shadow of its own writing) is
@@ -430,5 +434,6 @@ export function materializeCase(spec) {
 
 /** Removes a case root and everything under it. */
 export function removeCaseRoot(root) {
+  // used by its own test
   rmSync(root, { recursive: true, force: true });
 }

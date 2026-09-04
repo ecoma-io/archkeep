@@ -65,6 +65,7 @@ import {
 
 /** The condition types the registry can evaluate. */
 export const CONDITION_TYPES = Object.freeze([
+  // used by its own test
   "cycle-free",
   "layer-dependency",
   "tag-conformance",
@@ -327,6 +328,7 @@ function tagAxisIsolationViolations(condition, at) {
  * @returns {object} A verdict record from `fitnessVerdict`.
  */
 export function judgeFitnessRow(row, graph, analysis, intent, suppressions) {
+  // used by its own test
   const names = resolveMembers(row.match, graph.nodes);
   if (names.length === 0) {
     return fitnessVerdict({

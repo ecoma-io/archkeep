@@ -69,6 +69,7 @@ const KOTLIN_IMPORT = new RegExp(
  * @returns {{ specifier: string, importableName: string, offset: number }[]}
  */
 export function parseKotlinImportSites(kotlinText) {
+  // used by its own test
   // A shebang needs no handling of its own: `#!…` cannot anchor an import
   // match (`import` must follow a line head, `;`, or newline), and masking
   // runs before anything reads the text anyway.
@@ -112,6 +113,7 @@ const importableNameOf = (name) => (name.endsWith(".*") ? name.slice(0, -2) : na
  * @returns {string[]} Reasons, at most one per malformation kind.
  */
 export function kotlinImportMalformations(kotlinText) {
+  // used by its own test
   const source = maskKotlinComments(kotlinText);
   const KOTLIN_IMPORT_HEAD = /(?:^\uFEFF?|[\n;])[ \t]*(?:import[ \t]+)/gu;
   /** @type {string[]} */

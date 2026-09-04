@@ -74,7 +74,7 @@ import { describe, isPlainObject } from "../values.mjs";
 const REGISTRY_KEYS = ["profiles", "version", "$schema"];
 
 /** A version a reader that predates it must refuse, per `docs/reference/profiles.md`. */
-export const PROFILE_REGISTRY_SCHEMA_VERSION = 1;
+const PROFILE_REGISTRY_SCHEMA_VERSION = 1;
 
 /** The registry's schema version: stated, or schema 1 when absent. */
 function registrySchemaVersion(raw) {
@@ -112,6 +112,7 @@ const NAME_PATTERN = /^[a-zA-Z0-9_-]+$/u;
 
 /** A profile's declared block, kept ONLY for this command's own data. */
 export function listNames(registry) {
+  // used by its own test
   return registry.profiles.map((profile) => profile.name);
 }
 
@@ -126,6 +127,7 @@ export function listNames(registry) {
  * @returns {string[]}
  */
 export function profileRegistryViolations(raw) {
+  // used by its own test
   if (!isPlainObject(raw)) {
     return [`profiles: expected a JSON object, got ${describe(raw)}`];
   }
@@ -201,6 +203,7 @@ export function profileRegistryViolations(raw) {
  * @returns {string[]}
  */
 export function profileReferenceViolations(profiles) {
+  // used by its own test
   const violations = [];
   const byName = new Map(profiles.map((profile) => [profile.name, profile]));
   for (const profile of profiles) {
@@ -250,6 +253,7 @@ export function profileReferenceViolations(profiles) {
  *   silently resolved as "no profile".
  */
 export function resolveProfile(profiles, name, seen = new Set()) {
+  // used by its own test
   const profile = profiles.find((candidate) => candidate.name === name);
   if (profile === undefined) {
     throw new Error(
@@ -302,6 +306,7 @@ export function resolveProfile(profiles, name, seen = new Set()) {
  *   profile-registry or reference-graph defect.
  */
 export function loadProfileRegistry(path, { readFile = defaultProfileIo.readFile } = {}) {
+  // used by its own test
   const text = readFile(path);
   if (text === null) {
     throw new Error(`archkeep: cannot read profiles file ${path}`);

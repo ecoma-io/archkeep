@@ -95,7 +95,7 @@ export const DIAGNOSTIC_SEVERITY = Object.freeze({
  * more is not a supported conversation, and saying so beats waiting for bytes
  * that will never arrive.
  */
-export const MAX_CONTENT_LENGTH = 64 * 1024 * 1024;
+export const MAX_CONTENT_LENGTH = 64 * 1024 * 1024; // used by its own test
 
 /**
  * LSP `MessageType`, as `window/showMessage` reports it.
@@ -211,5 +211,6 @@ export function uriToPath(uri) {
  * @returns {string}
  */
 export function pathToUri(path) {
+  // used by its own test
   return pathToFileURL(path).href;
 }

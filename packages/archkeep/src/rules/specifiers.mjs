@@ -48,6 +48,7 @@ export const DEFAULT_WORKSPACE_LAYOUT = Object.freeze({ libsDir: "libs", appsDir
 
 /** `./x` or `../x` — upstream's `isRelative`, from `runtime-lint-utils`. */
 export function isRelative(s) {
+  // used by its own test
   return s.startsWith("./") || s.startsWith("../");
 }
 
@@ -191,6 +192,7 @@ export function getTargetProjectBasedOnRelativeImport(imp, sourceFile, projectRo
  * @returns {boolean}
  */
 export function isConstraintBanningProject(externalProject, constraint, imp) {
+  // used by its own test
   assertMatchableSpecifier(imp, "import specifier judged against the constraint table");
   const { allowedExternalImports, bannedExternalImports } = constraint;
   const { packageName } = externalProject.data;

@@ -102,6 +102,7 @@
  * @type {Readonly<Record<string, string>>}
  */
 export const OUT_OF_REACH = Object.freeze({
+  // used by its own test
   noRelativeOrAbsoluteExternals:
     "needs a specifier that IS a filesystem path; `spelling.path` is false for every Go import, " +
     "Rust `use` path, Python dotted module, JVM dotted import and C# using directive " +
@@ -117,6 +118,7 @@ export const OUT_OF_REACH = Object.freeze({
 });
 
 export const ARCHITECTURE_CORPUS = [
+  // used by its own test
   // ------------------------------------------------------------- layered (Go)
   {
     id: "layered-architecture-in-go",

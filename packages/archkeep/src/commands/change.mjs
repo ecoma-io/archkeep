@@ -170,6 +170,7 @@ function cmpFacts(a, b) {
  * @returns {string}
  */
 export function violationFindingId(entry) {
+  // used by its own test
   const sourceProject =
     entry.sourceProject == null ? "-" : escapeIdentityField(entry.sourceProject);
   return `${escapeIdentityField(entry.messageId)}:${sourceProject}:${escapeIdentityField(entry.target)}`;
@@ -250,6 +251,7 @@ function observedFrom(structural, meta) {
  * @returns {{matched: object[], unexpected: object[], missingExpected: object[]}}
  */
 export function reconcileMaterialDelta(intent, delta) {
+  // used by its own test
   const addedProjectNames = new Set(intent.projects.add);
   const removedProjectNames = new Set(intent.projects.remove);
   // The declared row's identity is `./change-intent.mjs`'s `edgePairKey` — the
@@ -358,7 +360,7 @@ export function reconcileMaterialDelta(intent, delta) {
  * @param {string[]} unprovenReasons Why the base identity could not be proven.
  * @returns {"matched"|"undeclared"|"unfulfilled"|"unproven"}
  */
-export function reconciliationVerdict(lists, unprovenReasons) {
+function reconciliationVerdict(lists, unprovenReasons) {
   if (unprovenReasons.length > 0) return "unproven";
   if (lists.unexpected.length > 0) return "undeclared";
   if (lists.missingExpected.length > 0) return "unfulfilled";
@@ -389,6 +391,7 @@ export function reconciliationVerdict(lists, unprovenReasons) {
  * @returns {"accepted"|"rejected"|"no-verdict"}
  */
 export function reconcileDisposition(verdict, constraints = []) {
+  // used by its own test
   if (verdict === "unproven") return "no-verdict";
   if (verdict === "undeclared" || verdict === "unfulfilled") return "rejected";
   if (constraints.some((row) => row.verdict === "unknown")) return "no-verdict";

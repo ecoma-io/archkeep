@@ -44,10 +44,10 @@ import { readFile as readFileFromDisk } from "node:fs/promises";
 import { describe, isPlainObject } from "../values.mjs";
 
 /** The only `version` this module accepts. A different value is a load error. */
-export const CHANGE_INTENT_VERSION = "1";
+const CHANGE_INTENT_VERSION = "1";
 
 /** The only keys a valid change-intent file may carry at the top level. */
-export const CHANGE_INTENT_TOP_LEVEL_KEYS = Object.freeze([
+const CHANGE_INTENT_TOP_LEVEL_KEYS = Object.freeze([
   "version",
   "base",
   "summary",
@@ -57,16 +57,16 @@ export const CHANGE_INTENT_TOP_LEVEL_KEYS = Object.freeze([
 ]);
 
 /** The keys the `base` section may carry. */
-export const CHANGE_INTENT_BASE_KEYS = Object.freeze(["commit"]);
+const CHANGE_INTENT_BASE_KEYS = Object.freeze(["commit"]);
 
 /** The sub-keys the `projects` section may carry. */
-export const CHANGE_INTENT_PROJECT_SECTION_KEYS = Object.freeze(["add", "remove"]);
+const CHANGE_INTENT_PROJECT_SECTION_KEYS = Object.freeze(["add", "remove"]);
 /** The sub-keys the `edges` section may carry. */
-export const CHANGE_INTENT_EDGE_SECTION_KEYS = Object.freeze(["add", "remove"]);
+const CHANGE_INTENT_EDGE_SECTION_KEYS = Object.freeze(["add", "remove"]);
 /** The keys an edge row may carry. */
-export const CHANGE_INTENT_EDGE_ROW_KEYS = Object.freeze(["from", "to"]);
+const CHANGE_INTENT_EDGE_ROW_KEYS = Object.freeze(["from", "to"]);
 /** The keys the `constraints` section may carry. */
-export const CHANGE_INTENT_CONSTRAINT_KEYS = Object.freeze(["noNewViolations", "noNewCycles"]);
+const CHANGE_INTENT_CONSTRAINT_KEYS = Object.freeze(["noNewViolations", "noNewCycles"]);
 
 /**
  * The constraints the reconciliation judges, in the fixed order their verdict
@@ -204,7 +204,7 @@ function sectionListViolations(section, spec) {
  * @param {unknown} raw The parsed JSON value.
  * @returns {string[]}
  */
-export function findChangeIntentViolations(raw) {
+function findChangeIntentViolations(raw) {
   const violations = [];
   if (!isPlainObject(raw)) {
     return [`top level: must be an object, got ${describe(raw)}`];
@@ -351,7 +351,7 @@ export function findChangeIntentViolations(raw) {
  *   with absent raw sections already normalized to empty arrays.
  * @returns {string[]} Messages; empty when the intent is not a catch-all.
  */
-export function findChangeIntentBreadthViolations(intent) {
+function findChangeIntentBreadthViolations(intent) {
   const declaredRows =
     intent.projects.add.length +
     intent.projects.remove.length +
@@ -389,6 +389,7 @@ export function findChangeIntentBreadthViolations(intent) {
  *   silently would reconcile against an expectation nobody wrote.
  */
 export function parseChangeIntent(text, path) {
+  // used by its own test
   let parsed;
   try {
     parsed = JSON.parse(text);

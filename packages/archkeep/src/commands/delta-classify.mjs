@@ -79,6 +79,7 @@ import { namespacedId } from "./custom-rules.mjs";
  *   constraint: object|null}}|{ok: false, reason: string}}
  */
 export function violationIdentity(violation) {
+  // used by its own test
   if (violation === null || typeof violation !== "object" || Array.isArray(violation)) {
     return { ok: false, reason: `violation is ${describe(violation)}, not an object` };
   }
@@ -148,6 +149,7 @@ export function violationIdentity(violation) {
  *   original violation plus the `reason` its identity could not be stated.
  */
 export function classifyViolations({ base, head, suppressions = [], now = referenceTime() }) {
+  // used by its own test
   const baseIdentified = base.map(identityOf);
   const headIdentified = head.map(identityOf);
 
@@ -237,6 +239,7 @@ export function classifyViolations({ base, head, suppressions = [], now = refere
  *   unknown: object[]}}
  */
 export function classifyUnresolvableRecords({ base, head, sourceProjectOf }) {
+  // used by its own test
   const attribute = sourceProjectOf ?? (() => null);
   const baseIdentified = base
     .filter(isUnresolvable)

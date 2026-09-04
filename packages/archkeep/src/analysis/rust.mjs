@@ -238,6 +238,7 @@ export function resolveRustDependencies(projects, filesOf, readFile) {
 
 /** Cargo's identifier spelling of a crate name: `-` and `.` become `_`. */
 export function crateIdentifier(name) {
+  // used by its own test
   return name.replace(/[-.]/g, "_");
 }
 
@@ -250,6 +251,7 @@ export function crateIdentifier(name) {
  * @returns {string|null}
  */
 export function crateImportName(manifest) {
+  // used by its own test
   const declared = manifest?.lib?.name ?? manifest?.package?.name;
   return typeof declared === "string" && declared !== "" ? crateIdentifier(declared) : null;
 }
@@ -471,7 +473,7 @@ function isOwnProjectPath(root, owner, byCrate) {
  * @param {string} path The `use` path, from the first non-space to the `;`.
  * @returns {{text: string, offset: number}[] | null}
  */
-export function braceGroupArms(path) {
+function braceGroupArms(path) {
   const open = path.indexOf("{");
   if (open === -1 || path.slice(0, open).trim() !== "") return null;
   /** @type {{text: string, offset: number}[]} */
@@ -520,6 +522,7 @@ export function braceGroupArms(path) {
  * with a brace group and names none.
  */
 export function useRootSegment(path) {
+  // used by its own test
   const match = /^\s*(?:::\s*)?([A-Za-z_]\w*)/.exec(path);
   return match ? match[1] : null;
 }
@@ -560,6 +563,7 @@ export function useRootSegment(path) {
  *   produces from reading as a clean file.
  */
 export function parseRustUseSites(rustText, knownCrates = new Set(), options = {}) {
+  // used by its own test
   const { returnMetrics = false } = options;
   /** The offset of the first `use` opener no `;` terminates, `null` before one is seen. */
   let unterminatedUseAt = null;

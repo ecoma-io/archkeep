@@ -42,6 +42,7 @@
 
 /** The four exports the ABI requires, so a test can omit one by name. */
 export const RULE_EXPORTS = Object.freeze([
+  // used by its own test
   "memory",
   "archkeep_alloc",
   "archkeep_describe",
@@ -202,6 +203,7 @@ const packRange = (range) => BigInt.asIntN(64, (BigInt(range.ptr) << 32n) | BigI
  * @returns {Uint8Array}
  */
 export function buildRuleModule(options = {}) {
+  // used by its own test
   const {
     describeJson = "{}",
     verdictJson = "{}",
@@ -473,5 +475,6 @@ function evaluateInstructionsFor(answer, behaviour, byLength) {
  * @returns {Uint8Array}
  */
 export function invalidWasmBytes() {
+  // used by its own test
   return new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0xff, 0xff, 0xff, 0xff, 0x01, 0x02]);
 }

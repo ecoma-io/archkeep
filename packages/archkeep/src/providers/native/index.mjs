@@ -61,6 +61,7 @@ function projectOfFactory(projects) {
  *   stale `coverage.exempt` row.
  */
 export function discover({ root, files, readFile }) {
+  // used by its own test
   const model = loadNativeModel(root, { readFile });
   const { projects, failures: discoveryFailures } = discoverNativeProjects({
     root,
@@ -128,7 +129,7 @@ export function discover({ root, files, readFile }) {
  * @param {{discovered: ReturnType<typeof discover>, importSites: object[]}} args
  * @returns {{nodes: Record<string, object>, dependencies: Record<string, object[]>, workspaceLayout?: {appsDir: string, libsDir: string}, exemptedFiles?: string[]}}
  */
-export function buildGraph({ discovered, importSites }) {
+function buildGraph({ discovered, importSites }) {
   return buildNativeGraph({
     projects: discovered.projects,
     importSites,

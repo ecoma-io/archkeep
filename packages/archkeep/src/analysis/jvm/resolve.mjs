@@ -40,7 +40,7 @@ import { resolveJvmPackagePrefix } from "./packages.mjs";
  * their own explicit imports, which is why an explicit `import java.util.List`
  * classifies as ordinary external rather than by this table.
  */
-export const JAVA_DEFAULT_IMPORT_ROOTS = Object.freeze(["java.lang"]);
+export const JAVA_DEFAULT_IMPORT_ROOTS = Object.freeze(["java.lang"]); // used by its own test
 
 /**
  * Kotlin's default imports (kotlinlang.org, "Default imports", page dated
@@ -50,6 +50,7 @@ export const JAVA_DEFAULT_IMPORT_ROOTS = Object.freeze(["java.lang"]);
  * testable classification of names the compiler brings in unasked.
  */
 export const KOTLIN_DEFAULT_IMPORT_ROOTS = Object.freeze([
+  // used by its own test
   "kotlin",
   "kotlin.annotation",
   "kotlin.collections",
@@ -70,7 +71,7 @@ const DEFAULT_IMPORT_ROOTS_BY_LANGUAGE = {
 };
 
 /** The default-import roots a language's files carry, or `[]` when unknown. */
-export const defaultImportRootsFor = (language) => DEFAULT_IMPORT_ROOTS_BY_LANGUAGE[language] ?? [];
+export const defaultImportRootsFor = (language) => DEFAULT_IMPORT_ROOTS_BY_LANGUAGE[language] ?? []; // used by its own test
 
 /**
  * True when `specifier` falls under one of `roots`: equal to a root or a dot-
@@ -83,6 +84,7 @@ export const defaultImportRootsFor = (language) => DEFAULT_IMPORT_ROOTS_BY_LANGU
  * @returns {boolean}
  */
 export const underAnyRoot = (specifier, roots) =>
+  // used by its own test
   roots.some((root) => specifier === root || specifier.startsWith(`${root}.`));
 
 /**

@@ -70,6 +70,7 @@ function boundaryKey(from, to) {
 
 /** The severity a state earns — the sort key a ranked proposal list uses. */
 export const SEVERITY_ORDER = Object.freeze({
+  // used by its own test
   unexpected: 4,
   absent: 3,
   match: 0,
@@ -133,6 +134,7 @@ function intentKeys(intent) {
  * @returns {{project: ScoredElement, tags: ScoredElement[]}}
  */
 export function scoreProject(project, keys, requiredTagsByProject) {
+  // used by its own test
   const tags = project.data?.tags ?? project.tags ?? [];
   const requiredTags = requiredTagsByProject.get(project.name) ?? [];
   const element = { plane: "project", name: project.name };
@@ -209,6 +211,7 @@ export function scoreProject(project, keys, requiredTagsByProject) {
  * @returns {ScoredElement}
  */
 export function scoreEdge(edge, keys, intentForbiddenPairs, tagForbiddenPairs) {
+  // used by its own test
   const key = `${edge.source} → ${edge.target}`;
   const element = { plane: "edge", name: key, intentRow: null };
 
@@ -279,6 +282,7 @@ export function scoreEdge(edge, keys, intentForbiddenPairs, tagForbiddenPairs) {
  * @returns {ScoredElement[]}
  */
 export function scoreIntentRows(intent, judgeVerdict, observed, tagsByProject) {
+  // used by its own test
   const rows = [];
   const observedNames = new Set(observed.projects.map((p) => p.name));
   const observedEdgeKeys = new Set(observed.edges.map((e) => `${e.source} → ${e.target}`));

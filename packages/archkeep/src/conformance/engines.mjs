@@ -43,6 +43,7 @@ const UPSTREAM_READABLE = Object.freeze([".ts", ".tsx", ".js", ".mjs", ".cjs", "
 
 /** Is this file one ESLint can parse at all in this workspace's configuration? */
 export const isUpstreamReadable = (file) =>
+  // used by its own test
   UPSTREAM_READABLE.some((extension) => file.endsWith(extension));
 
 /**
@@ -57,6 +58,7 @@ export const isUpstreamReadable = (file) =>
  * @param {string} root The fixture workspace root.
  */
 export async function createUpstreamRunner(root) {
+  // used by its own test
   const here = createRequire(import.meta.url);
   const viaPlugin = createRequire(here.resolve("@nx/eslint-plugin/package.json"));
   const { workspaceRoot } = viaPlugin("@nx/devkit");
@@ -228,6 +230,7 @@ function fixtureWorkspace(root, materialized) {
  * @returns {{violations: object[], failures: object[]}}
  */
 export function runEngine(root, materialized) {
+  // used by its own test
   const workspace = fixtureWorkspace(root, materialized);
   const sites = [];
   const failures = [];

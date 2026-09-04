@@ -51,6 +51,7 @@ import { check } from "../../cli.mjs";
  * @returns {Promise<{status: string, exitCode: number, coverage: object, violations: object[]}>}
  */
 export async function runCorpusCheck({ root, files, config = null, paths = [] }) {
+  // used by its own test
   const outcome = await check(
     { format: "json", config, paths },
     { cwd: root, listFiles: () => files },
@@ -96,6 +97,7 @@ export function projectOwning(spec, file) {
  * @returns {string}
  */
 export function findingKey({ messageId, sourceFile, specifier, sourceProject, targetProject }) {
+  // used by its own test
   return `${messageId} at ${sourceFile} on '${specifier}' (${sourceProject ?? "-"} -> ${targetProject ?? "-"})`;
 }
 
@@ -109,6 +111,7 @@ export function findingKey({ messageId, sourceFile, specifier, sourceProject, ta
  * @returns {string[]}
  */
 export function expectedFindings(spec) {
+  // used by its own test
   return spec.probes.flatMap((probe) =>
     probe.reports.map((report) =>
       findingKey({
@@ -141,6 +144,7 @@ export function expectedFindings(spec) {
  * @returns {{missing: string[], unexpected: string[]}}
  */
 export function compareFindings(expected, actual) {
+  // used by its own test
   const remaining = [...actual];
   const missing = [];
   for (const key of expected) {
@@ -164,6 +168,7 @@ export function compareFindings(expected, actual) {
  * @returns {string[]} One row per problem, naming the file and what was there.
  */
 export function positionProblems(violations, readText) {
+  // used by its own test
   const problems = [];
   for (const violation of violations) {
     // A Rust `use` path may wrap across lines, and the analyzer collapses the
@@ -191,7 +196,7 @@ export function positionProblems(violations, readText) {
 }
 
 /** A workspace-relative reader over a materialised case root. */
-export const readFrom = (root) => (relative) => readFileSync(join(root, relative), "utf8");
+export const readFrom = (root) => (relative) => readFileSync(join(root, relative), "utf8"); // used by its own test
 
 /**
  * Findings grouped by the file they were reported in, as counts.
@@ -200,6 +205,7 @@ export const readFrom = (root) => (relative) => readFileSync(join(root, relative
  * @returns {Map<string, number>}
  */
 export function countsByFile(violations) {
+  // used by its own test
   const counts = new Map();
   for (const violation of violations) {
     counts.set(violation.sourceFile, (counts.get(violation.sourceFile) ?? 0) + 1);

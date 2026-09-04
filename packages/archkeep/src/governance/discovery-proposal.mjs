@@ -61,7 +61,7 @@
  * The uncertainty marker vocabulary — three values, the bound the "bounded
  * uncertainty markers" test asserts.
  */
-export const CONFIDENCE = Object.freeze(["high", "medium", "low"]);
+export const CONFIDENCE = Object.freeze(["high", "medium", "low"]); // used by its own test
 
 /**
  * The component model: every project's root's first path segment (`""` at the
@@ -73,6 +73,7 @@ export const CONFIDENCE = Object.freeze(["high", "medium", "low"]);
  * @returns {Map<string, {name: string, root: string, tags: string[]}[]>}
  */
 export function componentsByDirectory(projects) {
+  // used by its own test
   const buckets = new Map();
   for (const project of projects) {
     const component = project.root === "" ? "" : project.root.split("/")[0];
@@ -101,6 +102,7 @@ export function componentsByDirectory(projects) {
  * @returns {{tag: string, component: string, members: string[]}[]} Sorted.
  */
 export function dominantTags(components) {
+  // used by its own test
   const tags = [];
   for (const [component, members] of components) {
     if (members.length < 2) continue;
@@ -136,6 +138,7 @@ export function dominantTags(components) {
  * @returns {{axis: string, values: string[]}[]} Sorted by axis.
  */
 export function tagAxes(projects) {
+  // used by its own test
   const byAxis = new Map();
   for (const project of projects) {
     for (const tag of project.tags) {
@@ -169,7 +172,7 @@ export function tagAxes(projects) {
  * @param {string} target
  * @returns {boolean}
  */
-export function sameComponent(components, source, target) {
+function sameComponent(components, source, target) {
   for (const members of components.values()) {
     if (members.some((m) => m.name === source) && members.some((m) => m.name === target)) {
       return true;
@@ -198,6 +201,7 @@ export function sameComponent(components, source, target) {
  *   component?: string, evidence: object[], confidence: string}[]} Sorted.
  */
 export function boundaryAssertions({ projects, edges }) {
+  // used by its own test
   const components = componentsByDirectory(projects);
   const projectNames = new Set(projects.map((p) => p.name));
   /** @type {{kind: "edge"|"component", source: string|undefined, target: string|undefined,
@@ -256,6 +260,7 @@ export function boundaryAssertions({ projects, edges }) {
  *   evidence: object[], confidence: string}[]} Sorted.
  */
 export function tagVocabulary(projects) {
+  // used by its own test
   const components = componentsByDirectory(projects);
   /** @type {{kind: "observed"|"suggested", tag: string|undefined, axis: string|undefined,
    *   component: string|undefined, members: string[]|undefined, values: string[]|undefined,
@@ -308,6 +313,7 @@ export function tagVocabulary(projects) {
  *   component?: string, evidence: object[], confidence: string}[]} Sorted.
  */
 export function candidateRules(assertions) {
+  // used by its own test
   /** @type {{kind: "noDependency"|"boundary", source: string|undefined, target: string|undefined,
    *   component: string|undefined, evidence: object[], confidence: "medium"}[]} */
   const rules = [];

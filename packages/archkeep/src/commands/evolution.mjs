@@ -138,6 +138,7 @@ function shortSha(sha) {
  *   and a shallow clone whose cut-off sits below the requested revision.
  */
 export function resolveRevision(root, rev, flag, { run = runProcess } = {}) {
+  // used by its own test
   if (typeof rev !== "string" || rev.length === 0) {
     throw new Error(`archkeep: ${flag} needs a revision — a commit, branch, tag, or HEAD~n.`);
   }
@@ -190,6 +191,7 @@ export function resolveRevision(root, rev, flag, { run = runProcess } = {}) {
  *   head's ancestry, or a merge commit inside the range.
  */
 export function selectLinearRange(root, { base, head }, { run = runProcess } = {}) {
+  // used by its own test
   const baseSha = resolveRevision(root, base, "--base", { run });
   const headSha = resolveRevision(root, head ?? "HEAD", "--head", { run });
 
