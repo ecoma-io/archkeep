@@ -55,6 +55,18 @@ and snapshot files, `findings`/`debt` carry identity strings, and each
 `affected` list holds identity strings only. An event is a pointer into the
 evidence, not a second copy of it.
 
+Those identity strings are delimiter joins — an edge spells
+`source>target:type`, a violation finding spells `messageId:source:target`
+with `-` written for an absent source project — and every field that carries a
+delimiter (`>`, `:`) or the escape character (`\`) is escaped (`\>`, `\:`,
+`\\`; a field that is exactly the `-` sentinel escapes to `\-`). The
+unescaped `>` and `:` in a stored string are therefore exactly the separators,
+so two distinct edges — or two distinct findings — can never join to one
+string and dedup into one row (#627, #628). A field carrying none of those
+characters is spelled byte for byte as it always was: the escaping is
+conditional precisely so the stored events of workspaces whose names never
+carried a delimiter do not change.
+
 ## Identity: the id and the dedupeKey
 
 An event's `id` is `sha256(canonicalizeJson({ base, head, declarationDigest }))`

@@ -108,18 +108,52 @@ export function declarationDigest(intent) {
 }
 
 /**
+ * The escape character every identity spelling below uses, and the one
+ * function that applies it. A field that carries none of `\`, `>` or `:` and
+ * is not exactly `-` is returned byte-identical — the overwhelmingly common
+ * case, which is what keeps this escaping from rewriting the stored events of
+ * workspaces whose names never carried a delimiter (#627's fix is
+ * conditional by design; a wholesale re-encode on the `boundaryKey`
+ * pattern would change the persisted bytes of every workspace). A field that
+ * does carry one is escaped, so the delimiters that remain unescaped in an
+ * identity string are exactly the separators, and distinct field tuples can
+ * no longer join to the same string (#627). The sentinel `-` (`#628` writes
+ * it for an absent source project) escapes to `\-`, so a field that literally
+ * is `-` can no longer read as "absent" — `\-` in an identity string can only
+ * ever have come from field data.
+ *
+ * @param {string} value One field of an identity string.
+ * @returns {string} The field, escaped iff escaping is needed.
+ */
+export function escapeIdentityField(value) {
+  if (!value.includes("\\") && !value.includes(">") && !value.includes(":") && value !== "-") {
+    return value;
+  }
+  // Backslash first, so it never escapes an escape this pass itself wrote.
+  return value
+    .replaceAll("\\", "\\\\")
+    .replaceAll(">", "\\>")
+    .replaceAll(":", "\\:")
+    .replace(/^-$/u, "\\-");
+}
+
+/**
  * The identity string of one graph edge, in the canonical spelling
  * `source>target:type` — the `(source, target, type)` identity design §1
  * names. The ONE spelling the evolution events' `observed.edges` and
  * `affected.boundaries` use: this module owns it, and `classifyEvolution`
  * maps every edge it is handed through this function, so there is exactly
- * one definition of "same edge" and no second spelling to drift.
+ * one definition of "same edge" and no second spelling to drift. Fields are
+ * escaped through `escapeIdentityField`, so the unescaped `>` and `:` in the
+ * result are the separators and two distinct triples never join to one
+ * string (#627) — while a triple with no delimiter in any field spells
+ * exactly what earlier versions spelled, byte for byte.
  *
  * @param {{source: string, target: string, type: string}} edge
  * @returns {string}
  */
 export function edgeEvolutionIdentity({ source, target, type }) {
-  return `${source}>${target}:${type}`;
+  return `${escapeIdentityField(source)}>${escapeIdentityField(target)}:${escapeIdentityField(type)}`;
 }
 
 /**

@@ -114,6 +114,7 @@ import { referenceTime } from "../governance/clock.mjs";
 import {
   classifyEvolution,
   declarationDigest,
+  escapeIdentityField,
   eventDedupeKey,
   eventId,
   EVOLUTION_EVENT_SCHEMA_VERSION,
@@ -152,13 +153,26 @@ function cmpFacts(a, b) {
  * The identity string a delta-classified violation entry carries into the
  * event's `findings` — the same identity fields the delta classification
  * emits (`messageId`, `sourceProject`, `target`), serialized deterministically
- * so the ref is stable across runs over the same transition.
+ * so the ref is stable across runs over the same transition. Fields are
+ * escaped through `escapeIdentityField`, so a `:` inside a project name no
+ * longer reads as the field separator and two distinct entries never share
+ * one id (#628). The sentinel is the ONE literal written unescaped: it is
+ * this function's own spelling for "absent", so a source project literally
+ * named `-` escapes to `\-` instead of merging with it — while an absent
+ * source project still spells exactly what earlier versions spelled, byte
+ * for byte.
+ *
+ * Exported as the ONE spelling of this id — the same arrangement
+ * `edgeEvolutionIdentity` holds for edge identity — so a consumer composing
+ * the command layer cannot grow a second one that drifts.
  *
  * @param {{messageId: string, sourceProject: string|null, target: string}} entry
  * @returns {string}
  */
-function violationFindingId(entry) {
-  return `${entry.messageId}:${entry.sourceProject ?? "-"}:${entry.target}`;
+export function violationFindingId(entry) {
+  const sourceProject =
+    entry.sourceProject == null ? "-" : escapeIdentityField(entry.sourceProject);
+  return `${escapeIdentityField(entry.messageId)}:${sourceProject}:${escapeIdentityField(entry.target)}`;
 }
 
 /**

@@ -113,9 +113,15 @@ function graph({ edge = false } = {}) {
  */
 function contextAt(
   dir,
-  { edge = false, law: inlineLaw = null, tracked = TRACKED, brokenFiles = 0 } = {},
+  {
+    edge = false,
+    law: inlineLaw = null,
+    tracked = TRACKED,
+    brokenFiles = 0,
+    graph: graphOverride = null,
+  } = {},
 ) {
-  const g = graph({ edge });
+  const g = graphOverride ?? graph({ edge });
   return {
     root: dir,
     provider: "native",
@@ -458,6 +464,74 @@ describe("the per-transition 8-question comparison evidence", () => {
     expect(summary.affected.constraints).toContain("no-cycles");
     expect(summary.affected.decisions).toEqual([]);
     expect(summary.notes).toEqual(expect.any(Array));
+  });
+
+  // The hostile-name half of the edge-identity contract (#627): the two edge
+  // triples below mapped to ONE identity string before the fix, so the
+  // per-transition dedup and the summary's unique union both reported one
+  // row — byte-for-byte the event a workspace with a single edge produces.
+  // A manifest-declared name is an arbitrary string, so `>` is a reachable
+  // character, not a theory.
+  it("keeps two edges whose unescaped identities collided as two rows, through the command and the store", async () => {
+    /** @param {{edges: boolean}} input */
+    const hostileGraph = ({ edges }) => {
+      const hostileNode = (name, root, tag) => ({ name, type: "lib", data: { root, tags: [tag] } });
+      return {
+        nodes: {
+          "a>b": hostileNode("a>b", "libs/a-gt-b", "src"),
+          c: hostileNode("c", "libs/c", "dst"),
+          a: hostileNode("a", "libs/a", "src"),
+          "b>c": hostileNode("b>c", "libs/b-gt-c", "dst"),
+        },
+        dependencies: {
+          "a>b": edges ? [{ source: "a>b", target: "c", type: "static" }] : [],
+          c: [],
+          a: edges ? [{ source: "a", target: "b>c", type: "static" }] : [],
+          "b>c": [],
+        },
+      };
+    };
+    // No dependency declared between the hostile projects: the intent axis
+    // stays quiet so the assertion reads only the structural diff.
+    const hostileIntent = {
+      version: "1",
+      boundaries: [
+        { name: "gt-source", match: ["name:a>b"] },
+        { name: "plain-c", match: ["name:c"] },
+        { name: "plain-a", match: ["name:a"] },
+        { name: "gt-target", match: ["name:b>c"] },
+      ],
+    };
+    const [from, to] = [SHA(4), SHA(5)];
+    const eventOut = mkdtempSync(join(tmpdir(), "archkeep-evolution-hostile-"));
+    const { result } = await runEvolution({
+      perSha: {
+        [from.slice(0, 12)]: { graph: hostileGraph({ edges: false }), law: law(["build"]) },
+        [to.slice(0, 12)]: { graph: hostileGraph({ edges: true }), law: law(["build"]) },
+      },
+      ordered: [from, to],
+      eventOut,
+      intentBySha: { [from.slice(0, 12)]: hostileIntent, [to.slice(0, 12)]: hostileIntent },
+    });
+    // Both spellings, distinct: `a\>b>c:static` and `a>b\>c:static` — the
+    // escaped fields are the only bytes that moved, and neither row is gone.
+    const expected = ["a>b\\>c:static", "a\\>b>c:static"];
+    const [transition] = result.transitions;
+    // The transition's `observed.edges` carries the raw triples on purpose
+    // (`classifyEvolution` owns the identity mapping); the identity strings
+    // appear in `affected.boundaries`, the summary unions, and the event.
+    expect(transition.comparison.observed.edges.added).toEqual([
+      { source: "a", target: "b>c", type: "static" },
+      { source: "a>b", target: "c", type: "static" },
+    ]);
+    expect(transition.comparison.affected.boundaries).toEqual(expected);
+    // The summary's unique union over transitions dedups on the same
+    // identity — it must not collapse what the transition kept apart.
+    expect(result.summary.observed.edges.added).toEqual(expected);
+    expect(result.summary.affected.boundaries).toEqual(expected);
+    // And the persisted event — the bytes a store reads back — keeps both.
+    const [event] = readEvents(eventOut);
+    expect(event.affected.boundaries).toEqual(expected);
   });
 
   it("carries no numeric health score in the comparisons, summary, or events", async () => {

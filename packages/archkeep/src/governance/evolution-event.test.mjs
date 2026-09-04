@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyEvolution,
   declarationDigest,
+  edgeEvolutionIdentity,
   eventDedupeKey,
   eventId,
   EVOLUTION_EVENT_SCHEMA_VERSION,
@@ -521,5 +522,85 @@ describe("classifyEvolution — output shape", () => {
     const first = classifyEvolution(input);
     const second = classifyEvolution(input);
     expect(second).toEqual(first);
+  });
+});
+
+describe("edgeEvolutionIdentity — hostile names cannot collide (#627)", () => {
+  // The byte-compat half of the contract: a triple whose fields carry no
+  // delimiter and no escape character maps to exactly the spelling every
+  // stored event has always carried. Pinning the bytes is what makes any
+  // future wholesale re-encode (the `boundaryKey` JSON path, say) a conscious
+  // compatibility decision rather than a silent rewrite of persisted content.
+  it("keeps delimiter-free fields byte-identical to the spelling that preceded the fix", () => {
+    expect(edgeEvolutionIdentity({ source: "alpha", target: "beta", type: "static" })).toBe(
+      "alpha>beta:static",
+    );
+    expect(edgeEvolutionIdentity({ source: "libs/beta", target: "libs/alpha", type: "dep" })).toBe(
+      "libs/beta>libs/alpha:dep",
+    );
+  });
+
+  // The two collisions #627 constructed — distinct edges, one identity — must
+  // be distinct again. Red in the silent direction before the fix: both pairs
+  // collapsed to one string, and `classifyEvolution`'s dedup then dropped a
+  // real edge from the persisted `affected.boundaries`.
+  it("gives the issue's two colliding pairs distinct identities", () => {
+    expect(edgeEvolutionIdentity({ source: "a>b", target: "c", type: "s" })).not.toBe(
+      edgeEvolutionIdentity({ source: "a", target: "b>c", type: "s" }),
+    );
+    expect(edgeEvolutionIdentity({ source: "a", target: "b:c", type: "s" })).not.toBe(
+      edgeEvolutionIdentity({ source: "a", target: "b", type: "c:s" }),
+    );
+  });
+
+  it("escapes only the fields that carry a delimiter or the escape character", () => {
+    expect(edgeEvolutionIdentity({ source: "a>b", target: "c", type: "s" })).toBe("a\\>b>c:s");
+    expect(edgeEvolutionIdentity({ source: "a", target: "b>c", type: "s" })).toBe("a>b\\>c:s");
+    expect(edgeEvolutionIdentity({ source: "a", target: "b:c", type: "s" })).toBe("a>b\\:c:s");
+    expect(edgeEvolutionIdentity({ source: "a", target: "b", type: "c:s" })).toBe("a>b:c\\:s");
+    // The escape character itself escapes too — so `\-` below can only ever
+    // come from a field that literally is `-`, never from a field that merely
+    // began with a backslash.
+    expect(edgeEvolutionIdentity({ source: "\\", target: "b", type: "s" })).toBe("\\\\>b:s");
+    expect(edgeEvolutionIdentity({ source: "-", target: "b", type: "s" })).toBe("\\->b:s");
+  });
+
+  it("is injective over a corpus of hostile triples — no two collapse", () => {
+    /** @type {{source: string, target: string, type: string}[]} */
+    const corpus = [
+      { source: "a>b", target: "c", type: "s" },
+      { source: "a", target: "b>c", type: "s" },
+      { source: "a", target: "b:c", type: "s" },
+      { source: "a", target: "b", type: "c:s" },
+      { source: "a\\", target: "b:c", type: "s" },
+      { source: "a\\:b", target: "c", type: "s" },
+      { source: "-", target: "-", type: "-" },
+      { source: "a", target: "b", type: "" },
+    ];
+    const identities = corpus.map(edgeEvolutionIdentity);
+    expect(new Set(identities).size).toBe(corpus.length);
+    // Determinism: the same triple maps to the same bytes on a second pass.
+    expect(corpus.map(edgeEvolutionIdentity)).toEqual(identities);
+  });
+
+  // The dedup this identity feeds — `classifyEvolution`'s unique-sorted
+  // `affected.boundaries`, the shape every stored event carries — must keep
+  // BOTH rows for the issue's colliding pair. Before the fix this very input
+  // collapsed to one entry, byte-for-byte indistinguishable from a workspace
+  // that had only ever had one edge.
+  it("keeps both colliding edges in affected.boundaries — never one", () => {
+    const result = classifyEvolution({
+      observed: {
+        projects: { added: [], removed: [], changed: [] },
+        edges: {
+          added: [
+            { source: "a>b", target: "c", type: "s" },
+            { source: "a", target: "b>c", type: "s" },
+          ],
+          removed: [],
+        },
+      },
+    });
+    expect(result.affected.boundaries).toEqual(["a>b\\>c:s", "a\\>b>c:s"]);
   });
 });

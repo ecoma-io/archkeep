@@ -617,6 +617,66 @@ describe("the reconcile event (--event-out)", () => {
     expect(events[0].classifications).toContain("REPAIR");
   });
 
+  // The hostile-name half of the finding-id contract (#628): the two
+  // violations below carried ONE id before the fix — a `:` in a project name
+  // reads as the field separator — so the event's findings collapsed and the
+  // introduced→resolved linkage could attribute one finding's repair to the
+  // other. A manifest-declared name is an arbitrary string, so the collision
+  // is a reachable input, not a theory.
+  it("keeps two violations whose unescaped finding ids collided as two findings", async () => {
+    /** @type {object[]} */
+    const events = [];
+    // `(source, target)` pairs chosen so the unescaped joins are identical:
+    // `acme:api`→`pay` and `acme`→`api:pay` both joined to
+    // `…:acme:api:pay`. Both violate the same law row, so both classify as
+    // introduced by the delta (whose own key is structural), and only the
+    // finding id flattened them into one.
+    const hostileGraph = {
+      nodes: {
+        "acme:api": node("acme:api", "libs/acme-api", ["scope-invented"]),
+        acme: node("acme", "libs/acme", ["scope-invented"]),
+        pay: node("pay", "libs/pay", ["scope-shared"]),
+        "api:pay": node("api:pay", "libs/api-pay", ["scope-shared"]),
+      },
+      dependencies: {
+        "acme:api": [{ source: "acme:api", target: "pay", type: "static" }],
+        acme: [{ source: "acme", target: "api:pay", type: "static" }],
+        pay: [],
+        "api:pay": [],
+      },
+    };
+    /** @param {string} sourceFile @param {string} target */
+    const hostileRecord = (sourceFile, target) =>
+      crossingRecord({
+        sourceFile,
+        resolved: { target, file: null, external: false, packageName: null },
+      });
+    const baseline = baselineOf();
+    await run({
+      ctx: contextOf({
+        graph: hostileGraph,
+        records: [
+          hostileRecord("libs/acme-api/src/a.go", "pay"),
+          hostileRecord("libs/acme/src/b.go", "api:pay"),
+        ],
+      }),
+      baseline,
+      intent: emptyRowsManifest(),
+      eventOut: "events",
+      writeEvent: (_dir, event) => {
+        events.push(event);
+        return { id: event.id, duplicate: false };
+      },
+    });
+    const introduced = events[0].findings.introduced;
+    expect(introduced).toHaveLength(2);
+    // The red direction: before the fix this set held ONE string, byte-for-
+    // byte the event a workspace with a single violation produces.
+    expect(new Set(introduced).size).toBe(2);
+    expect(introduced).toContain("onlyTagsConstraintViolation:acme\\:api:pay");
+    expect(introduced).toContain("onlyTagsConstraintViolation:acme:api\\:pay");
+  });
+
   it("records no-verdict when the base identity is unproven — never accepted", async () => {
     /** @type {object[]} */
     const events = [];

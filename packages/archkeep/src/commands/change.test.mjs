@@ -10,7 +10,7 @@ import { parseChangeIntent } from "./change-intent.mjs";
 import { parseEvidenceSnapshot, serializeEvidenceSnapshot } from "./delta-snapshot.mjs";
 import { captureDelta } from "./delta.mjs";
 import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../../spawn-budget.mjs";
-import { changeCommand } from "./change.mjs";
+import { changeCommand, violationFindingId } from "./change.mjs";
 
 /**
  * What the `change` command guarantees: the reconciliation answers exactly
@@ -763,4 +763,62 @@ export const moduleBoundaryOptions = {
     },
     SPAWN_TEST_BUDGET_MS,
   );
+});
+
+describe("violationFindingId — hostile fields cannot collide (#628)", () => {
+  // The byte-compat half of the contract: the id every stored event has
+  // always carried, spelled field-for-field, for delimiter-free fields and
+  // for the absent-source sentinel. Pinning the bytes is what makes any
+  // future wholesale re-encode a conscious compatibility decision rather
+  // than a silent rewrite of persisted event content.
+  it("keeps delimiter-free fields and the null sentinel byte-identical", () => {
+    expect(
+      violationFindingId({
+        messageId: "onlyTagsConstraintViolation",
+        sourceProject: "acme-api",
+        target: "acme-payments",
+      }),
+    ).toBe("onlyTagsConstraintViolation:acme-api:acme-payments");
+    expect(
+      violationFindingId({
+        messageId: "onlyTagsConstraintViolation",
+        sourceProject: null,
+        target: "acme-payments",
+      }),
+    ).toBe("onlyTagsConstraintViolation:-:acme-payments");
+  });
+
+  // The two collisions #628 constructed must be distinct again. Red in the
+  // silent direction before the fix: each pair produced ONE id, and the
+  // event's introduced→resolved linkage could then read one finding's repair
+  // as the other's.
+  it("gives the issue's two colliding pairs distinct ids", () => {
+    // A source project literally named `-` no longer merges with the
+    // sentinel an absent source project is written as.
+    expect(violationFindingId({ messageId: "m", sourceProject: null, target: "libs/x" })).not.toBe(
+      violationFindingId({ messageId: "m", sourceProject: "-", target: "libs/x" }),
+    );
+    // A `:` inside one field no longer reads as the separator.
+    expect(violationFindingId({ messageId: "m", sourceProject: "a:b", target: "t" })).not.toBe(
+      violationFindingId({ messageId: "m", sourceProject: "a", target: "b:t" }),
+    );
+    expect(violationFindingId({ messageId: "m:a", sourceProject: "b", target: "t" })).not.toBe(
+      violationFindingId({ messageId: "m", sourceProject: "a:b", target: "t" }),
+    );
+  });
+
+  it("escapes only the fields that carry a delimiter or the escape character", () => {
+    expect(violationFindingId({ messageId: "m", sourceProject: "a:b", target: "t" })).toBe(
+      "m:a\\:b:t",
+    );
+    expect(violationFindingId({ messageId: "m:a", sourceProject: "b", target: "t" })).toBe(
+      "m\\:a:b:t",
+    );
+    // The sentinel itself is written verbatim — it is this function's own
+    // spelling for "absent", never escaped field data — so a project named
+    // `-` is the one value that escapes, to `\-`.
+    expect(violationFindingId({ messageId: "m", sourceProject: "-", target: "libs/x" })).toBe(
+      "m:\\-:libs/x",
+    );
+  });
 });
