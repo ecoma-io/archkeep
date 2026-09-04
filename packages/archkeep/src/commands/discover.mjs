@@ -20,18 +20,23 @@
  *
  * ## The empty-result invariant
  *
- * A workspace the run could not fully read (`notAnalyzed` non-empty) returns
- * `status: "no-verdict"` → exit 3, the same refusal `graph`/`drift` make:
- * every missing edge would be ambiguous between "gone" and "never seen".
- * An Nx workspace with polyglot manifests and no plugin registration is
- * refused the same way `graph` refuses it — the graph would silently
- * under-represent the real architecture, and a candidate derived from it
- * would be a fabrication wearing a proposal's name.
+ * Completeness comes from `./coverage-verdict.mjs`'s shared constructor —
+ * the same three-axis law (no whole-file failure, no unjudged blind spot,
+ * at least one file analyzed) that `graph` and `check` judge completeness
+ * over. The graph-family restatement this replaces is how the zero-analysis
+ * axis went missing here (#619).
  *
  * A workspace with zero projects is NOT a refusal: it is the empty proposal
  * with `unknown: true` (`evaluateDiscovery`'s contract), because zero observed
  * projects is a complete observation — the honest answer is "nothing to
- * propose", not a fabricated candidate set.
+ * propose", not a fabricated candidate set. The constructor's zero-analysis
+ * clause is overridden for this case: if there is nothing to observe, the
+ * observation is complete.
+ *
+ * An Nx workspace with polyglot manifests and no plugin registration is
+ * refused the same way `graph` refuses it — the graph would silently
+ * under-represent the real architecture, and a candidate derived from it
+ * would be a fabrication wearing a proposal's name.
  *
  * ## Determinism
  *
@@ -40,14 +45,11 @@
  * byte-identical text and JSON — the same promise `graph`'s snapshots make,
  * which is what lets a consumer `diff` two proposals meaningfully.
  */
-import {
-  blindSpotRows,
-  isWholeFileFailure,
-  unresolvableLiteralCount,
-} from "../analysis/source-util.mjs";
 import { evaluateDiscovery } from "../governance/discovery-proposal.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatDiscoverReport } from "../report/discover-text.mjs";
+import { coverageIncompleteReasons } from "../verdict.mjs";
+import { coverageVerdict } from "./coverage-verdict.mjs";
 import { buildDependencies, buildProjects } from "./graph.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { refuseIncompleteGraph } from "./drift.mjs";
@@ -131,15 +133,32 @@ export function discoverCommand(commandContext, { propose = false } = {}) {
 
   refuseIncompleteGraph(commandContext);
 
-  const notAnalyzed = analysis.failures
-    .filter(isWholeFileFailure)
-    .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
-
-  const blindSpotCount = unresolvableLiteralCount(analysis.failures);
-
   const observed = buildObserved(commandContext);
 
   const proposal = propose ? evaluateDiscovery(observed) : null;
+
+  // The completeness verdict is the shared constructor's, not this file's:
+  // restating the axes here is how the `analyzed > 0` term went missing from
+  // this face (#619 — a run that judged no file at all used to report `ok` /
+  // `complete: true` / exit 0, byte-for-byte the envelope a clean workspace
+  // gets). `coverageVerdict` owns the one law — no whole-file failure, no
+  // unjudged site, at least one file analyzed — and the same return shape
+  // the envelope and the text face both read.
+  //
+  // One override: a workspace with zero projects is a complete observation
+  // (there is nothing to observe), so the zero-analysis clause does not
+  // withhold from it. `evaluateDiscovery`'s contract returns `unknown: true`
+  // over an empty project list, and that answer is honest — it does not
+  // claim completeness over nothing.
+  const verdict = coverageVerdict(commandContext);
+  const hasProjects = observed.projects.length > 0;
+  const { complete, status, exitCode } = verdict;
+  // When there are no projects, override the zero-analysis withdrawal: an
+  // empty observation is a complete observation, and the `unknown` proposal
+  // is the honest answer.
+  const effectiveComplete = hasProjects ? complete : true;
+  const effectiveStatus = hasProjects ? status : "ok";
+  const effectiveExitCode = hasProjects ? exitCode : 0;
 
   // A proposal over an unread tree would be a fabrication wearing a
   // proposal's name: every candidate edge would be ambiguous between "gone"
@@ -147,16 +166,16 @@ export function discoverCommand(commandContext, { propose = false } = {}) {
   // gives — rather than print a proposal and a warning that it may be lying.
   // An unresolvable site is the same fabrication at site granularity (#595):
   // the edge out of it may be missing, and a candidate built over a gap is
-  // still a guess.
-  if (propose && (notAnalyzed.length > 0 || blindSpotCount > 0)) {
+  // still a guess. Use the shared verdict's counts rather than re-deriving.
+  if (propose && (verdict.notAnalyzed.length > 0 || verdict.blindSpotCount > 0)) {
     throw new Error(
       `archkeep: discover --propose has incomplete coverage — ` +
         [
-          notAnalyzed.length > 0
-            ? `${notAnalyzed.length} file${notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
+          verdict.notAnalyzed.length > 0
+            ? `${verdict.notAnalyzed.length} file${verdict.notAnalyzed.length === 1 ? "" : "s"} could not be analyzed`
             : null,
-          blindSpotCount > 0
-            ? `${blindSpotCount} import site${blindSpotCount === 1 ? "" : "s"} could not be resolved`
+          verdict.blindSpotCount > 0
+            ? `${verdict.blindSpotCount} import site${verdict.blindSpotCount === 1 ? "" : "s"} could not be resolved`
             : null,
         ]
           .filter(Boolean)
@@ -166,21 +185,22 @@ export function discoverCommand(commandContext, { propose = false } = {}) {
     );
   }
 
-  // An unresolvable site was seen but never judged (#595): the snapshot's
-  // edge list under-represents the tree wherever that site would have drawn
-  // one, so `complete` cannot be claimed over it. It still reports — status
-  // no-verdict, exit 3 — naming the site in `coverage.blindSpots`.
-  const complete = notAnalyzed.length === 0 && blindSpotCount === 0;
-  const status = complete ? "ok" : "no-verdict";
-  const exitCode = complete ? 0 : 3;
+  // The clauses the text face renders over an incomplete run, worded by the
+  // same function `verdictFor` joins into `decision.reason` — one wording,
+  // two renderings, and neither can drift from the other.
+  const coverageIncomplete = coverageIncompleteReasons({
+    unchecked: verdict.notAnalyzed.length,
+    blindSpots: verdict.blindSpotCount,
+    analyzed: analysis.analyzed,
+  });
 
   const coverage = {
-    complete,
+    complete: effectiveComplete,
     projects: observed.projects.length,
     analyzedFiles: analysis.analyzed,
     imports: analysis.imports.length,
-    notAnalyzed,
-    blindSpots: blindSpotRows(analysis.failures),
+    notAnalyzed: verdict.notAnalyzed,
+    blindSpots: verdict.blindSpots,
     notes: [],
   };
 
@@ -196,14 +216,14 @@ export function discoverCommand(commandContext, { propose = false } = {}) {
   const envelope = jsonEnvelope({
     command: "discover",
     context,
-    status,
-    exitCode,
+    status: effectiveStatus,
+    exitCode: effectiveExitCode,
     coverage,
     result: { discovery, ...(proposal ? { proposal } : {}) },
   });
 
   return {
-    status,
+    status: effectiveStatus,
     discovery,
     proposal,
     coverage,
@@ -212,6 +232,7 @@ export function discoverCommand(commandContext, { propose = false } = {}) {
         discovery,
         proposal,
         coverage,
+        coverageIncomplete: hasProjects ? coverageIncomplete : undefined,
       }),
       json: renderJson(envelope),
     },

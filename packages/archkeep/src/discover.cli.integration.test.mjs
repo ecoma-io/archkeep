@@ -312,7 +312,12 @@ describe("discover over a tree it cannot fully read — the silent direction", (
     };
     expect(await runCli(["discover"], streams)).toBe(EXIT.error);
     const out = streams.lines.out.join("\n");
-    expect(out).toContain("discovery incomplete — 1 file could not be analyzed");
+    // The headline states the incompleteness and its consequence; the clause
+    // below states WHY — the same rendering `check` and `graph` print. A
+    // count-bearing headline would blame zero files for a zero-analysis run,
+    // so the axis wording lives in the shared clause list (#619).
+    expect(out).toContain("discovery incomplete");
+    expect(out).toContain("1 file could not be analyzed — coverage incomplete");
     // No candidate is proposed and no "clean" claim is made over a tree the
     // run could not fully read.
     expect(out).not.toContain("discovery complete");

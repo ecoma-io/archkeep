@@ -190,6 +190,32 @@ describe("discoverCommand", () => {
     expect(second.report.json).toBe(first.report.json);
     expect(second.report.text).toBe(first.report.text);
   });
+
+  // #619 — the same zero-analysis axis that #612 fixed for `graph`.
+  // A discover run whose analysis analyzes no file at all — neither a
+  // whole-file failure nor an unjudged site — must report no-verdict, not
+  // complete, because it judged nothing.
+  it("a zero-analysis run with projects is the no-verdict lane (#619)", () => {
+    const result = discoverCommand(
+      commandContext({
+        analysis: { analyzed: 0, imports: [], failures: [] },
+      }),
+    );
+    expect(result.status).toBe("no-verdict");
+    expect(result.coverage.complete).toBe(false);
+    expect(result.coverage.analyzedFiles).toBe(0);
+    expect(result.coverage.notAnalyzed).toEqual([]);
+    expect(result.coverage.blindSpots).toEqual([]);
+  });
+
+  // Anti-over-refusal: a discover run that DID analyze files stays ok/exit 0.
+  // This half is what keeps the #619 flip from breaking a real tree.
+  it("a discover run over analyzed files stays ok and exit 0", () => {
+    const result = discoverCommand(commandContext());
+    expect(result.status).toBe("ok");
+    expect(result.coverage.complete).toBe(true);
+    expect(result.coverage.analyzedFiles).toBe(4);
+  });
 });
 
 describe("formatDiscoverReport", () => {

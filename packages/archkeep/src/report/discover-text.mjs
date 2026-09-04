@@ -4,14 +4,26 @@
  *
  * The coverage claim sits ABOVE everything — the reader knows whether the
  * observations are complete before reading any entry, exactly like
- * `./graph-text.mjs`'s report. The proposal, when present, is rendered below
- * the observations with the proposal-only banner (`proposed`, `not
- * authoritative`) repeated on every line of every candidate, so a reader who
- * scans the report cannot mistake a candidate for a decision.
+ * `./graph-text.mjs`'s report. Under an incomplete claim sit the reason
+ * clauses the run withheld the verdict over, worded by
+ * `../verdict.mjs`'s `coverageIncompleteReasons` and rendered through
+ * `./text.mjs`'s `formatCoverageIncomplete` — the same clauses, in the
+ * same `⚠` rendering, `check`'s text report prints, so a terminal reader is
+ * told why the verdict is withheld whichever face ran. A zero-analysis run
+ * is the case that needs this: its `notAnalyzed` list is empty, so a
+ * count-bearing headline would blame zero failures for an incomplete
+ * discovery (#619).
+ *
+ * The proposal, when present, is rendered below the observations with the
+ * proposal-only banner (`proposed`, `not authoritative`) repeated on every
+ * line of every candidate, so a reader who scans the report cannot mistake a
+ * candidate for a decision.
  *
  * This module decides nothing. A formatter that filtered would be a rule
  * wearing a formatter's name (`../README.md`).
  */
+
+import { formatCoverageIncomplete } from "./text.mjs";
 
 /** The three confidence markers, in the order the legend prints them. */
 const CONFIDENCE_ORDER = ["high", "medium", "low"];
@@ -96,10 +108,16 @@ function formatRule(item) {
  *
  * @param {{discovery: {projects: object[], edges: object[], tags: string[]},
  *   proposal: object|null,
- *   coverage: object}} input
+ *   coverage: object,
+ *   coverageIncomplete?: string[]}} input
+ *   `coverageIncomplete` is the withheld-verdict clause list
+ *   (`../verdict.mjs`'s `coverageIncompleteReasons`, handed through
+ *   `../commands/discover.mjs`) — rendered below the incomplete headline,
+ *   empty exactly when the discovery is complete, and optional because a
+ *   complete discovery carries no clauses to render.
  * @returns {string}
  */
-export function formatDiscoverReport({ discovery, proposal, coverage }) {
+export function formatDiscoverReport({ discovery, proposal, coverage, coverageIncomplete }) {
   const sections = [];
 
   const inspected =
@@ -110,11 +128,15 @@ export function formatDiscoverReport({ discovery, proposal, coverage }) {
   if (coverage.complete) {
     sections.push(`✔ discovery complete (${inspected})`);
   } else {
-    const notAnalyzedCount = coverage.notAnalyzed.length;
+    // The headline states the incompleteness and its consequence; the clauses
+    // below state WHY, one per failed coverage axis. Blaming the whole-file
+    // count in the headline alone would read "0 files could not be analyzed"
+    // over a zero-analysis run (#619) — incomplete, with a reason of nothing.
     sections.push(
-      `✖ discovery incomplete — ${notAnalyzedCount} file${notAnalyzedCount === 1 ? "" : "s"} ` +
-        `could not be analyzed, so these observations may under-represent the workspace (${inspected})`,
+      `✖ discovery incomplete — these observations may under-represent the workspace (${inspected})`,
     );
+    const clauses = formatCoverageIncomplete(coverageIncomplete ?? []);
+    if (clauses !== "") sections.push(clauses);
   }
 
   const projectWord = discovery.projects.length === 1 ? "project" : "projects";

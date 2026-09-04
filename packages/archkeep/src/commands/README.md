@@ -203,10 +203,13 @@ the resolution order.
   `../../src/governance/discovery-proposal.mjs`'s pure evaluator over it.
   Proposal-only: every candidate carries `proposed: true` and
   `notAuthoritative: true`, and the command never writes
-  `architecture-intent.json`. Returns `status: "no-verdict"` (exit 3) over
-  incomplete coverage and refuses `--propose` over it; refuses an Nx workspace
-  with polyglot manifests but no plugin registration; a zero-project workspace
-  is the empty `unknown` proposal, not a refusal. Descriptive: never exits 1.
+  `architecture-intent.json`. Completeness comes from
+  `./coverage-verdict.mjs`'s shared constructor — a whole-file failure, an
+  unjudged site, or a run that analyzed no file at all (#619) is the
+  no-verdict lane. Returns `status: "no-verdict"` (exit 3) over incomplete
+  coverage and refuses `--propose` over it; refuses an Nx workspace with
+  polyglot manifests but no plugin registration; a zero-project workspace is
+  the empty `unknown` proposal, not a refusal. Descriptive: never exits 1.
 
 - **`drift`** (`./drift.mjs`'s `driftCommand`) — the observed architecture
   compared against the declared intended one. The intended side is the one
