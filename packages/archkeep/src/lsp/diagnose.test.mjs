@@ -18,7 +18,7 @@ vi.mock("../rules/index.mjs", async (importOriginal) => {
     __realEvaluate: mod.evaluate,
   };
 });
-vi.mock("../commands/edge-constraints.mjs", async (importOriginal) => {
+vi.mock("../rules/edge-constraints.mjs", async (importOriginal) => {
   const mod = /** @type {any} */ (await importOriginal());
   return {
     declaredEdgeViolationsForCheck: vi.fn((...args) => mod.declaredEdgeViolationsForCheck(...args)),
@@ -30,7 +30,7 @@ vi.mock("../commands/edge-constraints.mjs", async (importOriginal) => {
 // implementations are `importOriginal`ed and re-exposed for the tests that
 // want both a spy AND the true verdict. TypeScript cannot see the extra
 // synthetic keys on the mocked modules, so the casts are explicit.
-const edgeConstraints = /** @type {any} */ (await import("../commands/edge-constraints.mjs"));
+const edgeConstraints = /** @type {any} */ (await import("../rules/edge-constraints.mjs"));
 const rulesEngine = /** @type {any} */ (await import("../rules/index.mjs"));
 const analyzeFile = vi.mocked((await import("../analysis/analyze.mjs")).analyzeFile);
 const evaluate = vi.mocked((await import("../rules/index.mjs")).evaluate);

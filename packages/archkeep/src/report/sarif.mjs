@@ -421,7 +421,7 @@ export function sarifTsconfigPathsResult(finding) {
  * `messageId` is one of the same three `depConstraints` ids `sarifResult`
  * already catalogues (`onlyTagsConstraintViolation`,
  * `notTagsConstraintViolation`, `projectWithoutTagsCannotHaveDependencies`) —
- * `judgeEdge` (`../commands/edge-constraints.mjs`) reuses the identical
+ * `judgeEdge` (`../rules/edge-constraints.mjs`) reuses the identical
  * tag-matching functions `evaluate()`'s import-site path does, so the rule IS
  * the same rule and needs no second entry in `sarifRules()`; only the
  * `ruleIndex` lookup is shared, via `MESSAGE_IDS` rather than a second table.
@@ -440,7 +440,7 @@ export function sarifTsconfigPathsResult(finding) {
  * function learned the provider, which is a file a Moon tree is refused for
  * carrying at all.
  *
- * @param {object} finding A finding from `../commands/edge-constraints.mjs`'s
+ * @param {object} finding A finding from `../rules/edge-constraints.mjs`'s
  *   `declaredEdgeViolationsForCheck`, extended with `file` — workspace-relative.
  * @returns {object}
  */

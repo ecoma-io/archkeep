@@ -26,7 +26,7 @@
           "type": "source-evidence",
           "path": "src/commands/context.mjs",
           "assertion": "Only commands/context.mjs imports providers — the designated orchestration layer",
-          "sha256": "7f566c06afbb175337529bd9bdc42465f8849498b932abf6a77fe0290a0cd13c"
+          "sha256": "1a093796a46a74dd10ff83feb146fa95832d1002bdab9d264c97cfc61c12fced"
         }
       ],
       "status": "proven"
@@ -46,7 +46,7 @@
           "type": "source-evidence",
           "path": "src/lsp/diagnose.mjs",
           "assertion": "analyzed:false on every non-verdict path; empty diagnostic list only from two named places — plus a document whose only positioned failure is an external disclosure, which was judged and so is not published (#603)",
-          "sha256": "72196def14055475ccb23284a3c5d34167535a506985b26fb95af097545cc740"
+          "sha256": "0edeb309a9bba49f4e82d8bf82982363ae9a20bfc04421b208961854b84acd41"
         },
         {
           "type": "source-evidence",
@@ -66,13 +66,13 @@
           "type": "behavioral-test",
           "path": "src/intent/intent.test.mjs",
           "assertion": "analysis output conforms to the frozen contract schema (no extra verdict/policy fields); analysis output is invariant under project tag changes (three workspaces differing only in project tag fields compared byte-for-byte)",
-          "sha256": "34b4b0f799efffc7e2e7b2ed3a79e06ce3bf5c24f0ab74a745063e7804c53ed3"
+          "sha256": "adb25388f17c97577e97e6b65bd3dacc5811710fe3bb60a409a51ff4abcd945e"
         },
         {
           "type": "architecture-test",
           "path": "src/intent/intent.test.mjs",
           "assertion": "the gate walks every production analysis module and fails when judging vocabulary (judge/forbid/permit/allow/ban) appears in code",
-          "sha256": "34b4b0f799efffc7e2e7b2ed3a79e06ce3bf5c24f0ab74a745063e7804c53ed3"
+          "sha256": "adb25388f17c97577e97e6b65bd3dacc5811710fe3bb60a409a51ff4abcd945e"
         },
         {
           "type": "source-evidence",
@@ -130,7 +130,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "parseBaseline validates schemaVersion; refuses unknown versions",
-          "sha256": "6190013ec55eeb7f1a9e4cdd910c7be73bfb1fa87051bdeace7c9581c6a18426"
+          "sha256": "85e6400006a7e93c66e64547162c854320fa69d833a11cec42773703f522a163"
         }
       ],
       "status": "proven"
@@ -150,7 +150,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "computeDiff returns structural diff; policyMismatch detected via fingerprint; computeRuleImpact for depConstraints-only context",
-          "sha256": "6190013ec55eeb7f1a9e4cdd910c7be73bfb1fa87051bdeace7c9581c6a18426"
+          "sha256": "85e6400006a7e93c66e64547162c854320fa69d833a11cec42773703f522a163"
         }
       ],
       "status": "proven"
@@ -230,7 +230,7 @@
           "type": "behavioral-test",
           "path": "src/intent/intent.test.mjs",
           "assertion": "depConstraints verdicts from judgeEdge agree with evaluate in both directions (violating edge found by both, legal edge reported by neither); explain includes the same violations as evaluate at a given site",
-          "sha256": "34b4b0f799efffc7e2e7b2ed3a79e06ce3bf5c24f0ab74a745063e7804c53ed3"
+          "sha256": "adb25388f17c97577e97e6b65bd3dacc5811710fe3bb60a409a51ff4abcd945e"
         },
         {
           "type": "behavioral-test",
@@ -248,19 +248,19 @@
           "type": "source-evidence",
           "path": "src/commands/context-command.mjs",
           "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)",
-          "sha256": "72526cdaf038da4d9a50b33ab3cb30828713e62bbb891f4e2e51e008a403338e"
+          "sha256": "1f054400e864c381e65904bc20095f4eb6df3198b19ffcb985895af7ec31d80d"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/impact.mjs",
           "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)",
-          "sha256": "79ec0c2050f22a759a3add6bd2e4fa630e6c87f72d439b22093ca94f3ccd2b2c"
+          "sha256": "152a53a0010d8cbd51d11e3ce6268fa50d1e2bcacab3d7bcb38dbd53fc120bbf"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "coverage.notes warns when ruleImpact is computed (depConstraints only, 3 of 15)",
-          "sha256": "6190013ec55eeb7f1a9e4cdd910c7be73bfb1fa87051bdeace7c9581c6a18426"
+          "sha256": "85e6400006a7e93c66e64547162c854320fa69d833a11cec42773703f522a163"
         },
         {
           "type": "documentation",
@@ -312,13 +312,13 @@
           "type": "source-evidence",
           "path": "src/providers/moon.mjs",
           "assertion": "inferWorkspaceLayout returns null for partial layouts — same all-or-nothing contract as Nx and Native",
-          "sha256": "232dd8e2cbe70c9149ba3a75a03dcebe0db355894c280964ebbf6a5a536b5567"
+          "sha256": "f461cfaa2c8267a78fa9afa4b3267e92be4a85ff5f370b9e4b613a1fb85fc211"
         },
         {
           "type": "behavioral-test",
           "path": "src/providers/moon.test.mjs",
           "assertion": "Partial layout (apps-only, libs-only) returns undefined workspaceLayout",
-          "sha256": "084a0061b3236e680274d837fb2f12d27dd4b5a379040157f7afe2be5088e8ac"
+          "sha256": "906fcd38b82af875aecca2910231ec5d5bb551e2a6e7d452f35a0670326c8756"
         }
       ],
       "status": "proven"

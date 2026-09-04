@@ -322,7 +322,7 @@ export function readPluginOptions(workspaceRoot, { readFile = readFileOrNull } =
  * `nx.json` → `plugins[].options.tsConfig` and a native root states it on
  * `archkeep.json`'s own `tsConfig` field; Moon's own configuration carries no
  * plugin-options table, and a `archkeep.json` beside `.moon/` is refused
- * outright (`./commands/context.mjs`'s `requireSingleProjectModel`), so every
+ * outright (`./providers/model-gate.mjs`'s `requireSingleProjectModel`), so every
  * door to a stated name is shut. What is left is convention, and one name is
  * not enough of it: measured on a 94-project Vue Moon workspace whose `paths`
  * table lives in `tsconfig.json` with no `tsconfig.base.json` beside it, a

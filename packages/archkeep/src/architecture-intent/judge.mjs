@@ -129,7 +129,7 @@ function directEdges(graph) {
  * three copies of the same filter is how one of them drifts.
  *
  * `../../src/rules/reachability.mjs`'s `buildReachability` itself stays
- * type-agnostic on purpose: `../../src/commands/edge-constraints.mjs`'s
+ * type-agnostic on purpose: `../rules/edge-constraints.mjs`'s
  * `declaredEdgeViolationsForCheck` and `../../src/rules/index.mjs`'s
  * `evaluate()` both deliberately hand it the UNFILTERED graph, because
  * `depConstraints`' `notDependOnLibsWithTags` is a different, tag-based

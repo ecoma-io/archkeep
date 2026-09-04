@@ -938,7 +938,7 @@ describe("Contract J — Check is enforcement authority", () => {
     // Each direction is measured on the edge it can catch: agreement on a
     // violating edge, and agreement on a legal one.
     const { evaluate } = await import("../rules/index.mjs");
-    const { judgeEdge } = await import("../commands/edge-constraints.mjs");
+    const { judgeEdge } = await import("../rules/edge-constraints.mjs");
 
     const nodesFor = (betaTags) => ({
       alpha: { name: "alpha", type: "lib", data: { root: "libs/alpha", tags: ["layer:domain"] } },

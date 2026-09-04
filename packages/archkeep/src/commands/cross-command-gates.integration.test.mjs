@@ -16,7 +16,7 @@ import { waiversCommand } from "./waivers.mjs";
  *
  1. **`diff` ↔ `delta`** — both answer "which violations does this change
     introduce", through two DIFFERENT engines: `diff` judges added EDGES via
-    `edge-constraints.mjs`'s tag rules; `delta` re-judges both sides'
+    `../rules/edge-constraints.mjs`'s tag rules; `delta` re-judges both sides'
     import-site RECORDS through the full rule engine. The documented narrowing
     (diff's rule impact covers only the depConstraints verdicts) is itself
     pinned here as a subset relation — so a future edit that quietly widens,
