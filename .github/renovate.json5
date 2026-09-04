@@ -29,6 +29,7 @@
   // Weekly, not continuous. This is a small, single-maintainer repository; a
   // drip of pull requests through the day would be noise rather than signal.
   schedule: ["before 6am on monday"],
+  minimumReleaseAge: "3 days",
   lockFileMaintenance: {
     enabled: true,
     schedule: ["before 6am on monday"],
