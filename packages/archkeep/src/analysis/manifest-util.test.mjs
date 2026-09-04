@@ -168,25 +168,29 @@ describe("basenameMatches", () => {
   });
 
   it("routes a pattern carrying any carried character to the matcher, and nothing else", () => {
-    // The routing table is `[*?[{\\]` — one row per carried character below,
+    // The routing table is `[*?[{(\\]` — one row per carried character below,
     // then the characters it deliberately does not carry. The two tables named
     // `GLOB_METACHARACTERS` (`../rules/match.mjs` carries the other) disagree
     // on purpose: here the only wrong answer is sending a glob to equality —
     // the silent direction — so the table must carry every character that can
     // change the glob's answer, while admitting an extra literal costs
     // nothing, because a pattern without metacharacters answers identically
-    // through the matcher and by equality.
+    // through the matcher and by equality. `(` is carried for extglob; a
+    // pattern whose `(` never opens one — `a(b` — measures literal in the
+    // grammar, so routing it is free, and the raw pin below holds that
+    // measurement against a grammar that starts reading it otherwise.
     const routed = [];
     const spy = (base, pattern) => {
       routed.push(pattern);
       return base === pattern;
     };
-    for (const pattern of ["*.mod", "a?b", "[ab]", "{x,y}", "a\\b"]) {
+    for (const pattern of ["*.mod", "a?b", "[ab]", "{x,y}", "a\\b", "a(b"]) {
       expect(basenameMatches("zzz", [pattern], spy)).toBe(false);
     }
-    expect(routed).toEqual(["*.mod", "a?b", "[ab]", "{x,y}", "a\\b"]);
+    expect(routed).toEqual(["*.mod", "a?b", "[ab]", "{x,y}", "a\\b", "a(b"]);
+    expect(posix.matchesGlob("a(b", "a(b")).toBe(true);
     routed.length = 0;
-    for (const pattern of ["go.mod", "a(b", "a)b", "a]b", "a}b", "!go.mod"]) {
+    for (const pattern of ["go.mod", "a)b", "a]b", "a}b", "!go.mod"]) {
       expect(basenameMatches("zzz", [pattern], spy)).toBe(false);
     }
     expect(routed).toEqual([]);
@@ -200,23 +204,30 @@ describe("basenameMatches", () => {
     expect(basenameMatches("a\\b", ["a\\b"], posix.matchesGlob)).toBe(false);
   });
 
-  it("answers an extglob pattern from the literal table — the divergence issue #652 records", () => {
+  it("answers an extglob pattern through the glob, both directions — the carry #671 made", () => {
     // `path.posix.matchesGlob` implements extglob: measured on Node v24,
     // `+(x).txt` matches `x.txt`, `@(x).txt` matches `x.txt`, and `!(x).txt`
-    // matches `y.txt` — while an unbalanced `a(b` is literal, so the `a(b`
-    // row above is safe to route by equality. `(` is therefore the one
-    // character missing from the routing table that can change the glob's
-    // answer (`?(…)` already rides the `?`), and the doc comment on
-    // `basenameMatches` — "semantics are unchanged … every other pattern
-    // still reaches the glob" — does not hold for these patterns. Both
-    // directions are pinned as the function behaves TODAY, each beside the
-    // raw glob's contrary answer, so the day either the table or that
-    // contract moves, a half fails here and names the decision.
-    expect(basenameMatches("x.txt", ["+(x).txt"], posix.matchesGlob)).toBe(false);
+    // matches `y.txt` but refuses `x.txt`. #669 pinned `basenameMatches` on
+    // the equality side of every row below — `(` was missing from the
+    // routing table — and #671 carried it, turning that fixture table over:
+    // each row now answers what the raw glob answers, the literal spellings
+    // included. Equality gets those wrong in both directions — a file
+    // literally named `+(x).txt` is NOT matched by the pattern `+(x).txt`,
+    // while `!(x).txt` DOES match a file of its own spelling — so every row
+    // is a silent-direction guard: reverting the carry turns one of them
+    // back into a quiet miss. The raw pins beside the rows keep naming the
+    // grammar, so a Node that changes extglob semantics re-diverges here
+    // instead of drifting silently.
+    expect(basenameMatches("x.txt", ["+(x).txt"], posix.matchesGlob)).toBe(true);
     expect(posix.matchesGlob("x.txt", "+(x).txt")).toBe(true);
-    expect(basenameMatches("+(x).txt", ["+(x).txt"], posix.matchesGlob)).toBe(true);
+    expect(basenameMatches("+(x).txt", ["+(x).txt"], posix.matchesGlob)).toBe(false);
     expect(posix.matchesGlob("+(x).txt", "+(x).txt")).toBe(false);
-    expect(basenameMatches("y.txt", ["!(x).txt"], posix.matchesGlob)).toBe(false);
+    expect(basenameMatches("x.txt", ["@(x).txt"], posix.matchesGlob)).toBe(true);
+    expect(posix.matchesGlob("x.txt", "@(x).txt")).toBe(true);
+    expect(basenameMatches("@(x).txt", ["@(x).txt"], posix.matchesGlob)).toBe(false);
+    expect(basenameMatches("y.txt", ["!(x).txt"], posix.matchesGlob)).toBe(true);
     expect(posix.matchesGlob("y.txt", "!(x).txt")).toBe(true);
+    expect(basenameMatches("x.txt", ["!(x).txt"], posix.matchesGlob)).toBe(false);
+    expect(basenameMatches("!(x).txt", ["!(x).txt"], posix.matchesGlob)).toBe(true);
   });
 });

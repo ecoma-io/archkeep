@@ -67,8 +67,12 @@ export function resolveWithinWorkspace(baseDir, relative) {
   return segments.join("/");
 }
 
-/** A pattern carrying any of these is a glob; anything else is a literal. */
-const GLOB_METACHARACTERS = /[*?[{\\]/;
+/**
+ * A pattern carrying any of these is routed to the glob matcher; everything
+ * else compares equal. `(` rides for extglob — `+(x).txt` matches `x.txt`
+ * (measured on Node v24) — the character #671 proved the table was missing.
+ */
+const GLOB_METACHARACTERS = /[*?[{(\\]/;
 
 /**
  * Does a file's basename match any of a manifest-name pattern list — the
@@ -82,9 +86,14 @@ const GLOB_METACHARACTERS = /[*?[{\\]/;
  * the equality scan it replaced was nanoseconds, because each call compiles
  * its pattern again. The matcher is injected so `../../providers/native/
  * model.mjs`'s validated one and raw `path.posix.matchesGlob` ride the same
- * fast path without this module reaching for either; semantics are
- * unchanged, because a metacharacter-free pattern answers identically
- * either way and every other pattern still reaches the glob.
+ * fast path without this module reaching for either. The rule the table has
+ * to hold: every pattern carrying a character that can alter the glob's
+ * answer is routed to it, and everything else compares equal — a pattern
+ * the table does not carry is literal outside constructs the table already
+ * routes, so the two answers agree, and routing a literal anyway (an
+ * unbalanced `a(b`) costs only the matcher call. #671: `(` was missing
+ * from the table, so an extglob manifest pattern like `+(x).csproj` was
+ * compared by equality and missed every file the pattern named.
  *
  * @param {string} base The basename under test.
  * @param {readonly string[]} patterns
