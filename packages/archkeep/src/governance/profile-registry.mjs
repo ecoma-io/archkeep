@@ -304,23 +304,13 @@ export function resolveProfile(profiles, name, seen = new Set()) {
  * @param {string} path Absolute path of the profiles file.
  * @param {{readFile?: (path: string) => string|null}} [io] Injectable read,
  *   the same seam `../../options.mjs`'s readers take; answers `null` when the
- *   file is not there.
+ *   file is not there. Defaults to `defaultProfileIo.readFile` — the sync
+ *   `node:fs` read this module makes, the only place it touches the disk.
  * @returns {{profiles: object[]}}
  * @throws {Error} on a missing/unreadable/unparseable file, or on any
  *   profile-registry or reference-graph defect.
  */
-export function loadProfileRegistry(
-  path,
-  {
-    readFile = (p) => {
-      try {
-        return readFileSync(p, "utf8");
-      } catch {
-        return null;
-      }
-    },
-  } = {},
-) {
+export function loadProfileRegistry(path, { readFile = defaultProfileIo.readFile } = {}) {
   const text = readFile(path);
   if (text === null) {
     throw new Error(`archkeep: cannot read profiles file ${path}`);
@@ -363,3 +353,19 @@ export function profilePolicy(registryPath, profileName, sourceLabel, io = {}) {
   const effective = resolveProfile(registry.profiles, profileName);
   return policyFrom(effective, `${sourceLabel} (profile "${profileName}")`);
 }
+
+/**
+ * The default io: the sync `node:fs` read `loadProfileRegistry` makes, wrapped
+ * in the null-on-missing contract `../../options.mjs`'s readers share. This is
+ * the only place in this module the filesystem is named directly — a test
+ * injects a `readFile` and the module body never touches the disk on its own.
+ */
+const defaultProfileIo = Object.freeze({
+  readFile: (p) => {
+    try {
+      return readFileSync(p, "utf8");
+    } catch {
+      return null;
+    }
+  },
+});

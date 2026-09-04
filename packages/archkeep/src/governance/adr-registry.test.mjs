@@ -240,6 +240,24 @@ describe("loadAdrRegistry", () => {
     };
     expect(() => loadAdrRegistry("/tmp/x", io)).toThrow(/cannot read docs\/adr/);
   });
+
+  // The containment-probe gate is filesystem I/O like any other: before this
+  // test, `existsSync` read the real disk even when every other seam was
+  // injected — an in-memory tree that recorded its own calls would never see
+  // the probe. Counting proves the injected one is the one that ran.
+  it("routes the containment-probe existsSync through the injected io, not the real fs", () => {
+    let probeCalls = 0;
+    const io = {
+      ...inMemoryTree(Object.fromEntries(VALID)),
+      existsSync: () => {
+        probeCalls++;
+        return false;
+      },
+    };
+    const { records } = loadAdrRegistry("/tmp/x", io);
+    expect(records.map((r) => r.id)).toEqual(["0001-bind-collaboration"]);
+    expect(probeCalls).toBe(records.length);
+  });
 });
 
 describe("supersedes chain", () => {

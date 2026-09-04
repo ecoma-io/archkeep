@@ -407,7 +407,8 @@ judges against. It is descriptive: it never exits `1`. An incomplete read is
 `coverage`, and the observations that WERE made still ride `result.discovery`
 — the run reports what it saw and lets `coverage.complete` say how much of the
 tree that was. A workspace with zero projects is not one: an empty observation
-is complete, and the empty proposal states it with `unknown: true`. Under
+is complete, and the empty proposal `--propose` then builds states it with
+`unknown: true`. Under
 `--propose` an incomplete read refuses outright instead
 (exit 3, no envelope at all): a candidate derived over a gap would be a
 fabrication wearing a proposal's name. [discovery.md](discovery.md) owns the
@@ -1039,7 +1040,7 @@ descriptive: `status: "ok"` (exit 0) whenever the catalog could be read.
 
 | field     | type     | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | --------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `catalog` | string   | The path the catalog was read from, as the run resolved it — the `--catalog` value or the default path.                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `catalog` | string   | The path the catalog was read from, exactly as the run received it — the `--catalog` value (a relative path stays relative) or the default path when the flag was absent.                                                                                                                                                                                                                                                                                                                                                  |
 | `rules`   | object[] | Every catalog entry verbatim — the command validates the catalog's shape, not its entries. The official catalog records `{name, description, contract, needs, params, artifact, sha256}`: `contract` the contract version the artifact must speak, `needs` the evidence kinds the rule reads ([custom-rules.md](custom-rules.md)), `params` the parameter schema (the values are the workspace's law to choose, never the catalog's), `artifact` the wasm path the entry names, `sha256` the digest that pins those bytes. |
 
 **`rules info <name>`** answers `{catalog, rule}` — `rule` the same catalog
@@ -1053,16 +1054,16 @@ name is a named refusal, never a clean empty answer.
 findingsCount, findings}`, each `findings` entry `{rule, severity: "fail",
 message}` — a digest mismatch, an artifact the host refused, or a path that
 escapes the catalog's directory, each named with its entry. It exits `1` when
-`findings` is non-empty and `0` when every entry verified — the two lanes
-[exit-codes.md](exit-codes.md) draws for this command, never collapsed into
-one.
+`findings` is non-empty and `0` when every entry verified — never one code
+standing for both. The third lane [exit-codes.md](exit-codes.md) draws for
+this command, the catalog the run could not read at all, is the throw below.
 
 **`rules add <name>`** copies the artifact into the workspace and answers
 `{catalog, rule, artifactPath, customRulesRow}`: `rule` the catalog name,
 `artifactPath` where the bytes were written, and `customRulesRow` the
 ready-to-paste policy row `{name, artifact, sha256, reason}` — printed, never
-written into a config. Every refusal — an unknown name, an artifact path that
-escapes its directory, a missing artifact, a digest mismatch — is
+written into a config. Every refusal — an unknown name, a read or write path
+that escapes its anchor directory, a missing artifact, a digest mismatch — is
 `status: "no-verdict"` (exit 3) with the reason in `coverage.notAnalyzed`,
 and nothing is copied.
 
