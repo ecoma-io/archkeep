@@ -47,6 +47,7 @@
  */
 import { readFileSync } from "node:fs";
 
+import { canonicalJsonReplacer } from "../canonical.mjs";
 import { buildDependencies, buildProjects } from "./graph.mjs";
 
 /** The only snapshot schemaVersion this module writes and reads. */
@@ -262,16 +263,23 @@ export function buildEvidenceSnapshot({
 /**
  * Renders the snapshot as deterministic JSON text.
  *
- * Deterministic because `buildEvidenceSnapshot` constructs every key in a
- * fixed order and sorts every array whose source does not guarantee order;
- * two captures over one unchanged tree produce byte-identical files, which is
- * what makes a plain `diff` of two baselines meaningful.
+ * Deterministic by mechanism, not by constructor discipline: the text is
+ * produced through `../canonical.mjs`'s `canonicalJsonReplacer`, which sorts
+ * plain-object keys at every depth — the same canonicalizer the graph-snapshot
+ * family's `snapshotIdentity` hashes with. That is load-bearing because two of
+ * the stored inputs (`records`, `graph.workspaceLayout`) arrive verbatim from
+ * upstream code that owns their nested key order; sorting at serialize time is
+ * what makes the bytes a function of what the snapshot MEANS. Array element
+ * order is the only order the format keeps, and `buildEvidenceSnapshot` sorts
+ * every array whose source does not guarantee it. Two captures over one
+ * unchanged tree produce byte-identical files, which is what makes a plain
+ * `diff` of two baselines meaningful.
  *
  * @param {object} snapshot From `buildEvidenceSnapshot`.
  * @returns {string} The JSON text, newline-terminated.
  */
 export function serializeEvidenceSnapshot(snapshot) {
-  return `${JSON.stringify(snapshot, null, 2)}\n`;
+  return `${JSON.stringify(snapshot, canonicalJsonReplacer, 2)}\n`;
 }
 
 /**

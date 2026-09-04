@@ -290,6 +290,31 @@ describe("serializeEvidenceSnapshot", () => {
     expect(parseEvidenceSnapshot(text, "/base.json")).toEqual(snapshot);
   });
 
+  it("still parses a snapshot written BEFORE key order was canonicalized", () => {
+    // (#629 compatibility) Serializing through the canonicalizer reorders the
+    // keys a pre-fix build wrote in construction order. The reader has always
+    // keyed by name — never by position — so existing baselines must stay
+    // consumable, which is proven here the only way it can be: text spelled
+    // exactly as the old serializer spelled it (plain `JSON.stringify`,
+    // construction order, two-space indent) goes through the CURRENT parser
+    // and comes back equal to the snapshot it carries.
+    const snapshot = buildEvidenceSnapshot(
+      validInput({
+        graph: {
+          nodes: nodes(),
+          dependencies: { "acme-alpha": [{ target: "acme-beta", type: "static" }] },
+          workspaceLayout: { appsDir: "products", libsDir: "modules" },
+        },
+        records: [record()],
+      }),
+    );
+    const legacyText = `${JSON.stringify(snapshot, null, 2)}\n`;
+    // The legacy spelling really is a different byte stream — otherwise this
+    // test would pass vacuously beside the canonical one above.
+    expect(legacyText).not.toBe(serializeEvidenceSnapshot(snapshot));
+    expect(parseEvidenceSnapshot(legacyText, "/pre-fix.json")).toEqual(snapshot);
+  });
+
   it("is byte-deterministic: two builds over one tree serialize identically", () => {
     // Same facts, hostile ordering: nodes and dependency keys inserted in the
     // opposite order, unsorted entryPoints and exemptedFiles. If any array
@@ -304,6 +329,36 @@ describe("serializeEvidenceSnapshot", () => {
     b.graph.exemptedFiles = ["libs/alpha/gen.go", "libs/beta/gen.go"];
     expect(serializeEvidenceSnapshot(buildEvidenceSnapshot(a))).toBe(
       serializeEvidenceSnapshot(buildEvidenceSnapshot(b)),
+    );
+  });
+
+  it("is byte-deterministic under hostile nested key order in records and workspaceLayout", () => {
+    // (#629) `records` and `graph.workspaceLayout` are the two inputs
+    // `buildEvidenceSnapshot` stores verbatim, so their nested key order is
+    // upstream code's, not this module's. The serializer must own it: two
+    // snapshots that MEAN the same thing have to serialize to the same
+    // bytes, or a plain `diff` of two baselines reports a producer's key
+    // order as architectural change.
+    const reorderedRecord = {
+      resolved: { packageName: null, external: false, file: null, target: "acme-beta" },
+      spelling: { namesOnly: false, relative: false, path: false },
+      kind: "static",
+      specifier: "example.invalid/acme/beta",
+      column: 1,
+      line: 3,
+      sourceFile: "libs/alpha/src/main.go",
+    };
+    const a = validInput();
+    a.graph.workspaceLayout = { appsDir: "products", libsDir: "modules" };
+    const b = validInput();
+    b.records = [reorderedRecord];
+    b.graph.workspaceLayout = { libsDir: "modules", appsDir: "products" };
+    // Same meaning — vitest's toEqual reads by key, as the loader does.
+    expect(b.records).toEqual(a.records);
+    expect(b.graph.workspaceLayout).toEqual(a.graph.workspaceLayout);
+    // …and therefore the same bytes.
+    expect(serializeEvidenceSnapshot(buildEvidenceSnapshot(b))).toBe(
+      serializeEvidenceSnapshot(buildEvidenceSnapshot(a)),
     );
   });
 

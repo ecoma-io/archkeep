@@ -5,10 +5,12 @@
  * claim it cannot verify. When git IS available (the normal CLI path), the
  * commit, remote, and dirty state are captured.
  *
- * These tests run against the real git repository this package lives in, because
- * `resolveProvenance` is a thin wrapper over `git` commands and the meaningful
- * test is whether it correctly reads what git reports. A mocked git would prove
- * the mock, not the code.
+ * These tests run against real git repositories — the one this package lives
+ * in where only "git is available and honest about this tree" is the question,
+ * frozen temp fixtures everywhere the test asserts on a specific answer —
+ * because `resolveProvenance` is a thin wrapper over `git` commands and the
+ * meaningful test is whether it correctly reads what git reports. A mocked git
+ * would prove the mock, not the code.
  */
 import { describe, it, expect, vi } from "vitest";
 import { resolveFileAttribution, resolveProvenance } from "./provenance.mjs";
@@ -177,27 +179,77 @@ describe("resolveProvenance", () => {
 
 describe("resolveProvenance — 10-run determinism", () => {
   it("produces byte-identical output across 10 consecutive calls over the same repo", () => {
-    // The real git repo is stable across the duration of a test run; each
-    // call must return exactly the same {commit, remote, dirty} tuple.
-    const root = process.cwd();
-    const results = Array.from({ length: 10 }, () => resolveProvenance(root));
-    const first = JSON.stringify(results[0]);
-    for (let i = 1; i < results.length; i++) {
-      expect(JSON.stringify(results[i])).toBe(first);
+    // The loop reads a FROZEN fixture repository, not the live worktree
+    // (#631): between two calls of one loop, a concurrent writer to the
+    // checkout (another test, an editor, a git operation in another session)
+    // can flip the live `dirty` flag, and an assertion about determinism
+    // then reports a changed input as a changed answer. The fixture freezes
+    // the input; the calls still drive the real `resolveProvenance` over a
+    // real git repository — real child processes, only the location frozen.
+    const repo = makeFrozenRepo();
+    try {
+      const results = Array.from({ length: 10 }, () => resolveProvenance(repo));
+      // The fixture is what the loop needs it to be: a committed, clean,
+      // remote-less tree whose HEAD git can name — pinned, not assumed, so a
+      // fixture that stopped being frozen fails here rather than pinning a
+      // determinism it does not have.
+      const expectedCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: repo,
+        encoding: "utf8",
+      }).trim();
+      expect(results[0]).toEqual({ commit: expectedCommit, remote: null, dirty: false });
+      const first = JSON.stringify(results[0]);
+      for (let i = 1; i < results.length; i++) {
+        expect(JSON.stringify(results[i])).toBe(first);
+      }
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
     }
   });
 
   it("the 10 results share the same object shape — commit string, remote string|null, dirty boolean", () => {
-    const root = process.cwd();
-    const results = Array.from({ length: 10 }, () => resolveProvenance(root));
-    for (const result of results) {
-      expect(result).not.toBeNull();
-      expect(typeof result.commit).toBe("string");
-      expect(result.remote === null || typeof result.remote === "string").toBe(true);
-      expect(typeof result.dirty).toBe("boolean");
+    const repo = makeFrozenRepo();
+    try {
+      const results = Array.from({ length: 10 }, () => resolveProvenance(repo));
+      for (const result of results) {
+        expect(result).not.toBeNull();
+        expect(typeof result.commit).toBe("string");
+        expect(result.remote === null || typeof result.remote === "string").toBe(true);
+        expect(typeof result.dirty).toBe("boolean");
+      }
+    } finally {
+      rmSync(repo, { recursive: true, force: true });
     }
   });
 });
+
+/** Creates a temp git repo with one commit and a clean tree — a frozen input. */
+function makeFrozenRepo() {
+  const repo = mkdtempSync(join(tmpdir(), "archkeep-provenance-frozen-"));
+  try {
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: repo });
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "--allow-empty",
+        "-m",
+        "base",
+      ],
+      { cwd: repo, env: { ...process.env, GIT_DIR: undefined, GIT_WORK_TREE: undefined } },
+    );
+    return repo;
+  } catch (err) {
+    rmSync(repo, { recursive: true, force: true });
+    throw err;
+  }
+}
 
 /** Creates a temp git repo with two committers for attribution tests. */
 function makeRepoWithTwoCommitters() {

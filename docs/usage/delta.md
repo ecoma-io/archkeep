@@ -24,7 +24,11 @@ does the tree look like now" (`check`) and not "which edges moved"
   policy fingerprint. Evidence, never verdicts — the snapshot stores what a
   future run needs to _re-judge_ the base, not what the base was judged to be.
   With `--output <file>` the snapshot goes to a file; without it, to stdout.
-  Capture is descriptive: exit 0 on success, 3 on any failure, never 1.
+  The bytes are canonical — every object's keys sorted — so two captures over
+  one unchanged tree diff clean and a `diff` of two baselines shows evidence,
+  never key-order noise; snapshots captured before the keys were sorted stay
+  readable, because the compare side reads fields by name. Capture is
+  descriptive: exit 0 on success, 3 on any failure, never 1.
 - **Compare** — `archkeep delta <baseline>` loads a captured snapshot,
   re-judges **both** sides through the same rule engine under the **current**
   boundary config and one shared reference instant, and classifies every
