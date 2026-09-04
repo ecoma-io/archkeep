@@ -10,13 +10,14 @@ is observed (projects, edges, tags, and the coverage a verdict over this tree
 could trust), and `archkeep discover --propose` derives the candidate architecture
 those observations imply — candidate components, boundary assertions, tag
 vocabularies and rules — each marked as a proposal that is **not authoritative**
-and **never written**.
+and, on its own, **never written**: the write is a separate, explicit hand-off.
 
 Discovery is the last capability of the architecture-governance wave, and it is
 deliberately the least assertive one: everything else in that wave enforces or
 recommends against a declared intent, while discovery suggests what the intent
-_should be_ from what is already there. It never writes `architecture-intent.json`,
-never mutates the workspace, and never hands a candidate the authority of a
+_should be_ from what is already there. The observation and the proposal mutate
+nothing; a candidate reaches `architecture-intent.json` only through the
+operator's explicit `--write-intent` hand-off, and never with the authority of a
 decision.
 
 ## The proposal-only line
@@ -30,11 +31,16 @@ The one invariant everything else in this document holds:
   reader who scans the report cannot mistake a candidate for a decision.
 - **A workspace that does not ask does not get one.** The default `discover` run
   is purely descriptive. `--propose` is opt-in.
-- **No write-back, by construction.** The proposal evaluator
+- **No write-back in the derivation.** The proposal evaluator
   (`packages/archkeep/src/governance/discovery-proposal.mjs`) is pure: it takes an
   observed model and returns a proposal object. It never reads a file, never
-  writes a file, and never imports the module that loads a declaration. Whether a
-  candidate later becomes intent is a governance decision owned elsewhere.
+  writes a file, and never imports the module that loads a declaration. The one
+  write lives above it, in the CLI: `discover --propose --write-intent <file>`
+  serializes that proposal into a valid `architecture-intent.json` at a path the
+  operator names, refusing to overwrite a file that is already there. What lands
+  is still a proposal — reviewed like a diff before it governs anything. Whether
+  a candidate becomes intent is a governance decision owned by the reader, never
+  by the run.
 
 ## What is observed
 

@@ -13,11 +13,15 @@ archkeep discover --propose --format json --output proposal.json
 and the coverage a verdict over this tree could trust. With `--propose`, it
 derives the candidate architecture those observations imply: candidate
 components, boundary assertions, tag vocabularies and rules. Every candidate
-carries `proposed: true` and `notAuthoritative: true`, and the command never
-writes to `architecture-intent.json`.
+carries `proposed: true` and `notAuthoritative: true`, and computing one
+writes nothing — the only route from a proposal to `architecture-intent.json`
+is the operator's explicit `--write-intent` hand-off
+([../reference/discovery.md](../reference/discovery.md) owns the flag).
 
-This is a descriptive command: it never exits 1, never mutates the workspace,
-and never hands a candidate the authority of a decision.
+This is a descriptive command: it never exits 1, and it never hands a
+candidate the authority of a decision. The observation and the proposal
+write nothing on their own; the only file the command can put bytes into,
+beyond the `--output` report, is the one `--write-intent` names.
 
 ## What the observed side contains
 
@@ -66,9 +70,14 @@ vocabulary, bounded by construction and assigned deterministically from what was
 measured. The report prints a confidence legend with the count of candidates at
 each level.
 
-The proposal is **never written** to `architecture-intent.json`. The evaluator
-is pure — it cannot even express the write. Whether a candidate later becomes
-intent is a governance decision owned elsewhere.
+Computing the proposal writes nothing: the evaluator is pure — it cannot even
+express the write — and the command layer holds no intent path. The one door
+to `architecture-intent.json` is the CLI's `--write-intent <file>` flag:
+explicit, named by the operator, refused when a file already stands at the
+target, and what it writes is a proposal to review like a diff, not an
+adopted law. Whether a candidate becomes intent is a governance decision
+owned by the reader
+([../reference/discovery.md](../reference/discovery.md) owns the flag).
 
 ## Exit codes
 
