@@ -12,7 +12,7 @@
  *
  * `UsageError` covers exactly the refusals those regexes matched: a path
  * outside the workspace or matching no tracked file (`./workspace.mjs`'s
- * `selectFiles`), an unknown project name (`./commands/impact.mjs`'s
+ * `selectFiles`), an unknown project name (`./commands/impact-reachability.mjs`'s
  * `computeImpact`, `./commands/context-command.mjs`'s
  * `collectProjectContext`), and a malformed `file:line:column` site string
  * (`./commands/explain.mjs`'s `parseSite`). They are one mistake in four

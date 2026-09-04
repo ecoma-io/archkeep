@@ -384,3 +384,14 @@ the resolution order.
   `projectWithoutTagsCannotHaveDependencies`); npm/circular/lazy-load rules
   need import-site details that graph edges do not carry. A consumer who needs
   the complete verdict should run `check`.
+
+- **`impact-reachability.mjs`** — reverse reachability (`computeImpact`: a
+  project's direct and transitive dependents) shared by the `impact`,
+  `scenario` and `context --plan` commands and the canonical evaluator
+  (`./evaluation-primitives.mjs`). It lives apart from `./impact.mjs` rather
+  than inside it because that module drives `./impact-statement.mjs`, which
+  drives the evaluator — holding the walk in the command module is what made
+  `evaluation-primitives → impact → impact-statement → evaluation-primitives`
+  the engine's only import cycle (#644). `./impact.mjs` re-exports
+  `computeImpact`, so its existing importers keep resolving; new code imports
+  this module.

@@ -35,85 +35,23 @@
  * under project roots, `impact` refuses loudly rather than returning a result
  * whose dependents silently under-represent the real architecture.
  */
-import { UsageError } from "../errors.mjs";
 import { computeImpactConstraints } from "./edge-constraints.mjs";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatImpactReport } from "../report/impact-text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { composeImpactStatement } from "./impact-statement.mjs";
+import { computeImpact } from "./impact-reachability.mjs";
 
 /**
- * Computes the impact set: every project that transitively depends on
- * `projectName`.
- *
- * Builds a reverse adjacency map from the graph's `dependencies`, then walks
- * it breadth-first starting from the target project. The walk does NOT include
- * the target project itself in the dependent set — a project does not depend
- * on itself — but the returned `dependents` array is the union of `direct`
- * and `transitive`, and the report header names the target separately.
- *
- * @param {string} projectName The project whose impact is being queried.
- * @param {object} graph The project graph: `{nodes, dependencies}`.
- * @returns {{project: string, direct: string[], transitive: string[], dependents: string[]}}
- * @throws {UsageError} when `projectName` is not in the graph.
+ * The reachability walk this command reports, shared with the canonical
+ * evaluator through `./impact-reachability.mjs` — held there, not here,
+ * because this module also drives `./impact-statement.mjs`, which drives that
+ * evaluator, and keeping the walk here is what closed the engine's only
+ * import cycle (#644). Re-exported so every importer of this module keeps
+ * resolving `computeImpact` from where it always has.
  */
-export function computeImpact(projectName, graph) {
-  const nodes = graph.nodes;
-  const deps = graph.dependencies;
-
-  if (!Object.hasOwn(nodes, projectName)) {
-    throw new UsageError(
-      `archkeep: no project named '${projectName}' in the graph — ` +
-        `available projects: ${Object.keys(nodes)
-          .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-          .join(", ")}`,
-    );
-  }
-
-  // Build reverse adjacency: target → [sources that depend on it]
-  const reverseAdj = Object.create(null);
-  for (const source of Object.keys(deps)) {
-    if (!Object.hasOwn(deps, source)) continue;
-    const targets = deps[source];
-    for (const edge of targets) {
-      if (!Object.hasOwn(reverseAdj, edge.target)) {
-        reverseAdj[edge.target] = [];
-      }
-      reverseAdj[edge.target].push(source);
-    }
-  }
-
-  // Direct dependents: projects whose edges point straight at the target.
-  // Deduplicate (multiple edges between same pair are possible) and sort.
-  const directSet = new Set(reverseAdj[projectName] ?? []);
-  const direct = [...directSet].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-
-  // BFS through reverse edges to find transitive dependents.
-  const visited = new Set(directSet);
-  const queue = [...directSet];
-  while (queue.length > 0) {
-    const current = queue.shift();
-    const parents = reverseAdj[current];
-    if (parents === undefined) continue;
-    for (const parent of parents) {
-      if (!visited.has(parent)) {
-        visited.add(parent);
-        queue.push(parent);
-      }
-    }
-  }
-
-  // Transitive dependents: reachable through another project, but not direct.
-  const transitive = [...visited]
-    .filter((name) => !directSet.has(name))
-    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-
-  // All dependents: direct + transitive, sorted.
-  const dependents = [...visited].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-
-  return { project: projectName, direct, transitive, dependents };
-}
+export { computeImpact };
 
 /**
  * Runs the `impact` command: resolves the command context, checks the
