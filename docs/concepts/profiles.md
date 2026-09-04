@@ -185,7 +185,12 @@ are hit, not only under `check`. `graph`'s snapshot carries the resolved
 profile's policy fingerprint the same way it already does for a file or an
 inline policy, so `history` and `diff` classify a profile edit as a policy
 change across two captures the same way they classify one in the other two
-dialects.
+dialects. The fingerprint covers the selection itself, not only the resolved
+rows: two profiles whose blocks converge are two different named laws, so the
+selected profile's NAME is hashed in beside the rows, and a run that switches
+between them classifies as a policy change even while the rows agree — the one
+edit nothing else in a capture names, since only `check`'s report carries the
+profile at all.
 
 Only `check`'s own report names which profile it enforced — `result.policy.profile`
 in `--format json`, and a `policy` line first in the text and SARIF reports

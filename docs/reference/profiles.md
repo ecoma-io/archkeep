@@ -70,9 +70,12 @@ rows append.
 `boundaryConfig`/`--config` names a profile. Resolution is depth-first through
 the `base` chain, earlier profiles first. The resolved block is fed to
 `policyFrom`, which validates the block with the same function a file
-dialect uses and returns the shared policy shape. A resolved block that is
-malformed throws the same "is malformed" message a malformed file would, naming
-the profile as the source.
+dialect uses and returns the shared policy shape with the selected NAME
+carried beside it as `profile` — the one field a profile-selected policy has
+that the other dialects' policies do not
+([concepts/profiles.md](../concepts/profiles.md) owns why it rides along). A
+resolved block that is malformed throws the same "is malformed" message a
+malformed file would, naming the profile as the source.
 
 ## The four loud conditions
 

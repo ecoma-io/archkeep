@@ -187,6 +187,16 @@ export function computePolicyFingerprint(config) {
     // two above, so a policy declaring no block hashes exactly as it did
     // before this key existed.
     ...(config.markdown === undefined ? {} : { markdown: config.markdown }),
+    // The named selection is law identity the same way the blocks above are:
+    // `profilePolicy` (`../governance/profile-registry.mjs`) sets this key
+    // when the workspace selects a profile by name, and two profiles whose
+    // resolved blocks converge are still two different named laws. Only
+    // `check`'s report names the selection, so a hash blind to it would let a
+    // `delta` across a switch report the law unchanged with nothing anywhere
+    // saying it moved. Conditional, like the three above, so a policy
+    // selected by file or inline — no `profile` key at all — hashes exactly
+    // as it did before the selection was covered.
+    ...(config.profile === undefined ? {} : { profile: config.profile }),
   };
   // Canonicalise: sort object keys at every depth so insertion order does not
   // affect the hash. Semantic equality, not construction order, is the claim —

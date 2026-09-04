@@ -86,10 +86,13 @@ function hasProfiles(options) {
  * @param {string} cwd The process's working directory a relative `--config`
  *   resolves against — kept separate from the workspace root for the reason
  *   above.
- * @returns {Promise<{config: {depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], coverage?: object, markdown?: {include: string[], markers: {pattern: string, edge: string}[]}, notes?: string[]}|null, profile: string|null, source: string|null}>}
+ * @returns {Promise<{config: {depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], coverage?: object, markdown?: {include: string[], markers: {pattern: string, edge: string}[]}, notes?: string[], profile?: string}|null, profile: string|null, source: string|null}>}
  *   `fitness`, `customRules` and `markdown` are present only when the resolved
  *   policy declares them — an absent key is the workspace's decision not to
  *   declare that law, never an empty one (`../config.mjs`'s `policyFrom`).
+ *   `profile` is present only when the law was selected by name, set by the
+ *   profiles arm (`../governance/profile-registry.mjs`'s `profilePolicy`) so
+ *   the selection the policy was resolved by travels with it.
  * @throws {Error} when a named profile, a `--config` file, or an inline
  *   policy cannot be resolved or is malformed — every arm's existing failure
  *   mode, unchanged by the extraction.

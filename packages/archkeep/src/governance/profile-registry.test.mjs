@@ -427,6 +427,11 @@ describe("profilePolicy", () => {
       depConstraints: [{ sourceTag: "type:domain", onlyDependOnLibsWithTags: ["type:domain"] }],
       options: fullOptions(),
       suppressions: [],
+      // The selection rides on the policy it produced — the one policy fact
+      // that travels between captures — so two profiles whose blocks converge
+      // are still two different named laws (`../commands/graph.mjs`'s
+      // `computePolicyFingerprint` reads this key).
+      profile: "nx-package-law",
     });
   });
 
