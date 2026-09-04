@@ -25,7 +25,11 @@ import {
   computeDomainCoverage,
   REQUIRED_DOMAINS,
 } from "./completeness.mjs";
-import { computeImpact } from "./impact.mjs";
+// The reachability walk comes from `./impact-reachability.mjs`, not from
+// `./impact.mjs`: that module drives `./impact-statement.mjs`, which drives
+// this one, so importing the walk from there closed the engine's only import
+// cycle (#644).
+import { computeImpact } from "./impact-reachability.mjs";
 import { computeImpactConstraints } from "./edge-constraints.mjs";
 // ---------------------------------------------------------------------------
 // Decision resolution

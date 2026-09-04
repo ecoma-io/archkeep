@@ -827,13 +827,17 @@ describe("Contract F — Diff semantics", () => {
 // ── Contract G: Impact determinism ──────────────────────────────────────────
 
 describe("Contract G — Impact determinism", () => {
+  // Both checks read the reachability walk where it now lives
+  // (`./impact-reachability.mjs`, extracted from `./impact.mjs` in #644 so the
+  // canonical evaluator could import it without closing an import cycle);
+  // `./impact.mjs` only re-exports `computeImpact` from there.
   it("impact uses BFS (queue.shift, not pop)", () => {
-    const content = readFileSync(join(ROOT, "src", "commands", "impact.mjs"), "utf-8");
+    const content = readFileSync(join(ROOT, "src", "commands", "impact-reachability.mjs"), "utf-8");
     expect(content).toMatch(/queue\.shift\(\)/);
   });
 
   it("impact sorts with plain string comparison, never localeCompare", () => {
-    const content = readFileSync(join(ROOT, "src", "commands", "impact.mjs"), "utf-8");
+    const content = readFileSync(join(ROOT, "src", "commands", "impact-reachability.mjs"), "utf-8");
     const code = stripComments(content);
     expect(code).not.toMatch(/localeCompare/);
     // All sorts use (a, b) => (a < b ? -1 : a > b ? 1 : 0)
