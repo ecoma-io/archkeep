@@ -91,6 +91,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "
 import { join } from "node:path";
 
 import { containmentViolation } from "../containment.mjs";
+import { isEnoent } from "../errors.mjs";
 import { describe } from "../values.mjs";
 
 /** The directory, relative to a workspace root, where ADR files live. */
@@ -538,7 +539,7 @@ export function loadAdrRegistry(root, io = {}) {
     // deliberately silent, for the reason this module's header states.
     names = readDir(dir);
   } catch (cause) {
-    if (cause?.code === "ENOENT") return { records: [], byId: new Map() };
+    if (isEnoent(cause)) return { records: [], byId: new Map() };
     throw new Error(`archkeep: cannot read ${ADR_DIR}: ${cause?.message ?? cause}`, { cause });
   }
   names.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));

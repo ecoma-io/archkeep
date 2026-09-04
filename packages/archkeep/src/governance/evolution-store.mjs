@@ -51,6 +51,7 @@ import {
 import { join, resolve } from "node:path";
 
 import { containmentViolation } from "../containment.mjs";
+import { isEnoent } from "../errors.mjs";
 import {
   eventDedupeKey,
   eventId,
@@ -222,7 +223,7 @@ export function writeEvent(dir, event, io = {}) {
   try {
     names = readDir(dirAbs);
   } catch (cause) {
-    if (cause?.code === "ENOENT") {
+    if (isEnoent(cause)) {
       // An absent optional store is an empty store: the caller's first event.
       makeDir(dirAbs, { recursive: true });
       names = readDir(dirAbs);
@@ -325,7 +326,7 @@ export function readEvents(dir, io = {}) {
   try {
     names = readDir(dirAbs);
   } catch (cause) {
-    if (cause?.code === "ENOENT") return [];
+    if (isEnoent(cause)) return [];
     throw new Error(
       `archkeep: cannot read the event store '${dirAbs}': ${cause?.message ?? cause}`,
       { cause },
