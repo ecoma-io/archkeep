@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.24.1](https://github.com/ecoma-io/archkeep/compare/v0.24.0...v0.24.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* **archkeep:** fold profiles into the policy fingerprint ([#708](https://github.com/ecoma-io/archkeep/issues/708)) ([36be2bb](https://github.com/ecoma-io/archkeep/commit/36be2bb7a555b18dbcc3d1ee391772a1a9896fb0))
+* **archkeep:** fold the coverage block into the policy fingerprint ([#711](https://github.com/ecoma-io/archkeep/issues/711)) ([42ade83](https://github.com/ecoma-io/archkeep/commit/42ade831f463501194b3d8dee6aabb055520b45a))
+* **archkeep:** guard the multi-failure splice and refuse malformed snapshot exemptions ([#703](https://github.com/ecoma-io/archkeep/issues/703)) ([#704](https://github.com/ecoma-io/archkeep/issues/704)) ([#710](https://github.com/ecoma-io/archkeep/issues/710)) ([9680468](https://github.com/ecoma-io/archkeep/commit/96804687f301dab0f023ced5dfebb5ec0ebc4c24))
+* **archkeep:** hold the event-identity refusal law on change --event-out ([#705](https://github.com/ecoma-io/archkeep/issues/705)) ([ab0a93d](https://github.com/ecoma-io/archkeep/commit/ab0a93dbb0ac72fff741ae3c12d136f66fda9b0e))
+
 ## [0.24.0](https://github.com/ecoma-io/archkeep/compare/v0.23.0...v0.24.0) (2026-09-04)
 
 
