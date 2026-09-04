@@ -576,6 +576,29 @@ describe("computePolicyFingerprint", () => {
     );
   });
 
+  it("moves when the coverage block's acceptances move", () => {
+    // The silent direction this covers (#709): a `coverage.unowned` row is a
+    // recorded acceptance that withdraws an unclaimed file's whole-file
+    // failure (`../commands/coverage-acceptance.mjs`), so two policies
+    // differing only in which holes are on record state two different laws. A
+    // fingerprint blind to the block lets a `delta`/`diff` across exactly that
+    // edit report `policyChanged: false`, with nothing anywhere saying the law
+    // moved. The other half of the contract is the pin the profile test above
+    // holds: `coverage` joins the canonical object only when declared, so a
+    // policy recording no acceptance keeps its bytes.
+    const base = { depConstraints: [], options: {}, suppressions: [] };
+    const withAcceptance = (path) => ({
+      ...base,
+      coverage: { unowned: [{ path, reason: "generated vendor drop, reviewed per release" }] },
+    });
+    expect(computePolicyFingerprint(withAcceptance("libs/generated/**"))).not.toBe(
+      computePolicyFingerprint(withAcceptance("vendor/**")),
+    );
+    expect(computePolicyFingerprint(base)).not.toBe(
+      computePolicyFingerprint(withAcceptance("libs/generated/**")),
+    );
+  });
+
   it("is key-order independent — same policy with different key order produces same fingerprint", () => {
     // Two options objects with the same keys but different insertion order.
     const configA = {
