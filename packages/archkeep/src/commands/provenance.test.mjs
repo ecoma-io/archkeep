@@ -333,6 +333,62 @@ function makeFrozenRepoWithTrackedFile() {
   }
 }
 
+/** Creates a frozen repo with a remote and a second, linked worktree at the same commit — the main checkout on `main`, the linked one detached. */
+function makeFrozenRepoWithWorktree() {
+  const repo = mkdtempSync(join(tmpdir(), "archkeep-provenance-worktree-main-"));
+  const linked = `${repo}-linked`;
+  /** @returns {import("node:child_process").ExecFileSyncOptionsWithStringEncoding} The spawn options every setup call shares: the fixture's cwd, utf8 out, ambient git redirects stripped, identity and dates frozen. */
+  const env = () => ({
+    cwd: repo,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_DIR: undefined,
+      GIT_WORK_TREE: undefined,
+      GIT_AUTHOR_DATE: "2026-01-01T00:00:00.000Z",
+      GIT_COMMITTER_DATE: "2026-01-01T00:00:00.000Z",
+    },
+  });
+  try {
+    execFileSync("git", ["init", "-q", "-b", "main"], env());
+    writeFileSync(join(repo, "tracked.txt"), "committed\n");
+    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "add", "."], env());
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-m",
+        "base",
+      ],
+      env(),
+    );
+    execFileSync("git", ["remote", "add", "origin", "https://acme.example/invented.git"], env());
+    execFileSync("git", ["worktree", "add", "-q", "--detach", linked, "HEAD"], env());
+    return { repo, linked };
+  } catch (err) {
+    removeWorktreeFixture({ repo, linked });
+    throw err;
+  }
+}
+
+/** Removes the fixture: the registration first, then both directories. */
+function removeWorktreeFixture({ repo, linked }) {
+  try {
+    execFileSync("git", ["worktree", "remove", "--force", linked], { cwd: repo });
+  } catch {
+    // The registration may already be gone (the repo removed under it) —
+    // the rmSync calls below are the cleanup that must hold either way.
+  }
+  rmSync(repo, { recursive: true, force: true });
+  rmSync(linked, { recursive: true, force: true });
+}
+
 /** Creates a temp git repo with two committers for attribution tests. */
 function makeRepoWithTwoCommitters() {
   const repo = mkdtempSync(join(tmpdir(), "archkeep-file-attribution-"));
@@ -373,6 +429,94 @@ function makeRepoWithTwoCommitters() {
     throw err;
   }
 }
+
+describe("resolveProvenance — what the record says about the checkout that produced it", () => {
+  // The record has three fields, and every one is a fact about the
+  // REPOSITORY STATE a checkout sits at — `commit` the tree bytes name,
+  // `remote` the URL the repository's config shares with every clone and
+  // every linked worktree, `dirty` whether that checkout's tracked files
+  // still match the commit (#683: the bit is tracked-files-only). No field
+  // names the checkout itself: not its path, not the ref its HEAD pointed
+  // at, not which of two worktrees wrote a snapshot. Pinned here over real
+  // linked worktrees, because that is the reading a snapshot consumer
+  // needs: two baselines whose records are deep-equal are the same
+  // repository state, and nothing in the record claims they came from the
+  // same directory.
+
+  it("cannot tell two worktrees of one repository apart — one commit, one record", () => {
+    const { repo, linked } = makeFrozenRepoWithWorktree();
+    try {
+      const main = resolveProvenance(repo);
+      const second = resolveProvenance(linked);
+      // Non-vacuous first: the record carries all three fields, the remote
+      // is the repository-level URL both checkouts read from the shared
+      // config, and the commit is a full object id — so the equality below
+      // is not two empty answers agreeing.
+      expect(main).toEqual({
+        commit: expect.stringMatching(/^[0-9a-f]{40,64}$/u),
+        remote: "https://acme.example/invented.git",
+        dirty: false,
+      });
+      // The main worktree's HEAD is on `main`; the linked one is detached at
+      // the same commit. The records are deep-equal anyway — the ref each
+      // HEAD named is exactly the kind of checkout fact the record does not
+      // carry.
+      expect(second).toEqual(main);
+    } finally {
+      removeWorktreeFixture({ repo, linked });
+    }
+  });
+
+  it("the one checkout fact it does carry is an uncommitted tracked edit — `dirty` flips only in the worktree holding it", () => {
+    const { repo, linked } = makeFrozenRepoWithWorktree();
+    try {
+      // A TRACKED file edited in the linked worktree only: `git status
+      // --porcelain --untracked-files=no` is asked per root, so the answer
+      // is about THAT checkout's tree, never the sibling's.
+      writeFileSync(join(linked, "tracked.txt"), "edited\n");
+      const main = resolveProvenance(repo);
+      const second = resolveProvenance(linked);
+      expect(main.dirty).toBe(false);
+      expect(second.dirty).toBe(true);
+      // Same commit on both sides — the flip is the working tree, not the
+      // history. And `dirty` is the ONLY field that moved: `dirty` is the
+      // single checkout-level signal a consumer of two same-commit records
+      // can read, which is why the field's presence is pinned rather than
+      // assumed.
+      expect(second.commit).toBe(main.commit);
+      expect({ ...second, dirty: main.dirty }).toEqual(main);
+      // The inverse beat: reverting the edit re-equalizes the records — the
+      // bit is the tracked diff, not a property of the checkout, so a
+      // clean linked worktree is provably the same repository state again.
+      execFileSync("git", ["checkout", "-q", "--", "tracked.txt"], { cwd: linked });
+      expect(resolveProvenance(linked)).toEqual(resolveProvenance(repo));
+    } finally {
+      removeWorktreeFixture({ repo, linked });
+    }
+  });
+
+  it("an untracked file in one worktree moves NO field — two same-commit records stay deep-equal (#683)", () => {
+    // The #683 fix in its worktree dimension: the bit reads tracked files
+    // only, so a scratch file an editor left in ONE checkout is invisible
+    // to the record — the consumer comparing two baselines that name the
+    // same commit sees one repository state, not a phantom dirty flag.
+    // Before that fix the second record flipped to dirty=true here, and
+    // the equality below read a difference the analysis never opened.
+    const { repo, linked } = makeFrozenRepoWithWorktree();
+    try {
+      const before = resolveProvenance(repo);
+      expect(before.dirty).toBe(false);
+      writeFileSync(join(linked, "stray.txt"), "scratch\n");
+      const main = resolveProvenance(repo);
+      const second = resolveProvenance(linked);
+      expect(second.dirty).toBe(false);
+      expect(second).toEqual(main);
+      expect(second).toEqual(before);
+    } finally {
+      removeWorktreeFixture({ repo, linked });
+    }
+  });
+});
 
 describe("resolveFileAttribution", () => {
   it("attributes the first and last commits of a file as committed static facts", () => {
