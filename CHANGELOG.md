@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.2](https://github.com/ecoma-io/archkeep/compare/v0.22.1...v0.22.2) (2026-09-04)
+
+
+### Documentation
+
+* document the discover and rules payloads, and correct the decision prose ([#632](https://github.com/ecoma-io/archkeep/issues/632)) ([#639](https://github.com/ecoma-io/archkeep/issues/639)) ([f507eac](https://github.com/ecoma-io/archkeep/commit/f507eac11c72adf1363307ecf64ca1a32df6e09e))
+
 ## [0.22.1](https://github.com/ecoma-io/archkeep/compare/v0.22.0...v0.22.1) (2026-09-04)
 
 
