@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -696,6 +697,123 @@ describe("the reconcile event (--event-out)", () => {
     expect(events[0].notes).toEqual([
       "declared intent row 'intent' is unproven — its verdict could not be determined",
     ]);
+  });
+});
+
+describe("the event identity gate (--event-out) (#701)", () => {
+  /** The writeEvent capture the refusal tests share. */
+  /**
+   * @returns {{writes: {dir: string, event: object}[], capture: (dir: string, event: object) => {id: string, duplicate: boolean}}}
+   */
+  function eventCapture() {
+    /** @type {{dir: string, event: object}[]} */
+    const writes = [];
+    return {
+      writes,
+      capture: (dir, event) => {
+        writes.push({ dir, event });
+        return { id: event.id, duplicate: false };
+      },
+    };
+  }
+
+  /**
+   * Dirties a tracked file for the body of `body` and restores the committed
+   * bytes afterwards — `resolveProvenance` reads the real working tree, so
+   * the dirt must be real, and every other test in this file needs the tree
+   * exactly as `beforeAll` committed it.
+   */
+  /**
+   * @param {(root: string) => Promise<void>} body
+   */
+  async function withDirtyTree(body) {
+    const readme = join(root, "README.md");
+    writeFileSync(readme, "fixture — uncommitted\n");
+    try {
+      await body(root);
+    } finally {
+      writeFileSync(readme, "fixture\n");
+    }
+  }
+
+  it("refuses to write an event from a dirty head — uncommitted evidence collapses onto one id", async () => {
+    const { writes, capture } = eventCapture();
+    const baseline = baselineOf();
+    await withDirtyTree(async () => {
+      await expect(
+        run({
+          ctx: contextOf({ graph: declaredHeadGraph() }),
+          baseline,
+          intent: manifest({ summary: "add payments" }),
+          eventOut: "events",
+          writeEvent: capture,
+        }),
+      ).rejects.toThrow(/dirty working tree/u);
+    });
+    expect(writes).toEqual([]);
+  });
+
+  it("refuses to write an event from a dirty baseline — the base names a commit its evidence does not back", async () => {
+    const { writes, capture } = eventCapture();
+    const clean = baselineOf();
+    const baseline = {
+      readBaseline: (path) => {
+        const snapshot = clean.readBaseline(path);
+        return { ...snapshot, provenance: { ...snapshot.provenance, dirty: true } };
+      },
+    };
+    await expect(
+      run({
+        ctx: contextOf({ graph: declaredHeadGraph() }),
+        baseline,
+        intent: manifest({ summary: "add payments" }),
+        eventOut: "events",
+        writeEvent: capture,
+      }),
+    ).rejects.toThrow(/dirty working tree/u);
+    expect(writes).toEqual([]);
+  });
+
+  it("refuses to write an event without a committed head — a commitless head has no reproducible identity", async () => {
+    const { writes, capture } = eventCapture();
+    const baseline = baselineOf();
+    // Pin the base commit while the repository is still readable —
+    // `provenanceCommit()` spawns git in `root`, and the run below happens
+    // with `.git` renamed away.
+    const commit = provenanceCommit();
+    // Renaming `.git` away makes `resolveProvenance` answer `null` — the
+    // honest non-repository answer — while everything else in the fixture
+    // stays real. Restored in `finally`, always, because every other test in
+    // this file reads the same repository.
+    const dotGit = join(root, ".git");
+    const held = `${dotGit}-held`;
+    renameSync(dotGit, held);
+    try {
+      await expect(
+        run({
+          ctx: contextOf({ graph: declaredHeadGraph() }),
+          baseline,
+          intent: manifest({ base: { commit } }),
+          eventOut: "events",
+          writeEvent: capture,
+        }),
+      ).rejects.toThrow(/committed head/u);
+    } finally {
+      renameSync(held, dotGit);
+    }
+    expect(writes).toEqual([]);
+  });
+
+  it("still reconciles a dirty tree without --event-out — the gate is the event write, not the verdict", async () => {
+    const baseline = baselineOf();
+    await withDirtyTree(async () => {
+      const result = await run({
+        ctx: contextOf({ graph: declaredHeadGraph() }),
+        baseline,
+        intent: manifest({ summary: "add payments" }),
+      });
+      expect(result.coverage.notes.join(" ")).toMatch(/working tree is dirty/u);
+    });
   });
 });
 

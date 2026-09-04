@@ -128,7 +128,11 @@ verdict: matched with every declared constraint passing ⇒ `accepted`;
 undeclared or unfulfilled, or a failed declared constraint ⇒ `rejected`;
 unproven, or a constraint that could not be determined ⇒ `no-verdict`.
 Absent the flag, no file is written and the run is byte-identical to a
-pre-wave-3 one.
+pre-wave-3 one. The write refuses loudly (exit 3) when the head is
+uncommitted or the tree is dirty — the event-identity precondition
+[docs/concepts/evolution.md](../concepts/evolution.md) owns — because a
+write from uncommitted evidence would alias distinct evidence states onto
+one event id.
 
 Exit codes follow the repository-wide contract: `0` when the reconciliation
 is matched and every declared constraint passed, `1` when it found undeclared

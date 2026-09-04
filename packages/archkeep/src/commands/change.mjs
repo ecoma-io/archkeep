@@ -112,6 +112,7 @@ import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { referenceTime } from "../governance/clock.mjs";
 import {
+  assertReproducibleEventIdentity,
   classifyEvolution,
   declarationDigest,
   escapeIdentityField,
@@ -898,6 +899,18 @@ export async function changeCommand(
   /** @type {{dir: string, id: string, duplicate: boolean}|null} */
   let eventWritten = null;
   if (eventOut !== undefined && eventOut !== null && eventOut !== "") {
+    // F-delta-event-id on the reconcile event: the event's identity names
+    // base and head revisions, so a commitless head or a dirty tree collapses
+    // distinct evidence states onto one event id — a later transition is
+    // silently lost or aliased, the silent direction. `delta` holds the same
+    // gate; the shared law and its frozen wording live in
+    // `../governance/evolution-event.mjs`.
+    assertReproducibleEventIdentity({
+      label: "change",
+      headCommit,
+      baseDirty: baseline.provenance?.dirty === true,
+      headDirty: headProvenance?.dirty === true,
+    });
     // The store's io.root is the workspace root: the write must be provable
     // to stay inside the workspace (the same containment `--output` obeys).
     // A write failure throws — exit 3 upstream, the could-not-look lane —

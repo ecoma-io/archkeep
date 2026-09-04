@@ -74,6 +74,7 @@ import {
 import { stripTrailingSlashes } from "../path-util.mjs";
 import { referenceTime } from "../governance/clock.mjs";
 import {
+  assertReproducibleEventIdentity,
   eventDedupeKey,
   eventId,
   EVOLUTION_EVENT_SCHEMA_VERSION,
@@ -810,26 +811,16 @@ export async function deltaCommand(
   let eventWrite = null;
   if (eventOut !== null && eventOut !== undefined) {
     // F-delta-event-id: an evolution event is only written from a reproducible
-    // identity — a committed, clean head and a clean base. A commitless head
-    // has no revision to name, and a dirty tree names a commit its evidence
-    // does not back; either way TWO distinct evidence states collapse onto ONE
-    // event id, so a later transition is silently lost or aliased (the silent
-    // direction). Refuse loudly instead. The same run without `--event-out`
-    // stays a byte-identical in-memory delta.
-    if (typeof headCommit !== "string") {
-      throw new Error(
-        "archkeep: refusing to write a delta event without a committed head — a commitless " +
-          "head has no reproducible event identity, and every distinct head state would " +
-          "collide on one event id. Commit the head, or capture without --event-out.",
-      );
-    }
-    if (baseline.provenance?.dirty === true || headProvenance?.dirty === true) {
-      throw new Error(
-        "archkeep: refusing to write a delta event from a dirty working tree — the event " +
-          "would name a commit whose evidence is uncommitted, and distinct uncommitted " +
-          "states would collide on one event id. Commit both sides first.",
-      );
-    }
+    // identity — a committed, clean head and a clean base, by the shared law
+    // `assertReproducibleEventIdentity` owns. The wording is frozen there; the
+    // messages consumers match on are byte-identical to the inline refusals
+    // this call replaces.
+    assertReproducibleEventIdentity({
+      label: "delta",
+      headCommit,
+      baseDirty: baseline.provenance?.dirty === true,
+      headDirty: headProvenance?.dirty === true,
+    });
     // The architecture-debt sub-ledger (design §8): judged by re-running the
     // current intent over this run's base and head graphs — a drift finding
     // present at head but not base is introduced; one gone is resolved. Both
