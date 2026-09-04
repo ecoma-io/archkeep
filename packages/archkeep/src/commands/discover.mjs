@@ -14,9 +14,13 @@
  * - **`--propose`** — computes the candidate architecture over those same
  *   observations (`src/governance/discovery-proposal.mjs`'s
  *   `evaluateDiscovery`) and emits it with `proposed: true` and
- *   `notAuthoritative: true` on every candidate. It never writes
- *   `architecture-intent.json`, never mutates the workspace, and never hands
- *   a candidate the authority of a decision.
+ *   `notAuthoritative: true` on every candidate. This layer performs no
+ *   write: the evaluator is pure, and the one route from a proposal to
+ *   `architecture-intent.json` is the CLI's own `--write-intent <file>` flag
+ *   (`cli.mjs`'s `runDiscover`, serialized through `proposalToIntent`
+ *   below) — explicit, named by the operator, and refused when a file
+ *   already stands at the target. The command never hands a candidate the
+ *   authority of a decision.
  *
  * ## The empty-result invariant
  *

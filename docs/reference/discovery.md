@@ -8,11 +8,14 @@ archkeep discover
 archkeep discover --propose
 archkeep discover --format json
 archkeep discover --propose --format json --output proposal.json
+archkeep discover --propose --write-intent architecture-intent.json
 ```
 
 `discover` takes no positional arguments — the observed side is the whole
-project graph. It is descriptive: it never exits 1, never writes to the
-workspace, and never exits with a finding.
+project graph. It is descriptive: it never exits 1 and never exits with a
+finding. The run itself writes nothing; the only bytes it can produce are
+the ones a flag asks for — the report (`--output`) and, under
+`--write-intent`, a proposal serialized to the file the operator names.
 
 ## The observed side
 
@@ -42,9 +45,14 @@ legend counting candidates at each level. The derivation rules and the
 simplifications they make are the subject of
 [discovery.md](../concepts/discovery.md).
 
-The proposal is **never written** to `architecture-intent.json`. The evaluator
-is pure — it cannot even express the write. Whether a candidate later becomes
-intent is a governance decision owned elsewhere.
+The run that computes the proposal performs no write: the evaluator
+(`evaluateDiscovery`) is pure — it cannot even express the write — and the
+command layer holds no intent path. The one door from proposal to file is the
+CLI's `--write-intent` flag below: explicit, named by the operator, and
+refused when a file already stands at the target, because a proposal must
+never silently replace a law (or another candidate someone holds). What it
+writes is a proposal to review like a diff, not an adopted law — whether a
+candidate becomes intent is a governance decision owned by the reader.
 
 ## Fail-closed
 
@@ -65,22 +73,23 @@ Nothing observed means nothing to propose — never a fabricated candidate set.
 
 ## Exit codes
 
-| code | meaning                                                                                  |
-| ---- | ---------------------------------------------------------------------------------------- |
-| 0    | The observation completed (whether or not anything was proposed).                        |
-| 2    | Usage error: positional arguments given, unknown flag.                                   |
-| 3    | Coverage incomplete, the model could not be loaded, or the plugin gap refuses the graph. |
+| code | meaning                                                                                                                                                       |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | The observation completed (whether or not anything was proposed).                                                                                             |
+| 2    | Usage error: positional arguments given, unknown flag, `--write-intent` without `--propose`.                                                                  |
+| 3    | Coverage incomplete, the model could not be loaded, the plugin gap refuses the graph, or a `--write-intent` write that was refused (target exists) or failed. |
 
 `discover` never exits 1 — describing (or proposing) architecture is not a
 finding.
 
 ## Flags
 
-| flag        | argument       | default | meaning                                                             |
-| ----------- | -------------- | ------- | ------------------------------------------------------------------- |
-| `--format`  | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope.                     |
-| `--output`  | `<file>`       | stdout  | Write the report to a file instead of stdout.                       |
-| `--propose` | (none)         | off     | Compute and print the candidate architecture over the observations. |
+| flag             | argument       | default | meaning                                                                                                                                                                       |
+| ---------------- | -------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--format`       | `text`\|`json` | `text`  | Terminal report or the versioned JSON envelope.                                                                                                                               |
+| `--output`       | `<file>`       | stdout  | Write the report to a file instead of stdout.                                                                                                                                 |
+| `--propose`      | (none)         | off     | Compute and print the candidate architecture over the observations.                                                                                                           |
+| `--write-intent` | `<file>`       | off     | With `--propose`, write the proposal as a valid `architecture-intent.json` to `<file>` for review — never over a file that already exists; a refused or failed write exits 3. |
 
 `--output` writes atomically (write to `.tmp`, then rename) so a reader never
 sees a truncated file. A write failure is exit 3.

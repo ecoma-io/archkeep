@@ -169,17 +169,35 @@ model.
 ### Where the incomplete-coverage refusal appears
 
 Every incomplete-coverage refusal in the commands above arrives as the
-envelope itself: `status: "no-verdict"`, `exitCode: 3`, no `result` payload,
-the whole-file failures named in `coverage.notAnalyzed` and the unjudged sites
-in `coverage.blindSpots`, and the text report carrying the same clauses
-`check` prints. The refusal rides stdout like any report and reaches `--output`
-like any report, so a parser and a terminal reader get the same withheld
-verdict (`delta` and `change` additionally carry their usual `decision`, with
-`decision.reason` naming the clauses). This is one contract for two families
-that used to differ: `check`/`graph`/`discover`/`explain`/`context` answered
-this way already, while `drift`, `reconcile`, `waivers`, `debt`, `fitness`,
-`impact`, `scenario`, `diff`, `delta` (compare) and `change` threw the same
-refusal as a stderr sentence with no envelope and nothing under `--output`.
+envelope itself: `status: "no-verdict"`, `exitCode: 3`, the whole-file
+failures named in `coverage.notAnalyzed` and the unjudged sites in
+`coverage.blindSpots`, and the text report carrying the same clauses `check`
+prints. The refusal rides stdout like any report and reaches `--output` like
+any report, so a parser and a terminal reader get the same withheld verdict.
+This is one contract for two families that used to differ: `check`/`graph`/
+`discover`/`explain`/`context` answered this way already, while `drift`,
+`reconcile`, `waivers`, `debt`, `fitness`, `impact`, `scenario`, `diff`,
+`delta` (compare) and `change` threw the same refusal as a stderr sentence
+with no envelope and nothing under `--output`.
+
+The one thing the two families still differ on is the `result` payload, and
+the split is each command's own envelope shape, not the refusal's:
+
+- `check`, `graph`, `discover`, `explain` and `context` build one envelope for
+  every verdict, so a refusal carries their usual `result` beside it — the
+  policy identity and an empty `violations` array for `check`, the partial
+  project graph for `graph`, the observations that WERE made for `discover`.
+  [json-output.md](json-output.md) documents each payload. Read
+  `coverage.complete` before `result`: beside a `"no-verdict"` status the
+  payload is the part of the answer the run did reach, never a verdict over
+  the whole tree.
+- the rest — `drift`, `reconcile`, `waivers`, `debt`, `fitness`, `impact`,
+  `scenario`, `diff`, `delta` (compare) and `change` — refuse through the one
+  shared builder (`packages/archkeep/src/commands/coverage-verdict.mjs`'s
+  `coverageRefusal`), whose envelope carries no `result` at all: the verdict
+  was withheld, so the `coverage` block is the whole payload. `delta` and
+  `change` additionally carry their usual `decision`, with `decision.reason`
+  naming the clauses.
 
 The refusals that stay throws are the ones about a file or a declaration
 rather than this tree, and they still exit 3 through the catch with nothing on
