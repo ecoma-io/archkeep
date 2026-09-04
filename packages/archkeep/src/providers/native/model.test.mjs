@@ -541,7 +541,7 @@ describe("findNativeModelViolations", () => {
           boundaryConfig: { ...wellFormedPolicy(), extra: "decorative" },
         }),
       ).toEqual([
-        "boundaryConfig.extra: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness, customRules, coverage, plus '$schema' (for editor validation)",
+        "boundaryConfig.extra: not a recognised top-level key — expected one of depConstraints, moduleBoundaryOptions, boundarySuppressions, fitness, customRules, coverage, markdown, plus '$schema' (for editor validation)",
       ]);
     });
 

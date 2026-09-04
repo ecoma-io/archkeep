@@ -12,6 +12,7 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
 
+import { foldMarkdownTrack } from "../analysis/markdown.mjs";
 import {
   blindSpotRows,
   fileFailure,
@@ -31,7 +32,7 @@ import {
 import { partitionUnownedCoverage } from "./coverage-acceptance.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
-import { declaredEdgeViolationsForCheck } from "../rules/edge-constraints.mjs";
+import { declaredEdgeViolationsForCheck, judgeEdge } from "../rules/edge-constraints.mjs";
 import { customRulesForCheck, declaresCustomRules } from "./custom-rules.mjs";
 import { driftForCheck } from "./drift.mjs";
 import { fitnessForCheck } from "./fitness.mjs";
@@ -40,11 +41,13 @@ import { resolvePolicy } from "./policy.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
 import { compareGoWork, parseGoWorkUse } from "../go-work.mjs";
+import { mergeDeclaredEdges } from "../providers/native/graph.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatSarif } from "../report/sarif.mjs";
 import { formatReport } from "../report/text.mjs";
 import { ARCHKEEP_MODEL_FILE } from "../providers/native/model.mjs";
-import { evaluateRun, exemptResolvedFile } from "../rules/index.mjs";
+import { applySuppressionTable, evaluateRun, exemptResolvedFile } from "../rules/index.mjs";
+import { buildReachability } from "../rules/reachability.mjs";
 import { orphanedNotDependOnTags, unmatchedConstraintRows } from "../rules/tags.mjs";
 import { judgeTsconfigPaths } from "../tsconfig-paths.mjs";
 import { verdictFor } from "../verdict.mjs";
@@ -453,6 +456,41 @@ export async function check(
     }
   }
 
+  // The markdown document track, keyed by presence like every fold above it:
+  // a policy that declares no `markdown` block reaches nothing here and hears
+  // nothing anywhere — no edges, no failures, no envelope key — so a
+  // config-absent run is byte-identical to one this fold never existed for
+  // (`../../../../AGENTS.md`, "a change to what is reported on an unchanged
+  // workspace is a breaking change"). A policy that DOES declare one has its
+  // documents read (`../analysis/markdown.mjs`'s `foldMarkdownTrack`), the
+  // resolved pairings folded into the graph the way the declared manifest
+  // track's edges already are (`mergeDeclaredEdges`, the same dedup key), and
+  // every whole-file failure the read earned pushed into the same `failures`
+  // funnel the analysis uses — an unresolvable marker is an `unchecked` file,
+  // never a clean one.
+  //
+  // The fold runs BEFORE the walk below on purpose: a document pairing is a
+  // project-to-project dependency claim, and from here on this run's graph
+  // carries it exactly as it carries a csproj's `ProjectReference` — the tag
+  // rows, the circularity walk and the reachability behind them all read one
+  // graph, so a pairing cannot be legal here and violating in `context`.
+  // What it does not join is the twelve non-tag import-site rules: those need
+  // a specifier, a file and a resolution, and a document marker has none of
+  // them — it is judged as the EDGE it drew, the same 3-of-15 limit
+  // `declaredEdgeViolationsForCheck` documents for `implicit` edges.
+  let markdownTrack = null;
+  if (config !== null && config.markdown !== undefined) {
+    markdownTrack = foldMarkdownTrack({
+      tracked,
+      owned: commandContext.owned,
+      readFile: (file) => workspace.readFile(file),
+      workspace,
+      markdown: config.markdown,
+    });
+    mergeDeclaredEdges(graph, markdownTrack.edges);
+    failures.push(...markdownTrack.failures);
+  }
+
   // Both faces of one walk: the run's verdict, and the raw superset it was
   // picked from — every candidate up to each site's surviving group, including
   // the verdicts the suppression table removed to get there. `evaluate` alone
@@ -462,8 +500,66 @@ export async function check(
   // the gate's waiver-expiry judgement below and the engine's are the same
   // judgement, not two reads of the clock a boundary instant could split.
   const now = referenceTime();
-  const { violations: judged, rawViolations } = evaluateRun(imports, graph, { ...config, now });
-  const violations = sortViolations(judged);
+  const { violations: judged, rawViolations: judgedRaw } = evaluateRun(imports, graph, {
+    ...config,
+    now,
+  });
+
+  // The document pairings' own verdicts, judged by the machinery that already
+  // existed: `judgeEdge` — the same function `declaredEdgeViolationsForCheck`
+  // runs `implicit` edges through, so a doc pairing and a declared manifest
+  // edge can never disagree about the same boundary — over the graph the fold
+  // above already joined, with reachability built once for the whole claim
+  // list. The same empty-table exit `declaredEdgeViolationsForCheck` takes: a
+  // workspace declaring no `depConstraints` has opted out of tag enforcement
+  // entirely, and folding `projectWithoutTagsCannotHaveDependencies` onto
+  // every marker anyway would flag an opted-out workspace for a reason its
+  // import sites are never flagged for. Each verdict is then reshaped into the
+  // exact `Violation` record `violationOf` builds — position and specifier
+  // from the MARKER (the line a reader edits is the document's), project and
+  // constraint from the edge — so suppression, waiver annotation, sorting and
+  // the SARIF face all treat it as the ordinary violation it is.
+  /** @type {object[]} */
+  const markdownRaw = [];
+  if (config !== null && markdownTrack !== null && config.depConstraints.length > 0) {
+    const reachability = buildReachability(graph);
+    for (const claim of markdownTrack.claims) {
+      for (const verdict of judgeEdge(
+        { source: claim.source, target: claim.target },
+        graph.nodes,
+        graph.dependencies,
+        config.depConstraints,
+        reachability,
+      )) {
+        markdownRaw.push({
+          sourceFile: claim.file,
+          line: claim.line,
+          column: claim.column,
+          specifier: claim.name,
+          kind: claim.type,
+          messageId: verdict.messageId,
+          message: verdict.message,
+          sourceProject: verdict.source,
+          targetProject: verdict.target,
+          constraint: verdict.constraint,
+          data: verdict.data,
+        });
+      }
+    }
+  }
+  // The same table, the same behaviour: a suppression row whose glob covers a
+  // document removes that document's verdict (or waives it, with the same
+  // expiry evidence an import-site waiver carries), and the RAW records join
+  // `rawViolations` below so a row covering only document verdicts still
+  // counts as alive — a table that is doing its job must not read as dead
+  // because the violations it removes live in a different fold.
+  const markdownViolations =
+    config !== null && markdownTrack !== null
+      ? applySuppressionTable(config.suppressions, markdownRaw, now)
+      : [];
+
+  const rawViolations = [...judgedRaw, ...markdownRaw];
+  const violations = sortViolations([...judged, ...markdownViolations]);
   // An ACTIVE waiver keeps the violation it accepts in the findings list,
   // marked `waivedBy` — the run is still non-zero (waiving does not flip
   // exit 1 → 0), and this count is the additive "accepted violations" number
@@ -704,7 +800,10 @@ export async function check(
     config !== null &&
     options.paths.length === 0 &&
     failures.length === 0 &&
-    (config.suppressions.length > 0 || config.depConstraints.length > 0 || coverageRows.length > 0)
+    (config.suppressions.length > 0 ||
+      config.depConstraints.length > 0 ||
+      coverageRows.length > 0 ||
+      config.markdown !== undefined)
   ) {
     const deadRows = [];
     // The third dead table: a `coverage.unowned` row matching no unowned file
@@ -754,6 +853,34 @@ export async function check(
             `under it or it was never right`,
         );
       }
+    }
+    // The document track's two dead tables, measured against what the fold
+    // actually selected (`markdownTrack.includeCounts`/`rowMatches` — the
+    // same counts the fold's own selection is built from, not a re-derivation
+    // that could disagree): an include glob matching no tracked document, and
+    // a marker row matching no line in any included document, both govern
+    // nothing while reading as enforced — every pairing the workspace meant
+    // to declare goes unjudged and the run stays green. A whole-file failure
+    // above already disabled this gate, so reaching here with a row that
+    // matched nothing means the tree genuinely has no such line.
+    if (markdownTrack !== null && config.markdown !== undefined) {
+      markdownTrack.includeCounts.forEach((count, index) => {
+        if (count > 0) return;
+        deadRows.push(
+          `markdown.include[${index}]: '${config.markdown.include[index]}' matches no tracked ` +
+            `document — the document track reads nothing, so every marker row below it governs ` +
+            `nothing while reading as enforced. Either the path was never right, or the ` +
+            `documents are not tracked`,
+        );
+      });
+      markdownTrack.rowMatches.forEach((count, index) => {
+        if (count > 0) return;
+        deadRows.push(
+          `markdown.markers[${index}]: the pattern matches no line in any included document — ` +
+            `this row extracts no pairing, so it enforces nothing while reading as enforced. ` +
+            `Either the documents do not carry the marker, or the pattern was never right`,
+        );
+      });
     }
     if (deadRows.length > 0) {
       throw new Error(
@@ -1029,6 +1156,31 @@ export async function check(
                       judged: declaredEdges.judged,
                       findings: declaredEdges.findings,
                     },
+              // The document track is a policy DECLARATION, so it takes the
+              // same omitted-key-not-null discipline the intent/fitness/
+              // customRules blocks below state: a workspace whose policy
+              // declares no `markdown` block gets no key at all, and its
+              // envelope is byte-identical to the one it got before this
+              // section existed. The findings themselves are NOT restated
+              // here — they are members of `violations` above (sorted with,
+              // suppressible by, and counted into the verdict exactly like
+              // every import-site violation), so an array here would be one
+              // fact counted in two places; the block states what the track
+              // DID: how many documents the globs selected, how many markers
+              // they carried, where each resolution went.
+              ...(markdownTrack === null
+                ? {}
+                : {
+                    markdown: {
+                      checked: true,
+                      documents: markdownTrack.documents,
+                      judged: markdownTrack.judged,
+                      resolved: markdownTrack.resolved,
+                      ...(markdownTrack.selfPaired > 0
+                        ? { selfPaired: markdownTrack.selfPaired }
+                        : {}),
+                    },
+                  }),
               // Intent is a governance DECLARATION, absent when the workspace
               // chose not to make one: the key is omitted, never written as
               // null — the design contract `docs/reference/json-output.md` will

@@ -640,6 +640,155 @@ function findCoverageViolations(value) {
 }
 
 /**
+ * The one edge kind a markdown marker row can declare. The name is the claim
+ * the row makes about the graph: the captured symbol is resolved to the project
+ * that exports it, and the edge runs from the document's own project to that
+ * project. Kept as data rather than inlined at the check site so a second kind
+ * (`docs/reference/policy-schema.md`, "markdown") extends this list and nothing
+ * else — and so a row naming a kind this reader cannot draw is refused at load,
+ * where a law that would silently never run belongs.
+ *
+ * @type {Readonly<string[]>}
+ */
+export const MARKDOWN_EDGE_KINDS = Object.freeze(["resolvedExportOwner"]);
+
+/**
+ * One markdown marker row's problems, prefixed with its index.
+ *
+ * `pattern` is a regular-expression SOURCE matched against one line of a
+ * matched document at a time — never a glob, and never a whole-document
+ * match — because the position a violation reports must be a real
+ * `file:line:column` a developer can open. Its FIRST capture group must name
+ * the exported symbol the marker claims; a pattern with no capture group can
+ * match every line it is aimed at and still resolve nothing, which is a law
+ * that reads as enforced while testing nothing — refused here for the reason
+ * every dead shape in this file is refused.
+ *
+ * @param {object} row
+ * @param {number} index
+ * @returns {string[]}
+ */
+function markdownMarkerRowViolations(row, index) {
+  const at = `markdown.markers[${index}]`;
+  if (!isPlainObject(row)) return [`${at}: must be an object, got ${describe(row)}`];
+
+  const violations = [];
+  if (typeof row.pattern !== "string" || row.pattern === "") {
+    violations.push(
+      `${at}.pattern: must be a non-empty regular-expression source matched against one line of ` +
+        `a matched document, got ${describe(row.pattern)}`,
+    );
+  } else {
+    let compiled = null;
+    try {
+      compiled = new RegExp(row.pattern, "u");
+    } catch (cause) {
+      violations.push(
+        `${at}.pattern: '${row.pattern}' is not a valid regular expression under the 'u' flag ` +
+          `(${cause?.message ?? cause})`,
+      );
+    }
+    if (compiled !== null) {
+      // The capture count, read off the standard `pattern|` trick: matching the
+      // empty string yields one element per capture group plus the whole match,
+      // so a pattern that cannot capture anything reports `length === 1` here.
+      // Compiled in its own try, because the appended `|` can fail on a source
+      // the pattern alone accepted; the compile violation above is already
+      // reported in that case, and a second one would name the same row twice.
+      let captures;
+      try {
+        captures = (new RegExp(`${row.pattern}|`, "u").exec("")?.length ?? 1) - 1;
+      } catch {
+        captures = 1; // already refused above by the pattern's own compile check
+      }
+      if (captures < 1) {
+        violations.push(
+          `${at}.pattern: '${row.pattern}' has no capture group — the first capture group must ` +
+            `name the exported symbol the marker claims, and a pattern that captures nothing ` +
+            `resolves nothing while reading as enforced`,
+        );
+      }
+    }
+  }
+  if (!MARKDOWN_EDGE_KINDS.includes(row.edge)) {
+    violations.push(
+      `${at}.edge: ${describe(row.edge)} is not an edge kind this reader can draw — expected ` +
+        `${MARKDOWN_EDGE_KINDS.map((kind) => `"${kind}"`).join(", ")} (the captured symbol is ` +
+        `resolved to the project exporting it, and the edge runs there from the document's own ` +
+        `project)`,
+    );
+  }
+  for (const key of Object.keys(row)) {
+    if (key !== "pattern" && key !== "edge") {
+      violations.push(`${at}.${key}: not a markdown marker field — expected 'pattern' and 'edge'`);
+    }
+  }
+  return violations;
+}
+
+/**
+ * The markdown document track's problems, as messages; empty when it is
+ * well-formed. Pure, so a test drives it without a file on disk.
+ *
+ * `include` names the documents the track reads, by workspace-relative glob —
+ * the same glob machinery `boundarySuppressions` rows and `coverage.unowned`
+ * rows match with (`./rules/match.mjs`'s `safeMatchesGlob`), complexity-checked
+ * here at load for the reason a suppression's `path` is. An ABSOLUTE pattern is
+ * refused rather than left to match nothing forever: it can never match a
+ * workspace-relative document path, so declaring one is a law aimed outside
+ * the tree it governs (the family test is `ABSOLUTE_ARTIFACT_PATH`'s — the same
+ * "absolute in either path family" question, asked of a glob instead of a file).
+ *
+ * @param {unknown} value The parsed `markdown` value.
+ * @returns {string[]}
+ */
+function findMarkdownViolations(value) {
+  if (!isPlainObject(value)) {
+    return [`markdown: must be an object carrying 'include' and 'markers', got ${describe(value)}`];
+  }
+  const violations = [];
+  if (!Array.isArray(value.include) || value.include.length === 0) {
+    violations.push(
+      `markdown.include: must be a non-empty array of workspace-relative glob patterns naming ` +
+        `the documents the track reads, got ${describe(value.include)}`,
+    );
+  } else {
+    value.include.forEach((pattern, index) => {
+      const at = `markdown.include[${index}]`;
+      if (typeof pattern !== "string" || pattern === "") {
+        violations.push(
+          `${at}: must be a non-empty workspace-relative glob, got ${describe(pattern)}`,
+        );
+      } else if (ABSOLUTE_ARTIFACT_PATH.test(pattern)) {
+        violations.push(
+          `${at}: '${pattern}' is an absolute path — an include glob is matched against ` +
+            `workspace-relative document paths, so an absolute one can never match`,
+        );
+      } else {
+        const problem = globComplexityError(pattern);
+        if (problem) violations.push(`${at}: '${pattern}' ${problem}`);
+      }
+    });
+  }
+  if (!Array.isArray(value.markers) || value.markers.length === 0) {
+    violations.push(
+      `markdown.markers: must be a non-empty array of {pattern, edge} rows, got ` +
+        `${describe(value.markers)}`,
+    );
+  } else {
+    value.markers.forEach((row, index) =>
+      violations.push(...markdownMarkerRowViolations(row, index)),
+    );
+  }
+  for (const key of Object.keys(value)) {
+    if (key !== "include" && key !== "markers") {
+      violations.push(`markdown.${key}: not a markdown field — expected 'include' and 'markers'`);
+    }
+  }
+  return violations;
+}
+
+/**
  * The grammar a custom rule's `name` is written in: lowercase letters and
  * digits, single `-` separators, nothing else.
  *
@@ -945,6 +1094,7 @@ export function findBoundaryConfigViolations(module, io = {}) {
     fitness,
     customRules,
     coverage,
+    markdown,
   } = module;
   // F05: the resolution half of the governance block (`row-schema.mjs`'s
   // `io.resolve`) was validator-only until now — no production caller passed
@@ -998,6 +1148,19 @@ export function findBoundaryConfigViolations(module, io = {}) {
   // apply while the policy still says it does.
   if (coverage !== undefined) {
     violations.push(...findCoverageViolations(coverage));
+  }
+
+  // The markdown document track — the seventh top-level law, declared here and
+  // executed at graph level (`../analysis/markdown.mjs`): machine-readable
+  // markers inside tracked markdown documents, each resolved to an edge from
+  // the document's own project to the project that exports the named symbol.
+  // Absent means "no document track" — the workspace decision this key exists
+  // to state, and the state every config-absent run must stay byte-identical
+  // to. Present and malformed is refused here, loudly, for the reason the two
+  // blocks above state: a row this reader cannot understand is a document law
+  // that would not run while the policy still says it does.
+  if (markdown !== undefined) {
+    violations.push(...findMarkdownViolations(markdown));
   }
 
   // Absent means "nothing is suppressed", which is the only default that fails
@@ -1095,7 +1258,10 @@ export function findBoundaryConfigViolations(module, io = {}) {
  * `coverage.exempt` is that provider's one channel for the same decision —
  * and the refusal lives in `./commands/policy.mjs`'s `resolvePolicy` and
  * `./providers/native/model.mjs`'s inline-policy check, because only they
- * know which provider is reading.
+ * know which provider is reading. `markdown` is the seventh: the document
+ * track (`findMarkdownViolations` above owns the shape), read into the graph
+ * by `../analysis/markdown.mjs` on every provider, because documents belong
+ * to projects under all three.
  *
  * The name says `.json` and the list binds both file dialects: `loadModulePolicy`
  * runs the same check over an ES module's exports, which is what makes a
@@ -1109,6 +1275,7 @@ const JSON_POLICY_KEYS = [
   "fitness",
   "customRules",
   "coverage",
+  "markdown",
 ];
 
 /**
@@ -1185,7 +1352,7 @@ export function policyKeyViolations(parsed, { allowSchema }) {
  *   inline one.
  * @param {string[]} [extraViolations] Violations the caller already found that
  *   `findBoundaryConfigViolations` does not check on its own.
- * @returns {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], coverage?: object }}
+ * @returns {{ depConstraints: object[], options: object, suppressions: object[], fitness?: object[], customRules?: object[], coverage?: object, markdown?: object }}
  *   `fitness` and `customRules` are present only when the config declares
  *   them — a workspace without one carries no key, the same "absent is a
  *   decision" posture `cli.mjs`'s `check` uses for a missing
@@ -1209,6 +1376,7 @@ export function policyFrom(parsed, sourceLabel, extraViolations = []) {
     ...(parsed.fitness === undefined ? {} : { fitness: parsed.fitness }),
     ...(parsed.customRules === undefined ? {} : { customRules: parsed.customRules }),
     ...(parsed.coverage === undefined ? {} : { coverage: parsed.coverage }),
+    ...(parsed.markdown === undefined ? {} : { markdown: parsed.markdown }),
   };
 }
 

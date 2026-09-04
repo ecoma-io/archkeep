@@ -180,6 +180,13 @@ export function computePolicyFingerprint(config) {
     suppressions: config.suppressions ?? [],
     ...(config.fitness === undefined ? {} : { fitness: config.fitness }),
     ...(config.customRules === undefined ? {} : { customRules: config.customRules }),
+    // The document track is law the same way the two blocks above are: it
+    // decides what this run judges, so a policy that adds or edits a
+    // `markdown` block must not share a fingerprint with one that does not —
+    // `diff`'s policy-changed warning reads this hash. Conditional, like the
+    // two above, so a policy declaring no block hashes exactly as it did
+    // before this key existed.
+    ...(config.markdown === undefined ? {} : { markdown: config.markdown }),
   };
   // Canonicalise: sort object keys at every depth so insertion order does not
   // affect the hash. Semantic equality, not construction order, is the claim —

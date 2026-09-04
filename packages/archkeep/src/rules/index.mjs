@@ -816,6 +816,36 @@ function annotatedByTable(suppressions, violation, now) {
 }
 
 /**
+ * The suppression table applied to verdicts that did not come from
+ * `evaluateRun`'s site walk — suppressing rows remove, active waivers mark
+ * `waivedBy`, expired ones re-assert with `evidence`, exactly as the site walk
+ * applies them, because a verdict must ride the same table whichever walk
+ * produced it.
+ *
+ * The one caller is `./commands/check.mjs`'s markdown document track: its
+ * edges are judged per edge through `./edge-constraints.mjs`'s `judgeEdge` —
+ * they have no import site for `candidateGroupsFor` to walk, so there is no
+ * group chain, only a flat list — but a suppression row that names a document
+ * must silence the same verdict here it would silence on an import site, and
+ * a waiver over one must annotate it the same way. Unlike the site walk there
+ * is no second candidate group to fall through to: an edge's verdicts are all
+ * reported together, so a row that removes some leaves the rest standing
+ * rather than promoting anything.
+ *
+ * @param {object[]} suppressions The validated `boundarySuppressions` table.
+ * @param {object[]} violations The unfiltered verdicts, in walk order.
+ * @param {string} [now] Reference instant for waiver expiry; defaults to the
+ *   shared governance clock, as `evaluateRun` does.
+ * @returns {object[]} The survivors, in input order, annotations applied.
+ */
+export function applySuppressionTable(suppressions, violations, now = referenceTime()) {
+  if (suppressions.length === 0) return violations;
+  return violations
+    .filter((violation) => !removedByTable(suppressions, violation, now))
+    .map((violation) => annotatedByTable(suppressions, violation, now));
+}
+
+/**
  * One run of the engine over every import site: the judged verdict per site
  * plus the raw superset it was picked from.
  *

@@ -7,18 +7,19 @@ What each field contains; not what to put in it (that is
 
 ## Top-level keys
 
-Six keys, same names in every dialect. A seventh, `$schema`, is accepted in
+Seven keys, same names in every dialect. An eighth, `$schema`, is accepted in
 the `.json` dialect (file or inline) for editor validation, and must be a
 non-empty string.
 
-| key                     | type   | required | meaning                                                                                       |
-| ----------------------- | ------ | -------- | --------------------------------------------------------------------------------------------- |
-| `depConstraints`        | array  | yes      | The constraint table.                                                                         |
-| `moduleBoundaryOptions` | object | yes      | The eight `@nx/enforce-module-boundaries` options.                                            |
-| `boundarySuppressions`  | array  | no       | Accepted violations. Absent means nothing suppressed.                                         |
-| `fitness`               | array  | no       | Named quality gates judged every run. Absent means none declared.                             |
-| `customRules`           | array  | no       | Declared WebAssembly rules of the workspace's own. Absent means none declared.                |
-| `coverage`              | object | no       | Accepted unowned files (`coverage.unowned`), Nx/Moon only. Absent means no acceptance record. |
+| key                     | type   | required | meaning                                                                                                                                 |
+| ----------------------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `depConstraints`        | array  | yes      | The constraint table.                                                                                                                   |
+| `moduleBoundaryOptions` | object | yes      | The eight `@nx/enforce-module-boundaries` options.                                                                                      |
+| `boundarySuppressions`  | array  | no       | Accepted violations. Absent means nothing suppressed.                                                                                   |
+| `fitness`               | array  | no       | Named quality gates judged every run. Absent means none declared.                                                                       |
+| `customRules`           | array  | no       | Declared WebAssembly rules of the workspace's own. Absent means none declared.                                                          |
+| `coverage`              | object | no       | Accepted unowned files (`coverage.unowned`), Nx/Moon only. Absent means no acceptance record.                                           |
+| `markdown`              | object | no       | The document track ([`markdown`](#markdown)): markers in tracked documents read as dependency claims. Absent means no document is read. |
 
 Any other key is rejected by name in every dialect that reads this table — the
 `.mjs`/`.js` module's extra exports included, so a misspelled key cannot load
@@ -336,6 +337,90 @@ Two provider rules, and one compatibility note:
   the loud direction, and deliberate pre-1.0: an older enforcer must refuse a
   law it cannot fully read rather than enforce the half it understood.
 
+## `markdown`
+
+The document track: machine-readable markers inside tracked markdown, read as
+project-to-project dependency claims. A marker names an exported symbol —
+`<!-- @api Button -->` is the spelling the examples here use — and the engine
+turns each one into the edge from the document's project to the project
+exporting that symbol, folded into the graph the way the declared manifest
+track folds a `ProjectReference`. No new rule exists for this: the constraint
+table's tag rows judge the edge through the same machinery every declared edge
+goes through, so a document pairing and an import site crossing the same
+boundary report the same verdict.
+
+| field     | type     | required | meaning                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `include` | string[] | yes      | Non-empty list of workspace-relative globs naming the documents the track reads. Matched with the same matcher `boundarySuppressions`' `path` uses and complexity-capped like every glob here; an absolute pattern is refused — it can never match a workspace-relative path. Only tracked files ending `.md` are candidates, so a glob whose every match is some other kind of file selects nothing, loudly. |
+| `markers` | array    | yes      | Non-empty list of `{pattern, edge}` rows.                                                                                                                                                                                                                                                                                                                                                                     |
+
+A marker row:
+
+| field     | type   | required | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pattern` | string | yes      | A regular-expression source — never a glob — matched line by line against each included document under the `u` flag. Must compile, and must carry at least one capture group: the FIRST capture group names the exported symbol the marker claims. A pattern that captures nothing can match every line it is aimed at and still resolve nothing — refused at load, like every shape here that reads as enforced while testing nothing. |
+| `edge`    | string | yes      | The edge kind the marker draws. Exactly one kind exists today, `"resolvedExportOwner"`: the captured symbol is resolved to the project exporting it, and the edge runs there from the document's own project. Any other value is refused at load, naming the kinds this reader can draw.                                                                                                                                                |
+
+Unknown keys in the block or in a row are rejected by name, like every other
+table on this page.
+
+### How a marker resolves
+
+- **Source** is the project owning the document. A document living inside no
+  project fails its whole file — the edge its marker claims has no source.
+- **Target** is the project exporting the captured name. Exports are scanned
+  from project-owned TypeScript-language files once per run. A name a file
+  DECLARES wins over any number of projects that merely RE-EXPORT it — an
+  umbrella barrel re-exporting a library must not make that library's symbols
+  ambiguous. `.vue` single-file components are not scanned; the TypeScript
+  barrel that re-exports one is. `export * from` contributes nothing — it names
+  no symbol.
+- **No project exports the name, or more than one does** — whole-file failure,
+  naming the line, the symbol and (for an ambiguity) every candidate project.
+- **A capture that names nothing** — an empty or whitespace-only first group —
+  whole-file failure.
+- The edge's `type` is the row's `edge` value, so a document pairing folds under
+  the same `(source, target, type)` key every other track reports at: two
+  markers in two documents naming the same pair are one edge at project grain,
+  but two verdicts, each at its own marker's position.
+
+A whole-file failure is the run's ordinary unchecked lane — exit 3, no verdict,
+the posture [violations.md](violations.md#three-things-that-are-not-violations)
+calls a whole-file failure — never a clean result: a pairing the tree cannot
+resolve must not read as one it resolved and kept. A marker whose document and
+symbol live in the same project draws no edge (no project depends on itself)
+but still counts as judged.
+
+### What a document verdict is
+
+An ordinary member of `violations` — same shape, sorted with the rest,
+suppressible by a `boundarySuppressions` row whose `path` matches the document,
+counted into the exit code exactly like an import-site violation. Its
+`sourceFile`/`line`/`column` are the marker's own position; its `kind` is the
+row's `edge` value; its message ids are the constraint table's four
+([12](violations.md#12-projectwithouttagscannothavedependencies) through
+[15](violations.md#15-notagsconstraintviolation)) — the same limit a declared
+edge without an import site holds, since a marker has no specifier for the
+import-shape rules to read. An empty `depConstraints` table judges nothing, the
+same opted-out exit the import sites take.
+
+The run's envelope carries what the track did
+([json-output.md](json-output.md#result-for-command-check)'s `markdown` block):
+documents selected, markers judged, pairings resolved, self-pairings. The
+findings live only in `violations` — never restated as a second array.
+
+### Two dead shapes, refused
+
+The stale-row gate that refuses a dead suppression and a constraint row
+selecting no project refuses these two as well, with exit 3, under the same
+whole-workspace, fully-analyzed conditions:
+
+- an `include` glob matching no tracked document;
+- a `markers` row matching no line in any included document.
+
+Both govern nothing while reading as enforced — every pairing the workspace
+meant to declare goes unjudged, and the run stays green.
+
 ## Three dialects
 
 All three are validated by the same function. A constraint row is checked
@@ -349,7 +434,8 @@ identically whichever dialect wrote it.
 
 `coverage` follows the `customRules` column exactly: supported in the
 `.mjs`/`.js` and `.json` dialects, never present under the ESLint dialect —
-absent there, as the workspace's own statement, not empty.
+absent there, as the workspace's own statement, not empty. `markdown` follows
+that same column.
 
 The ESLint dialect is explicit opt-in only -- archkeep never probes for one.
 Legacy `.eslintrc*` names are refused by name. Basename is checked before

@@ -1121,3 +1121,149 @@ export function analyzeTypeScript({ sourceFile, text, workspace, lang }) {
   }
   return result;
 }
+
+/**
+ * The names one TypeScript-language file EXPORTS, split by how the export was
+ * written — the two facts `../analysis/markdown.mjs`'s resolution needs when a
+ * document marker names a symbol and the engine must answer "which project
+ * publishes this".
+ *
+ * The split is load-bearing rather than bookkeeping. A name a file DECLARES
+ * here (`export const Button`, `export { Button }` over a local binding,
+ * `export default`) is a symbol whose home this file's project is: a marker
+ * naming it resolves to that project even when five other projects re-export
+ * it, because the re-exporters are downstream of the declaration, not
+ * alternative homes for it. A name a file RE-EXPORTS from another module
+ * (`export { Button } from "@scope/ui-button"`, `export * as ui from …`) is a
+ * name this module passes through, and the project that declares it owns the
+ * resolution. Resolution prefers the declared tier for exactly this reason —
+ * an umbrella barrel that re-exports a whole library must not turn every one
+ * of its symbols into an ambiguous claim.
+ *
+ * Only top-level statements are read, and `export * from "…"` is deliberately
+ * absent from both tiers: a star names no symbol, and enumerating one would
+ * mean resolving the starred module — a module-resolution walk this function's
+ * caller never needs, because a star's targets are themselves scanned as the
+ * files they are. A project whose public surface is star-re-exported from
+ * another project's files resolves those markers through the declaring files'
+ * own projects, which is the honest answer at project grain.
+ *
+ * Never throws: a malformed file yields whatever TypeScript could parse plus a
+ * failure per syntax error, the same posture `analyzeTypeScript` above holds —
+ * one unreadable file must not blank the index every marker resolves against.
+ *
+ * @param {{ sourceFile: string, text: string, workspace: object, lang?: string }} request
+ *   The same request shape `analyzeTypeScript` takes; `lang` is a Vue block's
+ *   `<script lang>` and is omitted for a real file.
+ * @returns {{ declared: string[], reexported: string[], failures: object[] }}
+ */
+export function exportedNamesOf({ sourceFile, text, workspace, lang }) {
+  /** @type {string[]} */
+  const declared = [];
+  /** @type {string[]} */
+  const reexported = [];
+  /** @type {object[]} */
+  const failures = [];
+  try {
+    const parsed = ts.createSourceFile(
+      `${workspace.root}/${sourceFile}`,
+      text,
+      ts.ScriptTarget.Latest,
+      false,
+      scriptKindFor(sourceFile, lang),
+    );
+    failures.push(...parseFailures(parsed, sourceFile));
+
+    const hasModifier = (node, kind) =>
+      (node.modifiers ?? []).some((modifier) => modifier.kind === kind);
+
+    for (const statement of parsed.statements) {
+      // `export { a, b as c }` with no `from` — a local binding list. The
+      // EXPORTED name is the alias side: plain `a` exports `a`, `b as c`
+      // exports `c`. Element name text is read defensively so a
+      // string-literal alias (`export { a as "x y" }`) is carried as written
+      // rather than undefined.
+      if (ts.isExportDeclaration(statement) && statement.exportClause) {
+        const clause = statement.exportClause;
+        if (ts.isNamedExports(clause)) {
+          const target = statement.moduleSpecifier ? reexported : declared;
+          for (const element of clause.elements) {
+            target.push(element.name?.text ?? "");
+          }
+        } else if (clause.name) {
+          // `export * as ns from "…"` — a re-export wearing a new name.
+          reexported.push(clause.name.text);
+        }
+        continue;
+      }
+      if (ts.isExportAssignment(statement)) {
+        // `export default <expression>` and `export = <identifier>` — the
+        // module's own default/exports binding, declared here whatever it
+        // wraps. The `export =` form carries the identifier it aliases; a
+        // default is the name every consumer writes, not the expression's.
+        declared.push(
+          statement.isExportEquals && ts.isIdentifier(statement.expression)
+            ? statement.expression.text
+            : "default",
+        );
+        continue;
+      }
+      const exported = hasModifier(statement, ts.SyntaxKind.ExportKeyword);
+      if (!exported) continue;
+      if (hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) {
+        declared.push("default");
+        continue;
+      }
+      // The one-name statements — function, class, enum, namespace, type,
+      // interface — all carry the exported identifier as `.name`. Enumerated
+      // kind by kind so the type checker's statement union narrows to the
+      // members that actually have one; a future statement kind with a name
+      // is a new arm here, which is the point.
+      const named =
+        ts.isFunctionDeclaration(statement) ||
+        ts.isClassDeclaration(statement) ||
+        ts.isEnumDeclaration(statement) ||
+        ts.isTypeAliasDeclaration(statement) ||
+        ts.isInterfaceDeclaration(statement) ||
+        ts.isModuleDeclaration(statement);
+      if (named) {
+        const name = statement.name?.text ?? "";
+        if (name !== "") {
+          declared.push(name);
+          continue;
+        }
+      }
+      if (ts.isVariableStatement(statement)) {
+        for (const declaration of statement.declarationList.declarations) {
+          bindingNames(declaration.name, declared);
+        }
+      }
+    }
+  } catch (cause) {
+    failures.push(fileFailure(sourceFile, `export scan failed: ${cause?.message ?? cause}`));
+  }
+  return { declared, reexported, failures };
+}
+
+/**
+ * Every identifier a binding pattern introduces, in source order — `a`,
+ * `{ a, b: c }`'s `a` and `c`, `[x, ...rest]`'s `x` and `rest`. Computed
+ * properties (`{ [key]: value }`) introduce nothing nameable and are skipped,
+ * the same call a minifier would make: a name no source text carries is a name
+ * no marker can claim.
+ *
+ * @param {ts.Node} node A binding name or pattern.
+ * @param {string[]} out Accumulator, mutated in place.
+ */
+function bindingNames(node, out) {
+  if (ts.isIdentifier(node) || ts.isStringLiteral(node)) {
+    out.push(node.text);
+    return;
+  }
+  if (ts.isObjectBindingPattern(node) || ts.isArrayBindingPattern(node)) {
+    for (const element of node.elements) {
+      if (ts.isOmittedExpression(element)) continue;
+      bindingNames(element.name ?? element, out);
+    }
+  }
+}
