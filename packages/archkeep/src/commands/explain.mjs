@@ -79,16 +79,13 @@
  * was: the field, and its rendered lines, exist only when the comparison was
  * requested.
  */
-import {
-  blindSpotRows,
-  isWholeFileFailure,
-  unresolvableLiteralCount,
-} from "../analysis/source-util.mjs";
+import { isWholeFileFailure } from "../analysis/source-util.mjs";
 import { UsageError } from "../errors.mjs";
 import { evaluate } from "../rules/index.mjs";
 import { findConstraintsFor } from "../rules/tags.mjs";
 import { findProjectForPath, createProjectRootMappings } from "../rules/specifiers.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
+import { coverageVerdict } from "./coverage-verdict.mjs";
 import { formatExplainReport } from "../report/explain-text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { readAdrContext } from "./adr.mjs";
@@ -369,18 +366,18 @@ export function explainCommand(site, commandContext, config, options = {}) {
   // Normalize backslash separators (Windows paths) to forward slashes.
   parsed.sourceFile = sep === "\\" ? normalizedFile.replaceAll("\\", "/") : normalizedFile;
 
-  const notAnalyzed = commandContext.analysis.failures
-    .filter(isWholeFileFailure)
-    .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
-
-  // An unresolvable site was seen but never judged (#595): the graph is
-  // missing whatever edge that site would have drawn, and rules that judge
-  // the whole graph (circularity, lazy loading) would answer over a gap. The
-  // explanation still reports — status no-verdict — naming the site in
-  // `coverage.blindSpots`, the same contract `graph`/`discover` run.
-  const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
-  const complete = notAnalyzed.length === 0 && blindSpotCount === 0;
-  const status = complete ? "ok" : "no-verdict";
+  // The completeness verdict is the shared constructor's, not this file's —
+  // the same contract `graph`/`discover` run: an unresolvable site was seen
+  // but never judged (#595), the graph is missing whatever edge it would have
+  // drawn, and rules that judge the whole graph (circularity, lazy loading)
+  // would answer over a gap. The explanation still reports — status
+  // no-verdict — naming the site in `coverage.blindSpots`. The restatement
+  // this replaces carried two of the constructor's three axes; the third
+  // (`analyzed > 0`, #599) moves no byte here, because every lane below that
+  // builds an envelope already implies a read file — an import record or a
+  // positioned failure exists only for a file the run analyzed — so the axis
+  // is carried by composition, not changed by it.
+  const { notAnalyzed, blindSpots, complete, status, exitCode } = coverageVerdict(commandContext);
 
   // Find the import record at this site.
   const record = findSite(parsed, commandContext.analysis.imports);
@@ -432,7 +429,7 @@ export function explainCommand(site, commandContext, config, options = {}) {
         analyzedFiles: commandContext.analysis.analyzed,
         imports: commandContext.analysis.imports.length,
         notAnalyzed,
-        blindSpots: blindSpotRows(commandContext.analysis.failures),
+        blindSpots,
         notes: [],
       };
 
@@ -447,7 +444,7 @@ export function explainCommand(site, commandContext, config, options = {}) {
         command: "explain",
         context,
         status,
-        exitCode: complete ? 0 : 3,
+        exitCode,
         coverage,
         result,
       });
@@ -579,7 +576,7 @@ export function explainCommand(site, commandContext, config, options = {}) {
     analyzedFiles: commandContext.analysis.analyzed,
     imports: commandContext.analysis.imports.length,
     notAnalyzed,
-    blindSpots: blindSpotRows(commandContext.analysis.failures),
+    blindSpots,
     notes: [],
   };
 

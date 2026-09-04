@@ -136,6 +136,24 @@ describe("healthCommand — status contract", () => {
     expect(result.coverage.complete).toBe(false);
   });
 
+  it("pins today's two-axis fileComplete over a run that judged nothing (#652 stop)", () => {
+    // A PIN, not an endorsement. This face restates completeness inline as
+    // "no whole-file failure and no unresolvable site" — no `analyzed > 0`
+    // axis (#599) — so a run that judged no file at all reads `fileComplete`,
+    // and with it `graphComplete`, true, and every metric measures a tree no
+    // analyzer touched. Composing onto `coverageVerdict` flips this lane and
+    // every metric verdict downstream of `graphComplete` with it, which is a
+    // behavior change this collapse does not decide; the finding is reported
+    // to the maintainer and this pin makes the silent flip loud the moment
+    // someone makes it. Flip this pin when the axis question is decided.
+    const result = healthCommand(
+      context({ analysis: { analyzed: 0, imports: [], failures: [] } }),
+      { config: config(), trendDir: null },
+    );
+    expect(result.coverage.complete).toBe(true);
+    expect(result.coverage.analyzedFiles).toBe(0);
+  });
+
   it("builds a JSON envelope carrying the metrics under `result`", () => {
     const result = healthCommand(context(), { config: config(), trendDir: null });
     const envelope = JSON.parse(result.report.json);

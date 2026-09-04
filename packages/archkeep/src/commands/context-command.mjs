@@ -32,16 +32,12 @@
  * than explaining constraints from a graph whose edges silently under-represent
  * the real architecture.
  */
-import {
-  blindSpotRows,
-  isWholeFileFailure,
-  unresolvableLiteralCount,
-} from "../analysis/source-util.mjs";
 import { UsageError } from "../errors.mjs";
 import { judgeEdge } from "../rules/edge-constraints.mjs";
 import { findConstraintsFor } from "../rules/tags.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatContextReport } from "../report/context-text.mjs";
+import { coverageVerdict } from "./coverage-verdict.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
@@ -150,27 +146,23 @@ export function contextCommand(projectName, commandContext, config) {
     );
   }
 
-  const notAnalyzed = commandContext.analysis.failures
-    .filter(isWholeFileFailure)
-    .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
-
-  // The same completeness `check` claims (#595, #599): unjudged sites and
-  // a zero-analyzed run defeat it here exactly as they do there, so a
-  // context report cannot look complete over a tree the run could not
-  // fully read.
-  const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
-  const complete =
-    notAnalyzed.length === 0 && blindSpotCount === 0 && commandContext.analysis.analyzed > 0;
-  const status = complete ? "ok" : "no-verdict";
-  const exitCode = complete ? 0 : 3;
+  // The completeness verdict is the shared constructor's, not this file's —
+  // the same law `graph`/`discover` run (#595, #599): unjudged sites and a
+  // zero-analyzed run defeat it here exactly as they do there, so a context
+  // report cannot look complete over a tree the run could not fully read
+  // while the faces beside it refuse the same tree. The restatement this
+  // replaces carried all three axes, so composing it moves no byte on any
+  // input.
+  const verdict = coverageVerdict(commandContext);
+  const { complete, status, exitCode } = verdict;
 
   const coverage = {
     complete,
     projects: Object.keys(graph.nodes).length,
     analyzedFiles: commandContext.analysis.analyzed,
     imports: commandContext.analysis.imports.length,
-    notAnalyzed,
-    blindSpots: blindSpotRows(commandContext.analysis.failures),
+    notAnalyzed: verdict.notAnalyzed,
+    blindSpots: verdict.blindSpots,
     notes: [
       "per-edge violations cover only depConstraints (3 of 15 violation types). " +
         "A dependency with no violations here may still violate npm-ban, circular-dependency, " +

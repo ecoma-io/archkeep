@@ -248,7 +248,7 @@
           "type": "source-evidence",
           "path": "src/commands/context-command.mjs",
           "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)",
-          "sha256": "1f054400e864c381e65904bc20095f4eb6df3198b19ffcb985895af7ec31d80d"
+          "sha256": "f906671ff4a5720d80ea5a3dab2779f1cfd3648fbc1e6a1f3a6d0e6efef21feb"
         },
         {
           "type": "source-evidence",
