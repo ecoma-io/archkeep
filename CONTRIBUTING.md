@@ -416,7 +416,13 @@ will see in CI:
   commitlint configuration the `commit-msg` hook uses, so a valid message has one
   definition rather than two. Your own commit messages are kept — they land in
   the body of the squash commit — but only the title reaches the first line, and
-  the first line is what `git log --oneline` and any release tooling read.
+  the first line is what `git log --oneline` and any release tooling read. That
+  configuration also caps the first line at 100 characters
+  (`header-max-length`), and it judges the title only in CI — after
+  `pnpm install` — so an over-long title is a red lane minutes in, not a local
+  hook failure. The cheap discipline: keep the title byte-identical to the
+  branch's last commit subject, which the `commit-msg` hook already judged, and
+  count it before opening the pull request.
 - **One release-worthy change per pull request.** A pull request holding a
   `feat:` and an unrelated `fix:` gets one subject line, so it announces one of
   them. If you have two, send two.
