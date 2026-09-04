@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.23.0](https://github.com/ecoma-io/archkeep/compare/v0.22.2...v0.23.0) (2026-09-04)
+
+
+### Features
+
+* **archkeep:** name project-owned untracked files the analysis never read ([#679](https://github.com/ecoma-io/archkeep/issues/679)) ([f497493](https://github.com/ecoma-io/archkeep/commit/f497493a21807ea92120b5a7c80ceab2f624bbdd))
+
+
+### Documentation
+
+* **archkeep:** align the exit-codes and discovery payload claims with the engine ([#670](https://github.com/ecoma-io/archkeep/issues/670)) ([c4a1f98](https://github.com/ecoma-io/archkeep/commit/c4a1f982e11c71edcd938abf7da6f54c06c5982a))
+* **archkeep:** correct the envelope-absence and proposal-purity claims ([#680](https://github.com/ecoma-io/archkeep/issues/680)) ([2449d69](https://github.com/ecoma-io/archkeep/commit/2449d69d594f08620725b60e2f04dde5cf220c11))
+* the PR title's 100-character cap, stated beside the rule ([#661](https://github.com/ecoma-io/archkeep/issues/661)) ([#662](https://github.com/ecoma-io/archkeep/issues/662)) ([f864954](https://github.com/ecoma-io/archkeep/commit/f864954cb70b3ee92a310a2b3647c746863dc6f3))
+* tighten the discover and rules result wording ([#639](https://github.com/ecoma-io/archkeep/issues/639)) ([#657](https://github.com/ecoma-io/archkeep/issues/657)) ([73dec2f](https://github.com/ecoma-io/archkeep/commit/73dec2f3833f32b0b0164c6208b3875cab2bd00b))
+
 ## [0.22.2](https://github.com/ecoma-io/archkeep/compare/v0.22.1...v0.22.2) (2026-09-04)
 
 
