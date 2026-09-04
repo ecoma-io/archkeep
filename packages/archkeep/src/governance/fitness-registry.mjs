@@ -63,9 +63,6 @@ import {
   tagConformance,
 } from "./fitness-rules.mjs";
 
-/** The one `fitness` list key in the boundary config. */
-export const FITNESS_KEY = "fitness";
-
 /** The condition types the registry can evaluate. */
 export const CONDITION_TYPES = Object.freeze([
   "cycle-free",

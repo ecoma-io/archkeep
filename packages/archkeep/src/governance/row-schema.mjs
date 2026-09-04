@@ -59,9 +59,6 @@
 import { originViolations } from "./provenance-record.mjs";
 import { describe, isPlainObject } from "../values.mjs";
 
-/** The shape of any `origin.on` producer. Re-exported for a row owner's own docs. */
-export { clockViolations as clockValidation } from "./clock.mjs";
-
 /** The four governance keys a row may carry, in the order reports list them. */
 export const GOVERNANCE_ROW_KEYS = Object.freeze([
   "origin",

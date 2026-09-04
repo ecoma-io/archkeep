@@ -153,10 +153,11 @@ function ownershipIndexOf(projects) {
 /**
  * Root comparisons `projectOwning` has performed since the module loaded.
  *
- * Nothing in production reads it. It exists so the complexity test counts
- * deterministic operations instead of milliseconds — the wall-clock this
- * repository does not trust in a test (cf. #359, #369). Every comparison the
- * lookup makes is counted: one per binary-search step, one per equality probe.
+ * A test-support export: nothing in production reads it. It exists so the
+ * complexity test counts deterministic operations instead of milliseconds —
+ * the wall-clock this repository does not trust in a test (cf. #359, #369).
+ * Every comparison the lookup makes is counted: one per binary-search step,
+ * one per equality probe.
  */
 let rootComparisons = 0;
 export const ownershipRootComparisons = () => rootComparisons;
