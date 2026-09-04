@@ -501,10 +501,14 @@ export async function planContextCommand(
         (a.messageId < b.messageId ? -1 : a.messageId > b.messageId ? 1 : 0),
     );
 
+  // A run that analyzed nothing judged nothing (#599, #694): judging nothing
+  // is not finding nothing, so it defeats completeness the way a whole-file
+  // failure does.
   // An unresolvable literal site is work the run saw but never judged
   // (#595, narrowed): a plan over it would present edges the run does not
   // hold, so it defeats completeness the way a whole-file failure does.
-  const complete = notAnalyzed.length === 0 && unresolvableLiteralCount(failures) === 0;
+  const complete =
+    wholeTree.analyzed > 0 && notAnalyzed.length === 0 && unresolvableLiteralCount(failures) === 0;
   const status = complete ? "ok" : "no-verdict";
   const exitCode = complete ? 0 : 3;
 
