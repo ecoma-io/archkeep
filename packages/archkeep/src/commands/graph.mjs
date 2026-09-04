@@ -10,6 +10,13 @@
  * `entryPoints`, or `declaredPackages`). It is descriptive: it never exits 1,
  * because a snapshot of what is is never a finding.
  *
+ * Its completeness verdict is not computed here: `graphCommand` composes
+ * `./coverage-verdict.mjs`'s `coverageVerdict`, the one constructor every
+ * refusal-contract face reads, so this snapshot's `status`/`exitCode` cannot
+ * drift from the axes `check` judges completeness over. The graph-family
+ * restatement this replaces is how the zero-analysis axis went missing here
+ * while every other face carried it (#612).
+ *
  * What it needs from its caller is a `CommandContext` — the preamble every
  * command shares (`./context.mjs`). What it gives back is a `status`, the
  * payload for both the text and the JSON renderers, and enough coverage
@@ -29,15 +36,12 @@
  */
 import { createHash } from "node:crypto";
 
-import {
-  blindSpotRows,
-  isWholeFileFailure,
-  unresolvableLiteralCount,
-} from "../analysis/source-util.mjs";
 import { canonicalizeJson } from "../canonical.mjs";
 import { DEFAULT_WORKSPACE_LAYOUT } from "../rules/specifiers.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatGraphReport } from "../report/graph-text.mjs";
+import { coverageIncompleteReasons } from "../verdict.mjs";
+import { coverageVerdict } from "./coverage-verdict.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 
 /**
@@ -222,20 +226,24 @@ export function graphCommand(commandContext, { config = null } = {}) {
     );
   }
 
-  const notAnalyzed = commandContext.analysis.failures
-    .filter(isWholeFileFailure)
-    .map(({ sourceFile, reason }) => ({ file: sourceFile, reason }));
+  // The completeness verdict is the shared constructor's, not this file's:
+  // restating the axes here is how the `analyzed > 0` term went missing from
+  // this face while `check` carried it (#612 — a run that judged no file at
+  // all used to report `ok` / `complete: true` / exit 0, byte-for-byte the
+  // envelope a clean workspace gets). `coverageVerdict` owns the one law —
+  // no whole-file failure, no unjudged site, at least one file analyzed —
+  // and the same return shape the envelope and the text face both read.
+  const verdict = coverageVerdict(commandContext);
+  const { complete, status, exitCode } = verdict;
 
-  // An unresolvable import site was seen but never judged (#595): the edges
-  // out of it may be missing from this snapshot, so the snapshot must not
-  // claim `complete` over it. It still reports — status no-verdict, exit 3 —
-  // naming the site in `coverage.blindSpots`, the same contract `check` runs.
-  const blindSpots = blindSpotRows(commandContext.analysis.failures);
-  const blindSpotCount = unresolvableLiteralCount(commandContext.analysis.failures);
-
-  const complete = notAnalyzed.length === 0 && blindSpotCount === 0;
-  const status = complete ? "ok" : "no-verdict";
-  const exitCode = complete ? 0 : 3;
+  // The clauses the text face renders over an incomplete run, worded by the
+  // same function `verdictFor` joins into `decision.reason` — one wording,
+  // two renderings, and neither can drift from the other.
+  const coverageIncomplete = coverageIncompleteReasons({
+    unchecked: verdict.notAnalyzed.length,
+    blindSpots: verdict.blindSpotCount,
+    analyzed: commandContext.analysis.analyzed,
+  });
 
   const projects = buildProjects(graph.nodes);
   const dependencies = buildDependencies(graph.dependencies);
@@ -255,8 +263,8 @@ export function graphCommand(commandContext, { config = null } = {}) {
     projects: projects.length,
     analyzedFiles: commandContext.analysis.analyzed,
     imports: commandContext.analysis.imports.length,
-    notAnalyzed,
-    blindSpots,
+    notAnalyzed: verdict.notAnalyzed,
+    blindSpots: verdict.blindSpots,
     notes: [],
   };
 
@@ -299,6 +307,7 @@ export function graphCommand(commandContext, { config = null } = {}) {
         workspaceLayout,
         workspaceLayoutSource,
         coverage,
+        coverageIncomplete,
       }),
       json: renderJson(envelope),
     },

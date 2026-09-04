@@ -29,8 +29,11 @@ the resolution order.
   deterministic, serialisable snapshot: projects (with `targets` and `tags`) and
   dependencies, each as a flat sorted array. Strips internal fields
   (`mfeRemote`, `entryPoints`, `declaredPackages`). Includes
-  `workspaceLayout`/`workspaceLayoutSource`. Refuses an Nx workspace with
-  polyglot manifests but no plugin registration. Descriptive: never exits 1.
+  `workspaceLayout`/`workspaceLayoutSource`. Completeness comes from
+  `./coverage-verdict.mjs`'s shared constructor — a whole-file failure, an
+  unjudged site, or a run that analyzed no file at all (#612) is the
+  no-verdict lane. Refuses an Nx workspace with polyglot manifests but no
+  plugin registration. Descriptive: never exits 1.
 
 - **`diff`** (`./diff.mjs`'s `diffCommand`) — two graph snapshots compared edge
   by edge. Takes a baseline file (not a git ref). When a boundary config is

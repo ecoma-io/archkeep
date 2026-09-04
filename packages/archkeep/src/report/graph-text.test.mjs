@@ -44,7 +44,7 @@ describe("formatGraphReport", () => {
     expect(report).toContain("0 imports in 0 files across 0 projects");
   });
 
-  it("states 'graph snapshot incomplete' when coverage is not complete", () => {
+  it("states 'graph snapshot incomplete' when coverage is not complete, naming the clause", () => {
     const report = formatGraphReport({
       projects: [],
       dependencies: [],
@@ -57,9 +57,37 @@ describe("formatGraphReport", () => {
         analyzedFiles: 0,
         projects: 0,
       },
+      coverageIncomplete: ["1 file could not be analyzed — coverage incomplete"],
     });
     expect(report).toContain("graph snapshot incomplete");
-    expect(report).toContain("1 file could not be analyzed");
+    // The clause carries the count; the headline no longer restates it — one
+    // wording, and the same `⚠` rendering `check`'s text report prints.
+    expect(report).toContain("⚠ 1 file could not be analyzed — coverage incomplete");
+  });
+
+  it("names the zero-analysis clause over an empty notAnalyzed list (#612)", () => {
+    // The silent direction, at the renderer: an incomplete snapshot whose only
+    // failed axis is "nothing was analyzed" has an empty `notAnalyzed` list,
+    // so a count-bearing headline would blame zero failures. The clause line
+    // is what tells the reader the run judged nothing.
+    const report = formatGraphReport({
+      projects: [{ name: "a", root: "libs/a", tags: [] }],
+      dependencies: [],
+      workspaceLayout: DEFAULT_LAYOUT,
+      workspaceLayoutSource: "default",
+      coverage: {
+        complete: false,
+        notAnalyzed: [],
+        blindSpots: [],
+        imports: 0,
+        analyzedFiles: 0,
+        projects: 1,
+      },
+      coverageIncomplete: ["no file in scope could be analyzed — coverage incomplete"],
+    });
+    expect(report).toContain("graph snapshot incomplete");
+    expect(report).toContain("⚠ no file in scope could be analyzed — coverage incomplete");
+    expect(report).not.toContain("0 files could not be analyzed");
   });
 
   it("puts the incomplete-coverage warning ABOVE the listing", () => {

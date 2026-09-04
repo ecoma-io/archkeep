@@ -393,6 +393,46 @@ describe("graphCommand", () => {
     ]);
   });
 
+  it("refuses a run that judged nothing — zero analyzed files is no-verdict, not a complete snapshot (#612)", () => {
+    // The silent direction, at the command unit: a tree whose analysis judged
+    // no file at all and produced neither a whole-file failure nor an
+    // unresolvable site used to pass this law's two remaining axes and report
+    // `ok` / `complete: true` / exit 0 — byte-for-byte the envelope a clean
+    // workspace gets. A snapshot over nothing judged is not a snapshot of a
+    // clean workspace; it is no verdict at all.
+    const result = graphCommand(
+      commandContext({
+        analysis: { analyzed: 0, imports: [], failures: [] },
+      }),
+    );
+    expect(result.status).toBe("no-verdict");
+    expect(result.coverage.complete).toBe(false);
+    expect(result.coverage.analyzedFiles).toBe(0);
+    expect(result.coverage.notAnalyzed).toEqual([]);
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.coverage.complete).toBe(false);
+  });
+
+  it("names the zero-analysis reason where the text report renders every other clause (#612)", () => {
+    // The text half of the same refusal: an incomplete headline over an empty
+    // `notAnalyzed` list used to print "0 files could not be analyzed" — the
+    // reader is told the run is incomplete and, in the same sentence, given a
+    // count of zero failures as the reason. The clause list the JSON face
+    // words is the one the terminal reader gets too, the same rendering
+    // `check`'s text report gives its own coverage clauses.
+    const result = graphCommand(
+      commandContext({
+        analysis: { analyzed: 0, imports: [], failures: [] },
+      }),
+    );
+    expect(result.report.text).toContain("graph snapshot incomplete");
+    expect(result.report.text).toContain(
+      "no file in scope could be analyzed — coverage incomplete",
+    );
+  });
+
   it("uses default workspace layout when the graph does not carry one", () => {
     const result = graphCommand(commandContext());
     expect(result.workspaceLayout).toEqual(DEFAULT_WORKSPACE_LAYOUT);
@@ -683,7 +723,17 @@ export const moduleBoundaryOptions = {
 
   /** A tracked Nx tree: `nx.json` plus `files`, with the graph injected. */
   const nxWorkspace = (nxJson, files = {}) => {
-    const entries = { "nx.json": nxJson, "libs/core/README.md": "core\n", ...files };
+    // The one analyzable source file is load-bearing: since #612 a graph over
+    // a run that analyzed zero files is the no-verdict lane, and these tests
+    // pin the boundary-config load, not coverage — without a file the analyzer
+    // claims, every expectation here would flip to exit 3 for a reason this
+    // suite does not judge.
+    const entries = {
+      "nx.json": nxJson,
+      "libs/core/README.md": "core\n",
+      "libs/core/core.js": "export const core = 1;\n",
+      ...files,
+    };
     return {
       cwd: treeOf("archkeep-graph-nx-", entries),
       readGraph: () => GRAPH,
