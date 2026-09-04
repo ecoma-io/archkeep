@@ -152,6 +152,32 @@ describe("pattern validation", () => {
     expect(projectPatternError("libs/*")).toMatch(/does not reproduce/);
     expect(projectPatternError("tag:zone:{x,y}")).toMatch(/does not reproduce/);
   });
+
+  it("refuses every character of the table, one row per character", () => {
+    // The refusal is per character, not per construct: a lone `(` is refused
+    // although minimatch would read it literally without an extglob prefix.
+    // Loud over-refusal is the design — the entry names itself and the
+    // workspace rewrites it, where an accepted almost-match suppresses a
+    // violation nobody sees.
+    expect(projectPatternError("libs/**")).toMatch(/does not reproduce/);
+    expect(projectPatternError("alpha?")).toMatch(/does not reproduce/);
+    expect(projectPatternError("[a-z]")).toMatch(/does not reproduce/);
+    expect(projectPatternError("zone:{x,y}")).toMatch(/does not reproduce/);
+    expect(projectPatternError("alpha(b")).toMatch(/does not reproduce/);
+    expect(projectPatternError("alpha)b")).toMatch(/does not reproduce/);
+    expect(projectPatternError("alpha]b")).toMatch(/does not reproduce/);
+    expect(projectPatternError("alpha}b")).toMatch(/does not reproduce/);
+  });
+
+  it("admits a backslash — the one character this table does not carry", () => {
+    // Pinned because `../../analysis/manifest-util.mjs` carries a second table
+    // of the same name whose job is the opposite (route a glob to the real
+    // matcher rather than refuse it) and that one DOES treat the backslash as
+    // glob-significant. Whether upstream expands a backslash in a project
+    // pattern is not settled here; the pinned fact is only that this gate
+    // loads the row instead of refusing it.
+    expect(projectPatternError("libs\\alpha")).toBeNull();
+  });
 });
 
 describe("findMatchingProjects", () => {
