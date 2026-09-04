@@ -76,9 +76,6 @@ export const SEVERITY_ORDER = Object.freeze({
   unknown: Infinity,
 });
 
-/** A scored element's state, in the vocabulary the text and JSON reports share. */
-export const ELEMENT_STATES = Object.freeze(["match", "absent", "unexpected", "unknown"]);
-
 /**
  * A scored element.
  *

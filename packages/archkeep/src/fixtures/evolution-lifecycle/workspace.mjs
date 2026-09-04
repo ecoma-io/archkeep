@@ -58,11 +58,6 @@ export function commit(root, message) {
   return git(root, "rev-parse", "HEAD").trim();
 }
 
-/** Resolves the current HEAD of the fixture. */
-export function headOf(root) {
-  return git(root, "rev-parse", "HEAD").trim();
-}
-
 /**
  * Opens a brand-new throwaway native git workspace (never the repository's own
  * tree). `archkeep.json` declares two Go projects on two layers, exactly the
