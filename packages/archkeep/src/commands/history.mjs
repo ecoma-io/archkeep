@@ -79,6 +79,7 @@ import {
   isWholeFileFailure,
   unresolvableLiteralCount,
 } from "../analysis/source-util.mjs";
+import { canonicalizeJson } from "../canonical.mjs";
 import { containmentViolation } from "../containment.mjs";
 import { classifyEvolution } from "../governance/evolution-event.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
@@ -121,17 +122,17 @@ export function snapshotIdentity({ projects, dependencies, policy }) {
     type,
     tags,
   }));
-  const canonical = JSON.stringify(
-    { projects: identityProjects, dependencies, policy: policy?.fingerprint ?? null },
-    (_, value) =>
-      value !== null && typeof value === "object" && !Array.isArray(value)
-        ? Object.fromEntries(
-            Object.keys(value)
-              .sort()
-              .map((key) => [key, value[key]]),
-          )
-        : value,
-  );
+  // The canonical string comes from `../canonical.mjs` — the one canonicalizer
+  // ("one canonicalizer, in one place, so two serializations cannot drift").
+  // This digest's private inline replacer was the last serialization site
+  // beside it (#613); `history.test.mjs` pins the digest byte-identical to the
+  // retired spelling on every snapshot shape, so composing it moved no byte an
+  // unchanged workspace ever saw.
+  const canonical = canonicalizeJson({
+    projects: identityProjects,
+    dependencies,
+    policy: policy?.fingerprint ?? null,
+  });
   return createHash("sha256").update(canonical).digest("hex");
 }
 

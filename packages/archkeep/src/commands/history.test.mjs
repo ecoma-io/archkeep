@@ -1,5 +1,8 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it, vi } from "vitest";
 
+import { canonicalizeJson } from "../canonical.mjs";
 import {
   computeEvolution,
   historyCommand,
@@ -203,6 +206,111 @@ describe("snapshotIdentity", () => {
     // "no policy recorded" is a single state, not one indistinguishable from
     // an absent one.
     expect(snapshotIdentity({ ...base, policy: null })).toBe(snapshotIdentity(base));
+  });
+
+  it("digests the same bytes the retired inline canonicalizer produced (#613)", () => {
+    // `snapshotIdentity` used to inline its own key-sorting `JSON.stringify`
+    // beside `../canonical.mjs` — the last private serialization spelling in
+    // the package. The DIGEST is the contract: an unchanged workspace must
+    // re-derive the same snapshot ids after the consolidation, so the retired
+    // spelling lives here as the reference and every shape a real snapshot
+    // carries must come out identical through both. A shape where the two
+    // diverge is a semantic change to what `history` reports, not a refactor
+    // — the assertion is built to go red on that day, not to bless the new
+    // bytes.
+    const legacyCanonicalize = (value) =>
+      JSON.stringify(value, (_, current) =>
+        current !== null && typeof current === "object" && !Array.isArray(current)
+          ? Object.fromEntries(
+              Object.keys(current)
+                .sort()
+                .map((key) => [key, current[key]]),
+            )
+          : current,
+      );
+    const mapProjects = (projects) =>
+      projects.map(({ name, root, type, tags }) => ({ name, root, type, tags }));
+    /**
+     * The retired function, verbatim: projection, canonical string, SHA-256.
+     * @param {{projects: SnapshotShape["projects"], dependencies: any[], policy?: {fingerprint: string} | null}} _
+     * @returns {string}
+     */
+    const legacySnapshotIdentity = ({ projects, dependencies, policy }) =>
+      createHash("sha256")
+        .update(
+          legacyCanonicalize({
+            projects: mapProjects(projects),
+            dependencies,
+            policy: policy?.fingerprint ?? null,
+          }),
+        )
+        .digest("hex");
+
+    const project = { name: "alpha", root: "libs/alpha", type: "lib", tags: ["layer:a"] };
+
+    /**
+     * A representative snapshot shape: what a real `delta --capture` stores —
+     * projected projects, edge records, and the optional policy fingerprint.
+     * @typedef {object} SnapshotShape
+     * @property {{name: string, root: string, type?: string, tags?: string[]}[]} projects
+     * @property {any[]} dependencies
+     * @property {{fingerprint: string} | null} [policy]
+     */
+
+    /** @type {Array<[string, SnapshotShape]>} */
+    const shapes = [
+      ["the empty graph", { projects: [], dependencies: [] }],
+      ["one project with tags, no edges", { projects: [project], dependencies: [] }],
+      [
+        "key insertion order reversed on every object",
+        {
+          dependencies: [{ type: "static", target: "beta", source: "alpha" }],
+          projects: [{ tags: ["layer:a"], type: "lib", root: "libs/alpha", name: "alpha" }],
+        },
+      ],
+      [
+        "several projects and edge records, as a real graph carries them",
+        {
+          projects: [project, { name: "beta", root: "libs/beta", type: "lib", tags: [] }],
+          dependencies: [
+            { source: "alpha", target: "beta", type: "static" },
+            { source: "alpha", target: "beta", type: "dynamic" },
+          ],
+        },
+      ],
+      [
+        "empty projects, empty dependencies, explicit null policy",
+        { projects: [], dependencies: [], policy: null },
+      ],
+      [
+        "a policy fingerprint present",
+        { projects: [project], dependencies: [], policy: { fingerprint: "fp-1" } },
+      ],
+      ["a null policy", { projects: [project], dependencies: [], policy: null }],
+      ["a policy absent", { projects: [project], dependencies: [] }],
+      [
+        "a stored edge record with an own '__proto__' key",
+        {
+          projects: [project],
+          dependencies: [
+            JSON.parse('{"source":"alpha","target":"beta","type":"static","__proto__":{"x":1}}'),
+          ],
+        },
+      ],
+    ];
+
+    for (const [shapeName, shape] of shapes) {
+      const value = {
+        projects: mapProjects(shape.projects),
+        dependencies: shape.dependencies,
+        policy: shape.policy?.fingerprint ?? null,
+      };
+      // The serializers agree byte-for-byte on the canonical STRING …
+      expect(canonicalizeJson(value), shapeName).toBe(legacyCanonicalize(value));
+      // … and the composed digest equals the digest the retired spelling
+      // produced — the identity an unchanged workspace already recorded.
+      expect(snapshotIdentity(shape), shapeName).toBe(legacySnapshotIdentity(shape));
+    }
   });
 });
 

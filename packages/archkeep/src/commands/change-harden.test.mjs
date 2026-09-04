@@ -22,7 +22,7 @@ import {
 } from "../governance/evolution-event.mjs";
 import { debtFactId } from "../governance/debt-ledger.mjs";
 import { parseChangeIntent } from "./change-intent.mjs";
-import { changeCommand, reconcileDisposition } from "./change.mjs";
+import { changeCommand, reconcileDisposition, reconcileMaterialDelta } from "./change.mjs";
 import { parseEvidenceSnapshot, serializeEvidenceSnapshot } from "./delta-snapshot.mjs";
 import { captureDelta } from "./delta.mjs";
 import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../../spawn-budget.mjs";
@@ -303,6 +303,38 @@ describe("the breadth guard", () => {
         intent: emptyRowsManifest({ summary: "add payments capability" }),
       }),
     ).rejects.toThrow(/summary/);
+  });
+});
+
+describe("reconcileMaterialDelta — the declared row's identity", () => {
+  it("does not call one edge's observation another edge's promise kept", () => {
+    // Two distinct (from, to) pairs that a weaker separator — or no separator
+    // — would key identically (`("a:b","c")` and `("a","b:c")` both collapse
+    // to "a:b:c" under ":"). Declaring one and observing the other must read
+    // as unfulfilled AND undeclared, never as matched: this is the red
+    // direction of the #613 consolidation, because a spelling that collapses
+    // the two rows makes the reconciliation recognize a declaration it was
+    // never handed — byte-for-byte indistinguishable from a kept promise.
+    const intent = parseChangeIntent(
+      JSON.stringify({
+        version: "1",
+        base: { commit: "c" },
+        edges: { add: [{ from: "a:b", to: "c" }], remove: [] },
+      }),
+      "i.json",
+    );
+    const reconciliation = reconcileMaterialDelta(intent, {
+      addedProjects: [],
+      removedProjects: [],
+      changedProjects: [],
+      addedEdges: [{ source: "a", target: "b:c", type: "static" }],
+      removedEdges: [],
+    });
+    expect(reconciliation.matched).toEqual([]);
+    expect(reconciliation.missingExpected).toEqual([{ kind: "edge-added", from: "a:b", to: "c" }]);
+    expect(reconciliation.unexpected).toEqual([
+      { kind: "edge-added", from: "a", to: "b:c", type: "static" },
+    ]);
   });
 });
 

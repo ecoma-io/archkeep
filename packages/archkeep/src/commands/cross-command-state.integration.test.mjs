@@ -4,8 +4,9 @@
 // `diff`, `delta` and `evolution` name one changed edge with one spelling,
 // that `impact`/`scenario`'s alignment names what the events name, that a
 // snapshot's identity survives the hand-off from the command that wrote it to
-// the commands that read it, and that `check` and `reconcile` judge one intent
-// file to one verdict.
+// the commands that read it — including across the two capture faces, the
+// graph envelope `history` reads and the evidence snapshot `change` reads —
+// and that `check` and `reconcile` judge one intent file to one verdict.
 //
 // Why this file exists (`#590`): every one of these invariants was violated or
 // unpinned at some point — the evolution envelope once carried TWO edge
@@ -13,7 +14,8 @@
 // nothing compared the vocabularies to each other. A regression that lands
 // between commands lands green today unless a test spans them.
 //
-// The invariants are numbered e1–e7 as `#590` lists them. e8 (a fully-attested
+// The invariants are numbered e1–e7 as `#590` lists them, and all seven now
+// live here. e8 (a fully-attested
 // decision reaching `provenanceCoverage` 1 / a reachable `overallComplete`)
 // is NOT here: it is a derivation-soundness case against
 // `deriveEvidenceGates`, owned with the evidence-gate fix, not with identity.
@@ -32,6 +34,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { EXIT, runCli } from "../../cli.mjs";
 import { edgeEvolutionIdentity } from "../governance/evolution-event.mjs";
+import { readEvidenceSnapshot } from "./delta-snapshot.mjs";
 import { snapshotIdentity } from "./history.mjs";
 import { environmentForTree } from "../workspace.mjs";
 import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../../spawn-budget.mjs";
@@ -126,6 +129,8 @@ let root;
 let shas;
 let baselinePath;
 let graphPath;
+/** The history directory e4 captures both timeline snapshots into. */
+let historyDir;
 
 /** Writes `text` to `relativePath` under the fixture root. */
 const write = (relativePath, text) => {
@@ -193,13 +198,27 @@ beforeAll(async () => {
   graphPath = join(root, "..", "cross-command-graph.json");
   const graphRun = await arch(["graph", "--format", "json", "--output", graphPath]);
   expect(graphRun.exitCode).toBe(EXIT.ok);
+  // e4's hand-off needs the OTHER capture face of the same tree: `history
+  // --capture` stores a graph envelope — a format `change`'s evidence
+  // snapshot never reads — so C1 is captured through both, and C2 closes the
+  // transition `history` classifies and `change` reconciles. The history
+  // directory must exist before capture (`history` reads a directory a
+  // consumer manages; it does not create one), hence mkdtemp, not a fixed
+  // sibling path.
+  historyDir = mkdtempSync(join(tmpdir(), "archkeep-cross-command-hist-"));
+  const historyBase = await arch(["history", historyDir, "--capture", "--format", "json"]);
+  expect(historyBase.exitCode).toBe(EXIT.ok);
   checkout(shas.c2);
+  const historyHead = await arch(["history", historyDir, "--capture", "--format", "json"]);
+  expect(historyHead.exitCode).toBe(EXIT.ok);
 });
 
 afterAll(() => {
   if (root) rmSync(root, { recursive: true, force: true });
   rmSync(join(root ?? "", "..", "cross-command-baseline.json"), { force: true });
   rmSync(join(root ?? "", "..", "cross-command-graph.json"), { force: true });
+  rmSync(join(root ?? "", "..", "cross-command-change-intent.json"), { force: true });
+  if (historyDir) rmSync(historyDir, { recursive: true, force: true });
 });
 
 describe("e1 — one edge, one spelling across diff, delta and the delta event", () => {
@@ -361,6 +380,114 @@ describe("e3 — impact and scenario alignments name what the events name", () =
       expect(run.envelope.result.scenario.evolutionAlignment.boundaries).toContain(VIRTUAL);
     } finally {
       rmSync(scenarioFile, { force: true });
+    }
+  });
+});
+
+describe("e4 — the history→change hand-off carries one identity and one vocabulary", () => {
+  // `change` consumes the DELTA capture face (`delta --capture`'s evidence
+  // snapshot); `history` consumes its own (`history --capture`'s graph
+  // envelope). The two formats never read each other, which is exactly why
+  // neither command's own suite can pin their agreement: if the two faces
+  // ever serialized one tree's graph differently, `history` would classify
+  // transitions over facts `change` never reconciled — or both would report
+  // while disagreeing about what changed — and every command-local test
+  // would stay green.
+  //
+  // The red direction is concrete: the identity assertion below fails the day
+  // either capture face gains, loses, or renames a field the other does not
+  // carry, and the reconciliation assertion below fails the day the declared
+  // row's key and the observed edge's key stop agreeing — a swapped field, a
+  // half-applied spelling — turning `matched` into `unfulfilled`/`undeclared`,
+  // exit 1. The spelling's collision-freedom itself is pinned beside the
+  // grammar (`change-intent.test.mjs`) and the reconciliation
+  // (`change-harden.test.mjs`), which reach the pure functions an end-to-end
+  // manifest cannot name.
+
+  it("the C1 architecture identity is the same string through both capture faces", async () => {
+    const listed = await archJson(["history", historyDir, "--format", "json"]);
+    expect(listed.exitCode).toBe(EXIT.ok);
+    expect(listed.envelope.result.snapshots).toHaveLength(2);
+    const [baseSnapshot] = listed.envelope.result.snapshots;
+    const stored = JSON.parse(readFileSync(join(historyDir, baseSnapshot.name), "utf8"));
+    // The baseline `change` reads, through the same loader `change` uses.
+    const baseline = readEvidenceSnapshot(baselinePath);
+    // Both faces must record the boundary law, so the identity's policy axis
+    // compares fingerprints and never silently `null`s both sides.
+    expect(baseline.policyFingerprint).toEqual(expect.any(String));
+    expect(baseline.policyFingerprint).toBe(stored.result.policy?.fingerprint);
+
+    const fromHistoryFace = snapshotIdentity({
+      projects: stored.result.projects,
+      dependencies: stored.result.dependencies,
+      policy: stored.result.policy,
+    });
+    const fromChangeFace = snapshotIdentity({
+      projects: baseline.graph.projects,
+      dependencies: baseline.graph.dependencies,
+      policy: { fingerprint: baseline.policyFingerprint },
+    });
+    expect(fromChangeFace).toBe(fromHistoryFace);
+    // The id `history --capture` reported for this very file is that same
+    // identity — the write side of the hand-off, not a recomputation of it.
+    expect(baseSnapshot.id).toBe(fromHistoryFace);
+  });
+
+  it("the edge history's transition classifies is the edge change reconciles as matched", async () => {
+    const listed = await archJson(["history", historyDir, "--format", "json"]);
+    expect(listed.exitCode).toBe(EXIT.ok);
+    const [transition] = listed.envelope.result.transitions;
+    expect(transition.architectureChanged).toBe(true);
+    // History's face: the transition's added edges, spelled canonically.
+    expect(transition.changes.addedEdges.map(edgeEvolutionIdentity)).toEqual([CROSSING]);
+
+    // The change face: an intent declaring exactly that edge, over the same
+    // baseline, must land in the MATCHED lane — the declared row and the
+    // observed edge keying to one fact across the whole hand-off. Any drift
+    // that splits that key puts the row in `missingExpected` and the
+    // observation in `unexpected` (`unfulfilled`/`undeclared`, exit 1): the
+    // empty lists below are the assertion, not decoration.
+    const manifest = join(root, "..", "cross-command-change-intent.json");
+    writeFileSync(
+      manifest,
+      `${JSON.stringify(
+        {
+          version: "1",
+          base: { commit: shas.c1 },
+          projects: { add: [], remove: [] },
+          edges: { add: [{ from: "alpha", to: "beta" }] },
+          constraints: {},
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    try {
+      const run = await archJson([
+        "change",
+        baselinePath,
+        "--intent",
+        manifest,
+        "--format",
+        "json",
+      ]);
+      expect(run.exitCode).toBe(EXIT.ok);
+      expect(run.envelope.result.reconciliation.verdict).toBe("matched");
+      expect(run.envelope.result.reconciliation.unexpected).toEqual([]);
+      expect(run.envelope.result.reconciliation.missingExpected).toEqual([]);
+      const matchedEdges = run.envelope.result.reconciliation.matched.filter(
+        (row) => row.kind === "edge-added",
+      );
+      expect(
+        matchedEdges.map((row) =>
+          edgeEvolutionIdentity({ source: row.from, target: row.to, type: row.type }),
+        ),
+      ).toEqual([CROSSING]);
+      // And the classification riding the same envelope names the edge with
+      // the events' one vocabulary — `classifyEvolution`'s own spelling.
+      expect(run.envelope.result.affected.boundaries).toContain(CROSSING);
+    } finally {
+      rmSync(manifest, { force: true });
     }
   });
 });

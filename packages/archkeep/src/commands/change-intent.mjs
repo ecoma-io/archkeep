@@ -84,6 +84,30 @@ export const CONSTRAINT_ROW_NAMES = Object.freeze({
   noNewCycles: "no-new-cycles",
 });
 
+/**
+ * The one spelling of a declared edge row's identity: the NUL-separated
+ * `(from, to)` project pair. Two sites must read one edge declaration as one
+ * fact — this module's duplicate rejection (the dedup key
+ * `sectionListViolations` carries rows by) and `./change.mjs`'s
+ * reconciliation (which matches a declared row against the observed graph's
+ * `{source, target}`) — so the string is built here and imported, never
+ * spelled twice. Two private spellings were the live defect this helper
+ * closes (#613): they produced the same bytes until a shape moved, which is
+ * byte-for-byte the silent direction — the reconciliation would stop
+ * recognizing declarations it was handed while every command-local test
+ * stayed green.
+ *
+ * The observed edge's `type` is deliberately not part of the pair: whether
+ * the graph emits a dependency as `static` or `dynamic` is the model's
+ * spelling, not the author's promise (`./change.mjs`, `reconcileMaterialDelta`).
+ *
+ * @param {{from: string, to: string}} row A validated edge row.
+ * @returns {string}
+ */
+export function edgePairKey({ from, to }) {
+  return `${from}\u0000${to}`;
+}
+
 /** A value's type, for an error message that shows what was actually there. */
 function describe(value) {
   if (Array.isArray(value)) return `an array (${JSON.stringify(value)})`;
@@ -280,7 +304,7 @@ export function findChangeIntentViolations(raw) {
       },
       identity: (entry) =>
         isPlainObject(entry) && nonEmptyString(entry.from) && nonEmptyString(entry.to)
-          ? `${entry.from}\u0000${entry.to}`
+          ? edgePairKey(/** @type {{from: string, to: string}} */ (entry))
           : "",
     }),
   );
