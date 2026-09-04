@@ -22,8 +22,8 @@ the resolution order.
   drift, a failing fitness gate, and a failing custom rule
   (`./custom-rules.mjs`). Exits 1 on any of them, and it is the only
   command holding all four exit codes
-  ([which verbs carry exit 1 is settled in `docs/concepts/architecture.md`](../../../../docs/concepts/architecture.md)
-  — `fitness` and `delta` are the other two).
+  ([which verbs carry exit 1 is settled in `docs/reference/exit-codes.md`](../../../../docs/reference/exit-codes.md)
+  — `fitness`, `delta`, `change` and `rules verify` are the other four).
 
 - **`graph`** (`./graph.mjs`'s `graphCommand`) — the project graph as a
   deterministic, serialisable snapshot: projects (with `targets` and `tags`) and
@@ -59,8 +59,9 @@ the resolution order.
   incomplete head coverage, and an Nx workspace with polyglot manifests but no
   plugin registration; a policy-fingerprint change is a loud coverage note, not
   a refusal. A verdict, not a description: a non-waived introduced violation is
-  a finding (exit 1 — then the third verb beside `check` and `fitness`; `change`
-  and its declared-intent question arrived later as the fourth), an
+  a finding (exit 1 — one of the five verdict verbs
+  [`docs/reference/exit-codes.md`](../../../../docs/reference/exit-codes.md)
+  pins), an
   unclassifiable item is a no-verdict (exit 3), and a waived-introduced entry
   is reported without gating. Capture stays descriptive: never exits 1.
 
@@ -78,8 +79,9 @@ the resolution order.
   verdict, and the workspace-law axis it reports is informational — computed,
   labeled as evidence, never folded into the exit code, because `check`
   remains the authority on the law. Undeclared, unfulfilled, or a failed
-  declared constraint is a finding (exit 1 — the fourth verb beside `check`,
-  `fitness`, `delta`); an unproven base identity or an undeterminable
+  declared constraint is a finding (exit 1 — one of the five verdict verbs
+  [`docs/reference/exit-codes.md`](../../../../docs/reference/exit-codes.md)
+  pins); an unproven base identity or an undeterminable
   constraint is exit 3, and constraints are left unevaluated over a base the
   run cannot vouch for. Refuses a manifest that fails shape or reference
   validation, an unreadable/malformed/incomplete baseline, a provider
@@ -309,6 +311,49 @@ the resolution order.
   registry and an unresolvable reference; a binding to a fitness id no
   declaration carries is listed `unknown` — named, never hidden. Descriptive:
   never exits 1.
+
+- **`scenario`** (`./scenario.mjs`'s `scenarioCommand`, with the scenario
+  grammar in `./scenario-evaluation.mjs`'s `parseScenarioInput`/`evaluateScenario`)
+  — a hypothetical change evaluated against the current workspace and compared
+  with its present impact. Virtual and read-only by construction: it never
+  mutates the workspace, never writes canonical history, never emits an
+  `EvolutionEvent`, and every output field carries `virtual: true` /
+  `notAuthoritative` — a what-if projection, never an authoritative verdict.
+  Refuses an Nx workspace with polyglot manifests but no plugin registration;
+  incomplete coverage withholds the evaluation as the structured
+  incomplete-coverage refusal (exit 3, no `result`). Descriptive: never exits 1.
+
+- **`decisions`** (`./decisions.mjs`'s `decisionsCommand`) — the deterministic
+  chain behind one recorded decision: the decision, the governed rows that
+  stand on it (intent, constraint and fitness), the projects they govern, the
+  current evidence and findings, and the decision's verification level. It
+  composes the governance modules without owning any of them —
+  `../governance/decision-graph.mjs`'s `forwardDecision` walk,
+  `../governance/decision-fitness.mjs`'s verification level, and the row walk
+  `./provenance-command.mjs` exports, so it never holds a second copy of which
+  rows exist. A binding naming a declared fitness gate is judged against the
+  same snapshot the `fitness` command builds; one naming no declared gate
+  renders `unverifiable` — the registry alone asserts nothing, never a clean
+  pass. Refuses an unreadable registry; an unresolvable reference — the
+  positional `<id>` or any hop of the walk — is rendered as an unresolved block
+  (exit 3), never as a clean chain. Descriptive: never exits 1.
+
+- **`rules`** (`./rules.mjs`'s `rulesListCommand`, `rulesInfoCommand`,
+  `rulesVerifyCommand` and `rulesAddCommand`) — the CLI face of the official
+  rules catalog (`@ecoma-io/archkeep-rules`): `list`, `info`, `verify` and
+  `add`. The catalog is read from the filesystem at a user-resolvable path
+  (explicit `--catalog`, then
+  `node_modules/@ecoma-io/archkeep-rules/catalog.json`), never by import, and
+  artifact integrity is validated through the engine's real host
+  (`../custom-rules/host.mjs`). `verify` is the one verdict verb: exit 1 when
+  the catalog's recorded digests disagree with the shipped bytes (a digest
+  mismatch, an artifact the host refuses, or one that escaped its directory),
+  exit 3 when the catalog could not be read — the two lanes `check` uses, so
+  "the artifact was modified" never reads as "the catalog could not be looked
+  at". `list` and `info` are always exit 0; `add` exits 0 on success and 3 on
+  any failure. Catalog-derived paths are contained to the catalog's own
+  directory (`../containment.mjs`), so data a consumer vendored cannot name a
+  path outside its tree. `check` never reads the catalog.
 
 ## Shared modules
 
