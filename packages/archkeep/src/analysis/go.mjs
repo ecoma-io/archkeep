@@ -704,6 +704,24 @@ export function analyzeGo({ sourceFile, text, workspace }) {
           packageName: target === null ? site.specifier : null,
         },
       });
+      // The bare-module class the contract discloses without withholding
+      // (#603): the import names the external dependency universe, not the
+      // governed graph, so the site is DISCLOSED — a positioned row carrying
+      // `external: true` (`isExternalSiteFailure`), the run's verdict
+      // untouched — rather than swallowed. An empty blind-spot list must mean
+      // "nothing to disclose", and a workspace whose imports reach outside it
+      // has things to disclose. An import naming a declared module resolved
+      // above and never reaches this branch; the same classification the
+      // TypeScript analyzer already emits.
+      if (target === null) {
+        result.failures.push({
+          sourceFile,
+          line,
+          column,
+          reason: `Go cannot resolve '${site.specifier}' from '${sourceFile}'`,
+          external: true,
+        });
+      }
     }
   } catch (cause) {
     result.failures.push(fileFailure(sourceFile, `Go analysis failed: ${cause?.message ?? cause}`));

@@ -454,7 +454,15 @@ for (const spec of ARCHITECTURE_CORPUS) {
         expect(run.coverage.complete, "the run could not analyze the whole fixture").toBe(true);
         expect(run.coverage.notAnalyzed).toEqual([]);
       }
-      expect(run.coverage.blindSpots).toEqual([]);
+      // Every blind spot a corpus tree carries must be a DISCLOSED external
+      // coordinate (#603) — the third-party imports its sources make on
+      // purpose, named without withholding the verdict. A row WITHOUT the
+      // marker is a site the run never judged, which would make this clean
+      // verdict vacuous; that is the class this pin refuses.
+      expect(
+        run.coverage.blindSpots.filter((row) => row.external !== true),
+        "withholding blind spots over a fully analyzed fixture",
+      ).toEqual([]);
       expect(run.coverage.projects, "projects discovered from archkeep.json").toBe(
         spec.projects.length,
       );

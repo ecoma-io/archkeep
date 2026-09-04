@@ -271,7 +271,18 @@ describe("analyzeJava", () => {
     const broken = { ...baseWorkspace(), readFile: () => null };
     const caller = "package com.acme.app;\nimport com.acme.core.Kernel;\nclass A {}\n";
     const result = analyzeIn(broken, "packages/acme/src/main/java/com/acme/app/A.java", caller);
-    expect(result.failures).toEqual([]);
+    // The analyzer's only positioned failure is the coordinate's disclosure
+    // (#603); the unreadable index surfaces separately, below.
+    expect(result.failures).toEqual([
+      {
+        sourceFile: "packages/acme/src/main/java/com/acme/app/A.java",
+        line: 2,
+        column: 8,
+        reason:
+          "Java cannot resolve 'com.acme.core.Kernel' from 'packages/acme/src/main/java/com/acme/app/A.java'",
+        external: true,
+      },
+    ]);
     expect(result.imports[0].resolved.external).toBe(true);
     const indexFailures = jvmIndexFailures(broken);
     expect(indexFailures.length).toBeGreaterThan(0);

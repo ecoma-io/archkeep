@@ -45,8 +45,8 @@
         {
           "type": "source-evidence",
           "path": "src/lsp/diagnose.mjs",
-          "assertion": "analyzed:false on every non-verdict path; empty diagnostic list only from two named places",
-          "sha256": "4eea19bf245c33963cd292e02f676eb9c5238a5783a3a960976f53afc7cf8b27"
+          "assertion": "analyzed:false on every non-verdict path; empty diagnostic list only from two named places — plus a document whose only positioned failure is an external disclosure, which was judged and so is not published (#603)",
+          "sha256": "72196def14055475ccb23284a3c5d34167535a506985b26fb95af097545cc740"
         },
         {
           "type": "source-evidence",

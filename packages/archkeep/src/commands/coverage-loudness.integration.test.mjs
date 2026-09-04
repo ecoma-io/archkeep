@@ -291,10 +291,20 @@ describe("#595, narrowed — a dynamic import site is disclosed but withholds no
     expect(envelope.exitCode).toBe(0);
     expect(envelope.decision.verdict).toBe("pass");
     expect(envelope.coverage.complete).toBe(true);
-    expect(envelope.coverage.blindSpots).toHaveLength(1);
-    expect(envelope.coverage.blindSpots[0]).toMatchObject({
+    // Two disclosed classes ride together: the fixture's Rust bare `use` is
+    // external (#603) and the loader is dynamic — neither withholds.
+    expect(envelope.coverage.blindSpots).toHaveLength(2);
+    expect(
+      envelope.coverage.blindSpots.find((row) => row.file === "libs/widget/src/loader.js"),
+    ).toMatchObject({
       file: "libs/widget/src/loader.js",
       dynamic: true,
+    });
+    expect(
+      envelope.coverage.blindSpots.find((row) => row.file === "libs/widget/src/lib.rs"),
+    ).toMatchObject({
+      file: "libs/widget/src/lib.rs",
+      external: true,
     });
   });
 });
@@ -374,12 +384,19 @@ describe("#595, external class — a bare package import withholds nothing", () 
     expect(envelope.exitCode).toBe(0);
     expect(envelope.decision.verdict).toBe("pass");
     expect(envelope.coverage.complete).toBe(true);
-    expect(envelope.coverage.blindSpots).toHaveLength(1);
-    expect(envelope.coverage.blindSpots[0]).toMatchObject({
-      file: "libs/widget/src/dep.js",
-      external: true,
-    });
-    expect(envelope.coverage.blindSpots[0].dynamic).toBeUndefined();
+    // Two sites disclose here: the Rust fixture's bare `use` this file has
+    // always carried, and the TypeScript import — the class is per-analyzer,
+    // not a TypeScript privilege (#603).
+    expect(envelope.coverage.blindSpots).toHaveLength(2);
+    const rust = envelope.coverage.blindSpots.find((row) => row.file === "libs/widget/src/lib.rs");
+    expect(rust).toMatchObject({ external: true });
+    expect(rust.dynamic).toBeUndefined();
+    expect(
+      envelope.coverage.blindSpots.filter((row) => row.file === "libs/widget/src/dep.js"),
+    ).toEqual([expect.objectContaining({ file: "libs/widget/src/dep.js", external: true })]);
+    expect(
+      envelope.coverage.blindSpots.find((row) => row.file === "libs/widget/src/dep.js").dynamic,
+    ).toBeUndefined();
   });
 });
 
@@ -419,11 +436,205 @@ describe("#595, TypeScript face — a # subpath or broken relative path withhold
     expect(envelope.exitCode).toBe(3);
     expect(envelope.decision.verdict).toBe("unknown");
     expect(envelope.coverage.complete).toBe(false);
-    expect(envelope.coverage.blindSpots).toHaveLength(2);
-    for (const row of envelope.coverage.blindSpots) {
+    // Three rows now: the fixture's Rust bare `use` is external (#603) and
+    // does not withhold, so the withholding count — and this no-verdict lane —
+    // is the two TypeScript workspace-referencing sites alone.
+    expect(envelope.coverage.blindSpots).toHaveLength(3);
+    for (const file of ["libs/widget/src/subpath.js", "libs/widget/src/relative.js"]) {
+      const row = envelope.coverage.blindSpots.find((entry) => entry.file === file);
+      expect(row).toBeTruthy();
       expect(row.external).toBeUndefined();
       expect(row.dynamic).toBeUndefined();
-      expect(["libs/widget/src/subpath.js", "libs/widget/src/relative.js"]).toContain(row.file);
     }
+    expect(
+      envelope.coverage.blindSpots.find((entry) => entry.file === "libs/widget/src/lib.rs"),
+    ).toMatchObject({
+      file: "libs/widget/src/lib.rs",
+      external: true,
+    });
+  });
+});
+
+// #603 — the external class is per-analyzer, not a TypeScript privilege. Every
+// analyzer resolves a bare external coordinate (Go module path outside the
+// workspace module, Rust crate name outside the workspace crates, Python
+// third-party top-level import, JVM/C# dotted name no tracked package or
+// namespace claims) to no declared project, and each must DISCLOSE that site —
+// a positioned `external: true` row, verdict-neutral — the way the TypeScript
+// analyzer already does. On `main` these trees report an empty `blindSpots`
+// array: byte-for-byte the answer of a workspace with nothing to disclose.
+//
+// Each fixture carries both directions in one run:
+//
+// - disclosure: the bare external coordinate names the dependency universe, so
+//   the verdict stands and the site is still named — exactly one row, marked
+//   `external`, never `dynamic`.
+// - the loud direction: the second source imports the DECLARED project by its
+//   own importable name. Its resolution is asserted from absence — if that
+//   specifier ever read as external, there would be a second row; if it ever
+//   failed to resolve, the run would leave `ok`/`complete` for the no-verdict
+//   lane. A workspace-edge question never answers "external".
+const EXTERNAL_PARITY_CASES = [
+  {
+    language: "Go",
+    manifest: ["libs/widget/go.mod", "module example.com/widget\n\ngo 1.21\n"],
+    external: ["libs/widget/ext.go", 'package main\n\nimport _ "github.com/uninstalled/lib"\n'],
+    declared: [
+      "libs/widget/app.go",
+      'package main\n\nimport "example.com/widget/inner"\n\nvar _ = inner.Thing\n',
+    ],
+  },
+  {
+    language: "Rust",
+    manifest: ["libs/widget/Cargo.toml", '[package]\nname = "widget"\nversion = "0.1.0"\n'],
+    external: ["libs/widget/src/ext.rs", "use serde::Serialize;\n"],
+    declared: ["libs/widget/src/app.rs", "use widget::run;\n"],
+  },
+  {
+    language: "Python",
+    // The declared-project importer lives in a SECOND project: an absolute
+    // import of one's own project root package is `noSelfCircularDependencies`
+    // (the barrel-cycle rule), not a resolution question, and this fixture
+    // pins resolution, not that rule. Both projects share the layer tag, so
+    // the consumer→widget edge the declared import produces is allowed.
+    manifest: ["libs/widget/pyproject.toml", '[project]\nname = "widget"\nversion = "0.1.0"\n'],
+    extra: [
+      ["libs/widget/src/widget/__init__.py", "\n"],
+      ["libs/consumer/pyproject.toml", '[project]\nname = "consumer"\nversion = "0.1.0"\n'],
+    ],
+    external: ["libs/widget/src/widget/ext.py", "import requests\n"],
+    declared: ["libs/consumer/main.py", "import widget\n"],
+    nodes: {
+      widget: {
+        name: "widget",
+        type: "lib",
+        data: { root: "libs/widget", tags: ["layer:domain"] },
+      },
+      consumer: {
+        name: "consumer",
+        type: "lib",
+        data: { root: "libs/consumer", tags: ["layer:domain"] },
+      },
+    },
+    analyzedFiles: 3,
+  },
+  {
+    language: "Java",
+    manifest: [],
+    external: [
+      "libs/widget/src/main/java/com/example/widget/Ext.java",
+      "package com.example.widget;\n\nimport org.junit.jupiter.api.Test;\n\nclass Ext {}\n",
+    ],
+    declared: [
+      "libs/widget/src/main/java/com/example/widget/App.java",
+      "package com.example.widget;\n\nimport com.example.widget.Ext;\n\nclass App {}\n",
+    ],
+  },
+  {
+    language: "Kotlin",
+    manifest: [],
+    external: [
+      "libs/widget/src/main/kotlin/com/example/widget/Ext.kt",
+      "package com.example.widget\n\nimport org.junit.jupiter.api.Test\n\nclass Ext\n",
+    ],
+    declared: [
+      "libs/widget/src/main/kotlin/com/example/widget/App.kt",
+      "package com.example.widget\n\nimport com.example.widget.Ext\n\nclass App\n",
+    ],
+  },
+  {
+    language: "C#",
+    manifest: [],
+    external: [
+      "libs/widget/Ext.cs",
+      "using NUnit.Framework;\n\nnamespace Widget;\n\nclass Ext {}\n",
+    ],
+    declared: ["libs/widget/App.cs", "using Widget;\n\nnamespace Widget;\n\nclass App {}\n"],
+  },
+];
+
+describe("#603 — every analyzer discloses a bare external coordinate", () => {
+  for (const parity of EXTERNAL_PARITY_CASES) {
+    const slug = parity.language.toLowerCase().replace(/[^a-z]/g, "");
+    it(`${parity.language} — the external coordinate is disclosed; the declared-project import beside it is no row at all`, async () => {
+      const tree = makeRoot(`external-parity-${slug}`);
+      tree.write("nx.json", "{}\n");
+      tree.write("module-boundaries.config.mjs", CONFIG);
+      if (parity.manifest.length > 0) {
+        tree.write(parity.manifest[0], parity.manifest[1]);
+      }
+      for (const [path, text] of parity.extra ?? []) {
+        tree.write(path, text);
+      }
+      tree.write(parity.external[0], parity.external[1]);
+      tree.write(parity.declared[0], parity.declared[1]);
+      const files = [
+        "nx.json",
+        "module-boundaries.config.mjs",
+        ...(parity.manifest.length > 0 ? [parity.manifest[0]] : []),
+        ...(parity.extra ?? []).map(([path]) => path),
+        parity.external[0],
+        parity.declared[0],
+      ];
+      const { report } = await check(
+        { format: "json", config: null, paths: [] },
+        contextFor(tree.root, files, parity.nodes ?? widgetNode()),
+      );
+      const envelope = JSON.parse(report);
+      expect(envelope.status).toBe("ok");
+      expect(envelope.exitCode).toBe(0);
+      expect(envelope.decision.verdict).toBe("pass");
+      expect(envelope.coverage.complete).toBe(true);
+      expect(envelope.coverage.analyzedFiles).toBe(parity.analyzedFiles ?? 2);
+      // Exactly one row — the external coordinate's. The declared project's
+      // own import contributed nothing: not a second external row, not a
+      // withheld site.
+      expect(envelope.coverage.blindSpots).toHaveLength(1);
+      expect(envelope.coverage.blindSpots[0]).toMatchObject({
+        file: parity.external[0],
+        external: true,
+      });
+      expect(envelope.coverage.blindSpots[0].dynamic).toBeUndefined();
+    });
+  }
+
+  it("Python — a relative import off the top-level package still withholds while the bare coordinate beside it is disclosed", async () => {
+    const tree = makeRoot("external-parity-python-split");
+    tree.write("nx.json", "{}\n");
+    tree.write("module-boundaries.config.mjs", CONFIG);
+    tree.write("libs/widget/pyproject.toml", '[project]\nname = "widget"\nversion = "0.1.0"\n');
+    // A top-level module (no package directory above it): `from ..` climbs
+    // past the top-level package and names a workspace surface the analyzer
+    // cannot prove — that row withholds, no marker. `import requests` names
+    // the dependency universe — that row is external. One run, and the two
+    // classes part ways: the run must NOT collapse to either all-withheld or
+    // all-disclosed.
+    tree.write("libs/widget/main.py", "from .. import outside\n\nimport requests\n");
+    const { report } = await check(
+      { format: "json", config: null, paths: [] },
+      contextFor(
+        tree.root,
+        [
+          "nx.json",
+          "module-boundaries.config.mjs",
+          "libs/widget/pyproject.toml",
+          "libs/widget/main.py",
+        ],
+        widgetNode(),
+      ),
+    );
+    const envelope = JSON.parse(report);
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.decision.verdict).toBe("unknown");
+    expect(envelope.coverage.complete).toBe(false);
+    expect(envelope.coverage.blindSpots).toHaveLength(2);
+    const withheld = envelope.coverage.blindSpots.find((row) => row.reason.includes("climbs past"));
+    expect(withheld).toMatchObject({ file: "libs/widget/main.py" });
+    expect(withheld.external).toBeUndefined();
+    expect(withheld.dynamic).toBeUndefined();
+    const disclosed = envelope.coverage.blindSpots.find((row) => row.external === true);
+    expect(disclosed).toMatchObject({ file: "libs/widget/main.py" });
+    expect(disclosed.dynamic).toBeUndefined();
   });
 });

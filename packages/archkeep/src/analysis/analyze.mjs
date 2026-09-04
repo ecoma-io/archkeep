@@ -121,6 +121,12 @@ export { LANGUAGE_BY_EXTENSION, languageOf };
  *   the file as a whole rather than one position.
  * @property {number|null} column 1-based, or `null`.
  * @property {string} reason Human-readable; written to be read in a report.
+ * @property {true} [dynamic] The site's target is computed at runtime — the
+ *   language itself declines a static answer. Disclosed without withholding
+ *   (`isDynamicSiteFailure`).
+ * @property {true} [external] The site names the external dependency universe
+ *   rather than the governed graph. Disclosed without withholding
+ *   (`isExternalSiteFailure`); every analyzer sets it (#603).
  */
 
 /**

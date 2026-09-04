@@ -395,11 +395,17 @@ export const isDynamicSiteFailure = (failure) => failure.dynamic === true;
  * question can never masquerade as external), and every verdict lane counts
  * by its absence, the same mechanism the `dynamic` marker uses.
  *
- * Only the TypeScript/Vue analyzer sets the field today. The other analyzers'
- * unresolvable literals keep withholding — including legitimately external
- * coordinates (a JVM package coordinate naming an uninstalled library) —
- * which is the over-loud direction and is tracked as its own issue rather
- * than silently tolerated.
+ * Every analyzer sets the field, and each holds the same class line as the
+ * TypeScript/Vue one: only a bare coordinate that genuinely names the
+ * language's dependency universe gets it (a Go module path outside the
+ * workspace modules, a Rust crate outside the workspace crates, a Python
+ * third-party top-level import outside the unmodelled gate, a JVM/C# dotted
+ * name no tracked package or namespace claims), and a specifier naming a
+ * declared workspace project never does — a workspace-edge question must not
+ * masquerade as external. What still withholds is everything that is NOT this
+ * class: a workspace-surface specifier, a Rust brace group, a Python relative
+ * import past the top-level package, an unmodelled layout, a split package
+ * (#603's per-language pins hold both directions).
  *
  * @param {{ line: number|null, external?: true }} failure
  * @returns {boolean}

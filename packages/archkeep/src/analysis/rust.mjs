@@ -804,6 +804,24 @@ export function analyzeRust({ sourceFile, text, workspace }) {
           // so a `bannedExternalImports` glob is written against this form.
           packageName: target === null ? site.root : null,
         };
+        // The bare-crate class the contract discloses without withholding
+        // (#603): the `use` names the external dependency universe, not the
+        // governed graph, so the site is DISCLOSED — a positioned row carrying
+        // `external: true` (`isExternalSiteFailure`), the run's verdict
+        // untouched — rather than swallowed, the same classification the
+        // TypeScript analyzer already emits. A name a workspace crate declares
+        // resolved above and never reaches this branch; the brace-group
+        // malformation above keeps withholding, because there the name itself
+        // was never read.
+        if (target === null) {
+          result.failures.push({
+            sourceFile,
+            line,
+            column,
+            reason: `Rust cannot resolve '${site.specifier}' from '${sourceFile}'`,
+            external: true,
+          });
+        }
       }
       result.imports.push({
         sourceFile,

@@ -705,7 +705,17 @@ describe("analyzeRust", () => {
     // they have to change.
     const source = "use {engine_core::Task, serde::de};\n";
     const { imports, failures } = analyze(source);
-    expect(failures).toEqual([]);
+    // `serde::de` discloses at its own arm (#603); the declared crate's arm
+    // contributes no row.
+    expect(failures).toEqual([
+      {
+        sourceFile: "acme/apps/shell/src-tauri/src/main.rs",
+        line: 1,
+        column: source.indexOf("serde::de") + 1,
+        reason: "Rust cannot resolve 'serde::de' from 'acme/apps/shell/src-tauri/src/main.rs'",
+        external: true,
+      },
+    ]);
     expect(imports.map((record) => record.specifier)).toEqual(["engine_core::Task", "serde::de"]);
     expect(imports.map((record) => record.resolved.target)).toEqual(["core", null]);
     expect(imports.map((record) => record.column)).toEqual([
@@ -718,7 +728,17 @@ describe("analyzeRust", () => {
     // A comma-split would read `{a::{b, c}, d::e}` as three arms and invent a
     // crate named `c`. Depth is what keeps the record count honest.
     const { imports, failures } = analyze("use {engine_core::{Task, Job}, serde::de};\n");
-    expect(failures).toEqual([]);
+    // `serde::de` discloses at its arm (#603); the nested declared group stays
+    // one arm and one record, with no row.
+    expect(failures).toEqual([
+      {
+        sourceFile: "acme/apps/shell/src-tauri/src/main.rs",
+        line: 1,
+        column: 32,
+        reason: "Rust cannot resolve 'serde::de' from 'acme/apps/shell/src-tauri/src/main.rs'",
+        external: true,
+      },
+    ]);
     expect(imports.map((record) => record.specifier)).toEqual([
       "engine_core::{Task, Job}",
       "serde::de",
@@ -728,7 +748,16 @@ describe("analyzeRust", () => {
   it("collapses a brace group written across lines, at the arm's own position", () => {
     const source = "use {\n  engine_core::Task,\n  serde::de,\n};\n";
     const { imports, failures } = analyze(source);
-    expect(failures).toEqual([]);
+    // `serde::de` discloses at its own line inside the group (#603).
+    expect(failures).toEqual([
+      {
+        sourceFile: "acme/apps/shell/src-tauri/src/main.rs",
+        line: 3,
+        column: 3,
+        reason: "Rust cannot resolve 'serde::de' from 'acme/apps/shell/src-tauri/src/main.rs'",
+        external: true,
+      },
+    ]);
     expect(imports.map((record) => [record.line, record.specifier])).toEqual([
       [2, "engine_core::Task"],
       [3, "serde::de"],
@@ -797,7 +826,25 @@ describe("analyzeRust", () => {
     // for a file that plainly imports it — an enforcement gap indistinguishable
     // from a clean file.
     const { imports, failures } = analyze("use std::fmt; use banned_ffi::raw;\n");
-    expect(failures).toEqual([]);
+    // Both bare coordinates disclose (#603); the ban rule above still reads
+    // `banned_ffi` from the second record.
+    expect(failures).toEqual([
+      {
+        sourceFile: "acme/apps/shell/src-tauri/src/main.rs",
+        line: 1,
+        column: 5,
+        reason: "Rust cannot resolve 'std::fmt' from 'acme/apps/shell/src-tauri/src/main.rs'",
+        external: true,
+      },
+      {
+        sourceFile: "acme/apps/shell/src-tauri/src/main.rs",
+        line: 1,
+        column: 19,
+        reason:
+          "Rust cannot resolve 'banned_ffi::raw' from 'acme/apps/shell/src-tauri/src/main.rs'",
+        external: true,
+      },
+    ]);
     expect(imports.map((record) => record.specifier)).toEqual(["std::fmt", "banned_ffi::raw"]);
     expect(imports[1].resolved).toEqual({
       target: null,
@@ -1173,7 +1220,18 @@ describe("unterminated `use` — the #419 malformation", () => {
       text: "mod domain;\nuse engine_core::task::Task;\n",
       workspace,
     });
-    expect(failures).toEqual([]);
+    // No malformation — that is #419's point. The one row is the bare
+    // coordinate's disclosure (#603): the workspace declares no crate at all,
+    // so `engine_core` names the external universe.
+    expect(failures).toEqual([
+      {
+        sourceFile: "acme/apps/shell/src/main.rs",
+        line: 2,
+        column: 5,
+        reason: "Rust cannot resolve 'engine_core::task::Task' from 'acme/apps/shell/src/main.rs'",
+        external: true,
+      },
+    ]);
   });
 
   describe("Rust — determinism", () => {

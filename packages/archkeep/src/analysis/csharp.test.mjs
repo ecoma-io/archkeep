@@ -208,7 +208,24 @@ describe("analyzeCSharp", () => {
       text: "using System.Collections.Generic;\nusing Serilog.Configuration;\n",
       workspace: WORKSPACE,
     });
-    expect(result.failures).toEqual([]);
+    // Both coordinates disclose (#603) — the same classification the records
+    // below carry.
+    expect(result.failures).toEqual([
+      {
+        sourceFile: "libs/shop/app/Service.cs",
+        line: 1,
+        column: 7,
+        reason: "C# cannot resolve 'System.Collections.Generic' from 'libs/shop/app/Service.cs'",
+        external: true,
+      },
+      {
+        sourceFile: "libs/shop/app/Service.cs",
+        line: 2,
+        column: 7,
+        reason: "C# cannot resolve 'Serilog.Configuration' from 'libs/shop/app/Service.cs'",
+        external: true,
+      },
+    ]);
     expect(result.imports[0].resolved).toEqual({
       target: null,
       file: null,
@@ -271,7 +288,17 @@ describe("analyzeCSharp", () => {
       // a checked, clean one.
       workspace: broken,
     });
-    expect(result.failures).toEqual([]);
+    // The analyzer's only positioned failure is `Shop.Domain`'s disclosure
+    // (#603); the unreadable index surfaces separately, below.
+    expect(result.failures).toEqual([
+      {
+        sourceFile: "libs/shop/app/Service.cs",
+        line: 1,
+        column: 7,
+        reason: "C# cannot resolve 'Shop.Domain' from 'libs/shop/app/Service.cs'",
+        external: true,
+      },
+    ]);
     expect(result.imports[0].resolved.external).toBe(true);
     const indexFailures = dotnetIndexFailures(broken);
     expect(indexFailures.length).toBeGreaterThan(0);
@@ -514,7 +541,17 @@ describe("analyzeCSharp — #419 whole-file failure", () => {
       text,
       workspace: WORKSPACE,
     });
-    expect(failures).toEqual([]);
+    // #469's point holds: the real directive is read and resolved, no
+    // malformation anywhere. The one row is the directive's disclosure (#603).
+    expect(failures).toEqual([
+      {
+        sourceFile: "libs/shop/app/Service.cs",
+        line: 1,
+        column: 7,
+        reason: "C# cannot resolve 'System.IO' from 'libs/shop/app/Service.cs'",
+        external: true,
+      },
+    ]);
     expect(imports).toHaveLength(1);
     expect(imports[0].specifier).toBe("System.IO");
     expect(imports[0].resolved?.external).toBe(true);
