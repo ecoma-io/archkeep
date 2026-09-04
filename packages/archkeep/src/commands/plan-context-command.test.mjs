@@ -383,23 +383,27 @@ describe("planContextCommand", () => {
     expect(result.coverage.complete).toBe(false);
   });
 
-  it("pins today's two-axis completeness over a tree the run judged nothing of (#652 stop)", async () => {
-    // A PIN, not an endorsement. This face restates completeness inline as
-    // `notAnalyzed.length === 0 && unresolvableLiteralCount(failures) === 0`
-    // — no `analyzed > 0` axis (#599) — over its own whole-tree-plus-drift
-    // failure set, so a run that judged no file at all still reports
-    // `complete: true` / `ok` here, byte-for-byte the coverage a complete run
-    // claims. Composing this face onto `coverageVerdict` flips this lane, and
-    // its failure set is not `commandContext.analysis` anyway (a whole-tree
-    // re-analysis plus drift failures), so the collapse is a semantic
-    // reconciliation, not a refactor. That decision is reported to the
-    // maintainer, not made here; this pin makes the silent flip loud the
-    // moment someone makes it. Flip this pin when the axis question is
-    // decided.
-    const ctx = commandContext({ owned: [] });
+  it("goes no-verdict when zero files were analyzed — a run that judged nothing is incomplete (#694)", async () => {
+    // A workspace whose only owned file has no recognized language (.txt) still
+    // passes through analyzeWorkspace with analyzed=0, no failures, no
+    // unresolvable literals. Before #694 this produced complete:true — a
+    // zero-analysis hole. Now analyzed > 0 is required.
+    const ctx = commandContext({
+      owned: [{ file: "libs/alpha/readme.txt", project: "alpha" }],
+      workspace: {
+        root: "/workspace",
+        readFile: () => "content",
+        filesOf: () => ["libs/alpha/readme.txt"],
+        tsConfig: "tsconfig.base.json",
+        projects: [{ name: "alpha", root: "libs/alpha" }],
+      },
+      tracked: ["libs/alpha/readme.txt"],
+      analysis: { analyzed: 0, imports: [], failures: [] },
+    });
     const result = await planContextCommand("alpha", [], ctx, config());
-    expect(result.status).toBe("ok");
-    expect(result.coverage.complete).toBe(true);
+    expect(result.status).toBe("no-verdict");
+    expect(result.exitCode).toBe(3);
+    expect(result.coverage.complete).toBe(false);
     expect(result.coverage.analyzedFiles).toBe(0);
   });
 

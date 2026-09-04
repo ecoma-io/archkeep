@@ -112,10 +112,14 @@ export function healthCommand(commandContext, io = {}) {
   const edges = buildDependencies(graph.dependencies);
 
   // The run's coverage facts, the same shape every command's envelope carries.
+  // A run that analyzed nothing judged nothing (#599, #694): judging nothing
+  // is not finding nothing, so it defeats completeness the way a whole-file
+  // failure does.
   // An unresolvable site is a fact the run saw but never judged (#595) —
   // metrics measured over it would read precision the run does not have,
   // so it defeats file completeness the way a whole-file failure does.
   const fileComplete =
+    analysis.analyzed > 0 &&
     analysis.failures.filter(isWholeFileFailure).length === 0 &&
     unresolvableLiteralCount(analysis.failures) === 0;
   // The graph is complete only when the files are AND the graph actually sees
