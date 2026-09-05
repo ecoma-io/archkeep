@@ -84,7 +84,7 @@ waits on, and the later maturity beyond them.
 
 | page                                                        | what it answers                                                                                  |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| [architecture.md](concepts/architecture.md)                 | The engine, three faces, layer split — technology-neutral                                        |
+| [architecture.md](concepts/architecture.md)                 | The engine, three faces, layer split, and the command capability vocabulary — technology-neutral |
 | [graph.md](concepts/graph.md)                               | Project graph, edge identity, deterministic snapshots                                            |
 | [boundaries.md](concepts/boundaries.md)                     | Layer/scope/license axes, constraint model, tag semantics, what "violation" is                   |
 | [policies.md](concepts/policies.md)                         | Three dialects, one table, stability contract                                                    |

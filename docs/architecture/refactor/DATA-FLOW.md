@@ -85,9 +85,13 @@ deterministic evaluation → verdict → projections/surfaces
 
 - `verdictFor` (`src/verdict.mjs:121-238`) → `buildDecision`
   (`governance/verdict.mjs`) + the single `EXIT` table — this is `check`'s
-  fold of the lane's output; the four sibling carriers fold their own
-  verdicts through the same vocabulary and table, not through `verdictFor`
-  ([CON-1](CONSTITUTION.md#con-1--one-enforcement-authority)).
+  fold of the lane's output; the three sibling enforcement carriers
+  (`delta --compare`, `change`, `fitness`) fold their own verdicts through
+  the same vocabulary and table, not through `verdictFor`
+  ([CON-1](CONSTITUTION.md#con-1--one-enforcement-authority));
+  `rules verify` folds its artifact-integrity status over the same vocabulary
+  and table outside this lane
+  ([PD-8](DECISIONS.md#program-decisions)).
 
 ### 9. Projections / surfaces
 

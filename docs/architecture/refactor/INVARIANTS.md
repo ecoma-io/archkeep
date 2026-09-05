@@ -47,22 +47,24 @@ The root invariant. An empty diagnostic list means "no violation", never
 ## INV-4 — One verdict vocabulary, EXIT table, and Decision constructor
 
 Enforcement semantics are singular — one `EXIT` table, one status vocabulary,
-one `buildDecision` — and five verdict carriers (`check`, `fitness`,
-`delta --compare`, `change`, `rules verify`) fold status→exit through that
-shared vocabulary at **five fold sites**: `verdictFor` for `check`
+one `buildDecision` — and the verdict-bearing verbs fold status→exit over
+that shared vocabulary at **five fold sites**: `verdictFor` for `check`
 (`src/verdict.mjs:121-238`, callers `cli.mjs:802` + `check.mjs:1066`);
 `cli.mjs:1060-1061` (delta, over `delta.mjs:751-781`), `:1377-1378` (change,
 over `change.mjs:751-780`), `:1539-1542` (fitness, over
-`fitness.mjs:211-216`), `:2017-2019` (rules verify, over
-`rules.mjs:444-448`). The carriers agree because they evaluate the same law
-(intent J), not because they share one function.
+`fitness.mjs:211-216`) — the three siblings evaluate the same architecture
+law (intent J) — and `:2017-2019` (rules verify, over `rules.mjs:445-448`),
+whose fold is the **artifact-integrity** contract's — the same vocabulary and
+table, a different law, outside the lane ([PD-8](DECISIONS.md#program-decisions)).
+The enforcement carriers agree because they evaluate the same law, not
+because they share one function.
 
 - Witness: fails-closed folds (`?? EXIT.error`); the envelope latch
   (`json.mjs:88-96`); exit-matrix both directions; cross-command-gates
   composition pins.
 - Gap: `verdictFor`'s counts input is an untyped 14-field tuple — a
-  misspelled key silently zeroes a count — and the four sibling folds
-  hand-roll status/exitCode literals in branch shapes no scan sees. Phase 1
+  misspelled key silently zeroes a count — and the sibling folds hand-roll
+  status/exitCode literals in branch shapes no scan sees. Phase 1
   hardens the **class** across all five sites, not just `check`'s.
 
 ## INV-5 — Snapshot identity per family (ADR 0008)
@@ -236,13 +238,18 @@ estimator, or second authority.
 
 ## INV-25 — Semantic authority count is one
 
-The evaluation lane is the one semantic enforcement authority
+The **architecture semantic enforcement** authority count is one
 ([CON-1](CONSTITUTION.md#con-1--one-enforcement-authority)), and the count
 never increases across this program. A module becomes an authority only by
 gaining the right to make a semantic judgment — holding, passing, rendering,
 or storing a Verdict does not confer it (the five-role vocabulary is
 [AUTHORITY-MAP.md](AUTHORITY-MAP.md#vocabulary-authority-carrier-projection-adapter-surface)'s).
-The mirror holds with equal force: the five carriers' five fold sites are
+`rules verify` is a bounded **artifact-integrity verification** authority
+([PD-8](DECISIONS.md#program-decisions)) — it makes no architecture judgment,
+so it neither raises nor dilutes the count; a second architecture authority
+would. Creating a new bounded verification domain is a maintainer-classified
+semantic change, never a refactor side effect. The mirror holds with equal
+force: the fold sites — four enforcement folds and the integrity fold — are
 legitimate and must not be mechanically unified
 ([PD-6](DECISIONS.md#program-decisions)) — this invariant caps the count in
 **both** directions.

@@ -26,6 +26,13 @@ Two registers live here, and neither duplicates `docs/adr/`:
 
 ## Program decisions
 
+From PD-8 on, each record carries, compactly in itself, the fields a review
+needs to check its grounding: **ID · Date · Question · Evidence · Decision ·
+Scope · Alternatives rejected · Consequences · Compatibility impact · Owner ·
+Verification/acceptance evidence · Supersedes/superseded by** (when one
+exists). A record never restates the constitution — a field whose answer is
+"nothing" says so and stops.
+
 - **PD-1 (2026-09-05) — Phase 0 ran six audits, read-only.** Doctrine (WS1),
   core semantics (WS2), commands/surfaces (WS3), governance/state (WS4),
   providers/external surfaces (WS5), tests/contracts (WS6). Five ran as
@@ -72,6 +79,9 @@ Two registers live here, and neither duplicates `docs/adr/`:
   sibling carrier through `verdictFor`" as cleanup — `delta`'s findings fold
   classification counts `verdictFor` has no inputs for, so such a reroute is
   a semantic change, not a conformance fix.
+  _(Narrowed 2026-09-05 by [PD-8](#program-decisions): `rules verify` is not
+  an architecture-enforcement carrier — its fold is the artifact-integrity
+  contract's, not the architecture law's. The five-fold-site count stands.)_
 - **PD-7 (2026-09-05) — Maintainer steering pass on PR #727.** Before merge,
   the maintainer approved the direction and issued nineteen directives
   hardening the control plane against future-agent misreading. The
@@ -91,3 +101,167 @@ Two registers live here, and neither duplicates `docs/adr/`:
   [document hierarchy](CONSTITUTION.md#document-hierarchy); and Phase 1's
   PASS/FAIL/DEFER gate table. Recorded here as program history — the
   articles are the binding statement.
+- **PD-8 (2026-09-05) — `rules verify` is a bounded artifact-integrity
+  verification authority (closes OQ-13).**
+  - _Question_: is `rules verify`'s exit-1 fold a second semantic authority,
+    or part of the one enforcement authority's carrier roster?
+  - _Evidence_ (source, read 2026-09-05): the fold computes a three-state
+    status — `ok`/`findings`/`no-verdict` — over **catalog-integrity**
+    findings (digest mismatch, contract-version mismatch, host refusal, an
+    artifact escaping its directory) at
+    `packages/archkeep/src/commands/rules.mjs:445-448`, folded to exit at
+    `packages/archkeep/cli.mjs:2017-2019`. Its envelope is built through the
+    shared `jsonEnvelope` and held by the same `EXIT_FOR_STATUS` latch
+    (`src/report/json.mjs:88-96`), but it constructs no Decision object and
+    never calls `verdictFor` or `evaluateRun` — the `delta`/`change`
+    envelopes carry a `decision`; `rules verify`'s carries a `result` over
+    the catalog. It reads no workspace graph (the documented `rules` bypass
+    of `resolveCommandContext`: synthetic native context, catalog only). The
+    consumer-facing contracts already name the domain honestly
+    ([exit-codes.md](../../reference/exit-codes.md): "a rule-catalog integrity
+    finding").
+  - _Decision_: `rules verify` is a **bounded artifact-integrity verification
+    authority**. It verifies declared rule artifacts against their catalog; it
+    does not evaluate architecture law, does not participate in the
+    architecture-enforcement evaluation lane, and is **not** a "second
+    architecture authority" in the sense [CON-1](CONSTITUTION.md#con-1--one-enforcement-authority)
+    and [INV-25](INVARIANTS.md#inv-25--semantic-authority-count-is-one) forbid —
+    that cap counts **architecture semantic enforcement** authorities, and
+    both articles now state the scope as such. What `rules verify` shares
+    with the lane is the **contract**, not the **law**: the status vocabulary,
+    the `EXIT` table, and the envelope latch. Its exit/status behavior follows
+    the artifact-integrity contract (a negative verification is exit 1; an
+    unreadable catalog is exit 3), not the architecture-verdict contract.
+  - _Scope_: the authority map's carrier vocabulary and decision-rights rows,
+    and the wording of CON-1, INV-4, INV-25. Not in scope: any change to
+    `rules verify`'s implementation, exit codes, or output.
+  - _Alternatives rejected_: naming it a second judgment surface inside the
+    enforcement authority (blurs the one-law statement); folding its
+    vocabulary into the lane's (its findings are not architecture findings
+    and `verdictFor` has no inputs for them); a `RulesVerifyEngine`/
+    `IntegrityEngine` abstraction (no proven gain —
+    [CON-0](CONSTITUTION.md#con-0--do-not-trade-semantic-maturity-for-structural-purity)).
+  - _Consequences_: the enforcement-carrier roster is **four** (`check` plus
+    three siblings); the "same law" sentence applies to those four only; the
+    fold-site hardening of Phase 1-A still covers `rules.mjs:445-448`, as an
+    input-validation hardening under the artifact-integrity contract — not a
+    lane migration.
+  - _Compatibility impact_: none — no observable surface moves.
+  - _Owner_: the Phase 0.5 decision-closure session (this PR); carried into
+    AUTHORITY-MAP, CON-1, INV-4, INV-25 in the same PR.
+  - _Verification/acceptance evidence_: doc gates green; the hostile-reader
+    misreading list ([CONTEXT.md](CONTEXT.md#chk-1-prep--phase-05--decision-closure--phase-1-execution-baseline-2026-09-05))
+    re-derived with none surviving.
+  - _Supersedes_: the carrier-roster wording of
+    [PD-6](#program-decisions) (five carriers → four enforcement carriers
+    plus the integrity surface); PD-6's five-fold-site count stands.
+- **PD-9 (2026-09-05) — The capability vocabulary is product documentation,
+  owned by `docs/concepts/architecture.md` (closes OQ-1, closes DG-5).**
+  - _Question_: who owns the words analyze / check / inspect / compare /
+    explain / govern / rules — semantic-domain objects, package names, or
+    what?
+  - _Evidence_: `docs/concepts/architecture.md` exists and already describes
+    every command's capability under "The 24 commands"; `docs/README.md`'s
+    ownership map lists it as the concepts owner for the engine model; the
+    control plane uses the seven words as its own refactor vocabulary
+    ([CON-9](CONSTITUTION.md#con-9--surface--package)).
+  - _Decision_: the seven words are **product capability vocabulary** — names
+    of product capabilities, not semantic-domain objects and not package
+    names. Their normative conceptual owner is the concept documentation,
+    `docs/concepts/architecture.md`; the control plane holds no second owner
+    and creates no new vocabulary page. [CON-9](CONSTITUTION.md#con-9--surface--package)
+    keeps only the refactor constraint — surface ≠ package — and cites the
+    concept owner for the words.
+  - _Scope_: documentation ownership only. No CLI spelling, no
+    implementation, no new control-plane page.
+  - _Alternatives rejected_: a new doctrine page (a second home beside an
+    existing concepts owner); ownership by the control plane (wrong layer —
+    it binds the refactor, not the product).
+  - _Consequences_: Phase 5's facade work names groupings from the concept
+    page's vocabulary; per
+    [PD-11](#program-decisions), regrouping verbs across the words is a
+    maintainer-gated surface change.
+  - _Compatibility impact_: none.
+  - _Owner_: `docs/concepts/architecture.md` (product side); the control
+    plane cites it.
+  - _Verification/acceptance evidence_: the concept page carries the words
+    and their one-sentence semantics; docs gates green.
+  - _Supersedes_: nothing — closes [OQ-1](OPEN-QUESTIONS.md#closed--decided)
+    and DG-5.
+- **PD-10 (2026-09-05) — The event-identity law's home is ADR-0008 plus the
+  owning module; no ADR-0009 (closes OQ-2, closes DG-3).**
+  - _Question_: does the event-identity law need its own numbered record
+    (ADR-0009) or a section in the semantic model page?
+  - _Evidence_: ADR
+    [0008](../../adr/0008-snapshot-identity-per-family.md) (accepted,
+    immutable) states the family law the events already live under: identity
+    once per family; graph identity is `snapshotIdentity` over `computeDiff`'s
+    universe; the evidence family's identity is its bytes; storage paths
+    never enter identity; event sides consume `eventSnapshotSide` and never
+    re-derive a second identity. The event-identity composition —
+    `eventId`/`eventDedupeKey` over `{base, head, declarationDigest}` — is
+    implemented and pinned in `src/governance/evolution-event.mjs` (headers
+    plus the [INV-6](INVARIANTS.md#inv-6--event-identity-and-append-only-store)
+    witnesses: base/head/declaration sensitivity, clock/narration excluded),
+    landed by PR #724. Accepted ADRs are immutable; corrections are new
+    records ([ADR 0004](../../adr/0004-correct-old-name-deprecation-mechanics.md)).
+  - _Decision_: **no ADR-0009.** ADR-0008 remains the normative source for the
+    snapshot/event identity family semantics it already accepted; the event
+    composition lives as implementation annotation in the owning module's
+    headers, witnessed by its tests; [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md)
+    stays the living ownership map pointing at the owner. No new ADR for
+    housekeeping; no duplicate semantic source.
+  - _Scope_: documentation pointers only.
+  - _Alternatives rejected_: ADR-0009 restating the composition (housekeeping,
+    not a new architectural decision); a duplicate statement in the semantic
+    model page (two homes for one law).
+  - _Consequences_: a genuinely new architectural decision about event
+    identity would still be a new ADR — this record decides only where the
+    existing law lives.
+  - _Compatibility impact_: none.
+  - _Owner_: [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md)'s event-identity row
+    (living map); `src/governance/evolution-event.mjs` headers (implementation
+    annotation).
+  - _Verification/acceptance evidence_: the map row cites ADR-0008 and the
+    owner; docs gates green.
+  - _Supersedes_: nothing — closes [OQ-2](OPEN-QUESTIONS.md#closed--decided)
+    and DG-3.
+- **PD-11 (2026-09-05) — CLI capability regrouping is a product-surface
+  semantic change (closes OQ-3).**
+  - _Question_: is regrouping CLI verbs into capability surfaces
+    behavior-free when verb spelling, exit codes, and output stay identical?
+  - _Evidence_: the capability grouping changes which words own which verbs —
+    the public surface's mental model and ownership semantics — before any
+    byte moves; the compatibility contract (root `AGENTS.md`) classifies by
+    meaning, not by bytes.
+  - _Decision_: **no — capability regrouping is a product-surface semantic
+    change.** Phase 5's regrouping carries its own explicit maintainer
+    decision record before implementation; it is never bundled with
+    mechanical extraction; it is never described as a pure internal refactor;
+    spelling stability is a compatibility constraint and does not make a
+    regrouping behavior-free.
+  - _Scope_: the classification of one work item; no surface moves in this
+    record.
+  - _Alternatives rejected_: treating regrouping as in-scope 0.x-minor
+    cleanup bundled into Phase 5's mechanical work.
+  - _Consequences_: Phase 5 gains a maintainer gate ahead of its facade work
+    (recorded in [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-5--capability-facades)'
+    entry criteria).
+  - _Consequences for vocabulary_: the groupings are named from
+    `docs/concepts/architecture.md`'s words ([PD-9](#program-decisions)).
+  - _Compatibility impact_: classification guidance only — the contract in
+    root `AGENTS.md` remains the decider of compatibility classes.
+  - _Owner_: the maintainer (the Phase 5 gate is theirs).
+  - _Verification/acceptance evidence_: MIGRATION-PLAN's Phase 5 entry names
+    the gate; hostile-reader misreading 3 and 11 excluded.
+  - _Supersedes_: nothing — closes [OQ-3](OPEN-QUESTIONS.md#closed--decided).
+- **PD-12 (2026-09-05) — Decisions before implementation.** Every
+  architecture-affecting question is classified **before** the code that
+  would depend on it, as exactly one of: already decided by doctrine or an
+  accepted ADR; decided by a program decision (this page);
+  **verification-required** ([OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) names the
+  owner, the evidence, and the closing outcome); or **maintainer-gated**
+  (only the maintainer decides). "Open" is never a license to choose: a
+  worker may investigate and may propose; the coordinator or maintainer
+  decides. Recorded here as program history — the binding statement is
+  [P-G](CONSTITUTION.md#process-articles).

@@ -102,8 +102,8 @@ For the verbs its diff touches, over pinned fixture trees, old path vs new:
 8. `history --capture` → `diff` roundtrip.
 9. `trajectory` classification vs `history`'s classifier.
 10. Exit-code matrix per verb — the real exit-matrix shape (ok/refused sides
-    plus the suite's named extras; findings sides pinned for the five verdict
-    carriers).
+    plus the suite's named extras; findings sides pinned for the five exit-1
+    verbs: `check`, `fitness`, `delta --compare`, `change`, `rules verify`).
 11. `rules verify` tamper → exit 1.
 12. Envelope byte stability per verb — level 2; the envelope is contract.
 

@@ -48,20 +48,22 @@ A missing field is a review defect, not a style preference.
 
 ## Program state
 
-| Phase                         | Status                 | Record                      |
-| ----------------------------- | ---------------------- | --------------------------- |
-| 0 — Architecture cartography  | **complete** (this PR) | CHK-0 below                 |
-| 1 — Authority hardening       | not started            | entry: Phase 0 accepted     |
-| 2 — Canonical model hardening | not started            | blocked by 1                |
-| 3 — Boundary enforcement      | not started            | blocked by 2                |
-| 4 — Internal extraction       | not started            | **blocked by GAP-A** (PD-4) |
-| 5 — Capability facades        | not started            | blocked by 4                |
-| 6 — CLI recomposition         | not started            | blocked by 5                |
-| 7 — Additional surfaces       | not started            | blocked by 6                |
-| 8 — Federation readiness      | not started            | maintainer-gated            |
-| 9 — Final hardening           | not started            | blocked by 8 (or waiver)    |
+| Phase                                               | Status                        | Record                      |
+| --------------------------------------------------- | ----------------------------- | --------------------------- |
+| 0 — Architecture cartography                        | **complete** (PR #727 merged) | CHK-0 below                 |
+| 0.5 — Decision closure & Phase 1 execution baseline | **complete** (this PR)        | CHK-1-PREP below            |
+| 1 — Authority hardening                             | ready — first PR is 1-A       | entry: CHK-1-PREP satisfied |
+| 2 — Canonical model hardening                       | not started                   | blocked by 1                |
+| 3 — Boundary enforcement                            | not started                   | blocked by 2                |
+| 4 — Internal extraction                             | not started                   | **blocked by GAP-A** (PD-4) |
+| 5 — Capability facades                              | not started                   | blocked by 4                |
+| 6 — CLI recomposition                               | not started                   | blocked by 5                |
+| 7 — Additional surfaces                             | not started                   | blocked by 6                |
+| 8 — Federation readiness                            | not started                   | maintainer-gated            |
+| 9 — Final hardening                                 | not started                   | blocked by 8 (or waiver)    |
 
-Tracking: issue #725 (the program), PR #727 (Phase 0's control plane).
+Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), and
+the Phase 0.5 PR (this one, branch `johnitvn/docs-control-plane-decisions`).
 
 ## Checkpoints
 
@@ -126,6 +128,100 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane).
   inputs across the five carrier sites (Phase 1, INV-4 gap).
 - **Rollback point**: revert this PR; no other state exists.
 - **Next-phase entry criteria**: Phase 0 accepted (PR merged) → Phase 1 per
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-1--authority-hardening).
+
+### CHK-1-PREP — Phase 0.5, decision closure & Phase 1 execution baseline (2026-09-05)
+
+- **ID**: CHK-1-PREP. **Phase**: 0.5 (between Phase 0 and Phase 1).
+  **Status**: complete; pending merge of this PR.
+- **Goal**: close the decisions the evidence already supported, convert every
+  remaining question into an owned, gated work item, and turn Phase 1 from an
+  abstract checklist into a lock-scoped, PR-sized execution baseline.
+  Documentation-only; no code touched.
+- **Architectural change**: none. Pages updated: CONSTITUTION (CON-1 scope
+  sentence, CON-9 owner pointer, new article
+  [P-G](CONSTITUTION.md#process-articles)); AUTHORITY-MAP (carrier
+  vocabulary, fold-roster bullet, decision-rights row for `rules verify`,
+  may-not-add prohibitions); INVARIANTS (INV-4, INV-25); SEMANTIC-MODEL
+  (catalog-integrity row); DATA-FLOW (stage 8); MIGRATION-PLAN (Phase 1
+  rebuilt as units 1-A..1-F with locks, gate table, Phase 5 entry,
+  cross-cutting rules); OPEN-QUESTIONS (rebuilt as the decision register);
+  DECISIONS (record format + PD-8..PD-12); this page; the refactor README;
+  `docs/concepts/architecture.md` (the capability words);
+  `docs/README.md` (ownership row).
+- **Decisions closed** (records in
+  [DECISIONS.md](DECISIONS.md#program-decisions)):
+  - **PD-8** (OQ-13): `rules verify` is a bounded **artifact-integrity
+    verification authority** — outside the architecture enforcement lane; it
+    shares the contract (status vocabulary, `EXIT` table, envelope latch),
+    not the law; not a "second architecture authority"; the fold-site
+    hardening (1-A) still covers `rules.mjs:445-448` as an input-validation
+    hardening under its own contract.
+  - **PD-9** (OQ-1/DG-5): the capability words are product vocabulary owned
+    by `docs/concepts/architecture.md`; CON-9 keeps the constraint and cites
+    the owner; no new control-plane vocabulary page.
+  - **PD-10** (OQ-2/DG-3): no ADR-0009 — ADR-0008 stays normative for the
+    family semantics it accepted; the `{base, head, declarationDigest}`
+    composition stays implementation annotation in `evolution-event.mjs`
+    witnessed by its tests; SEMANTIC-MODEL stays the living map.
+  - **PD-11** (OQ-3): CLI capability regrouping is a **product-surface
+    semantic change**; Phase 5's regrouping carries its own maintainer
+    decision record before implementation, never bundled with mechanical
+    extraction.
+  - **PD-12** (record; binding statement is
+    [P-G](CONSTITUTION.md#process-articles)): decisions before
+    implementation — four-class classification policy; "open" is not a
+    license to choose.
+- **Verification-required**: OQ-4 (Phase 3), OQ-5/OQ-7/OQ-10 (Phase 2),
+  OQ-6 (Phase 3), OQ-9 (GAP-A work, Phase 4 entry), OQ-12 (Phase 1-F). Each
+  row in [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) names its owner, evidence,
+  closing condition, and no-issue outcome.
+- **Maintainer-gated**: OQ-8 (GAP-A implementation, Phase 4 entry),
+  OQ-11 (Phase 7 entry), OQ-14 (Phase 9 GAP-D).
+- **Phase 1 execution baseline** (details in
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-1--authority-hardening)): six
+  PR-sized units with locks —
+  1-A `authority-boundary/verdict-folds`; 1-B `authority-boundary/rules-integrity`
+  (documentation-only; must not edit `src/commands/rules.mjs` or `cli.mjs`);
+  1-C → 1-D `provider-seam` (serialized pair; 1-C's records feed 1-D's
+  table); 1-E `state-identity` (headers first, distinct type only if
+  demonstrably insufficient); 1-F `documentation-truth` (each rider
+  sentence-scoped).
+- **Phase 1 PR ordering**: recommended **1-A first** (it hardens the
+  evidence every later phase trusts), then the remaining groups may proceed
+  per lock disjointness: `{1-A}`, `{1-B, 1-E, 1-F}` and `{1-C → 1-D}` may
+  overlap once 1-A lands; 1-C precedes 1-D. Disjointness is proven by the
+  dependency graph ([P-F](CONSTITUTION.md#process-articles)), and
+  1-B's file isolation keeps it clear of 1-A's territory.
+- **Exact next PR target**: **Phase 1-A — verdict-fold hardening** (lock
+  `authority-boundary/verdict-folds`; scope, evidence, and rollback in
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-1-a--verdict-fold-hardening)).
+- **Forbidden next moves**: (1) begin any Phase 1 implementation outside the
+  six units' scopes and locks; (2) route `rules verify` through
+  `buildDecision`/`verdictFor` or into the lane, or create
+  `RulesVerifyEngine`/`IntegrityEngine`; (3) add a Finding object before
+  2-A's adjudication; (4) start Phase 4 before GAP-A is closed (PD-4);
+  (5) regroup verbs before Phase 5's maintainer record (PD-11); (6) draft
+  ADR-0009 for event identity, or create a new capability-vocabulary page;
+  (7) reopen OQ-1/2/3/13 without new evidence or a maintainer ruling;
+  (8) let a worker PR amend the constitution, invariant registry, or
+  authority map autonomously (P-E); (9) treat "open" as a decision license
+  (P-G).
+- **Debt budget**: gaps before — the decision layer itself: OQ-1/2/3/13
+  undecided, no classification policy, and the authority map's false
+  "same law" claim about `rules verify`; gaps closed — those four OQs, the
+  map error corrected across six pages, the P-G policy, and Phase 1 turned
+  from 5 abstract items into 6 lock-scoped units; gaps introduced — none
+  (documentation-only, no code, no tests, no manifests touched); net delta —
+  negative: uncertainty removed, no new gap; the code gap register (G-n,
+  GAP-n, INV gaps, D1–D6, R1–R7) unchanged in size.
+- **Validation evidence**: the repository's document gates green —
+  `check-docs-links`, `check-docs-claims-parity`, `format:check`, `lint`,
+  `pnpm test`, `typecheck` — plus a full control-plane consistency pass and
+  an independent hostile-reader pass (12 misreadings attempted, none
+  derivable); no code diff, no package diff, no generated-artifact drift.
+- **Next-phase entry criteria**: Phase 0.5 accepted (this PR merged) →
+  begin **Phase 1-A** per
   [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-1--authority-hardening).
 
 ## Conventions maintained here

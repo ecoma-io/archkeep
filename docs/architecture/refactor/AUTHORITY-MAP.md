@@ -30,8 +30,15 @@ it may **do**, never by what it holds:
   authority; deciding does. The count is one and the refactor may not
   increase it ([INV-25](INVARIANTS.md), maturity gate row 1).
 - **Carrier** — a command that reports a verdict on every reachable path and
-  can exit 1 through a fold over the shared vocabulary. Five today (the
-  roster below). Adding a sixth is a semantic change needing maintainer
+  can exit 1 through a fold over the shared vocabulary. The **enforcement
+  carriers** — the ones folding the architecture law's verdict — are four
+  today: `check` plus the three siblings (`delta --compare`, `change`,
+  `fitness`). `rules verify` also exits 1 through a fold over the shared
+  vocabulary, but over the **artifact-integrity** law: it is the
+  **artifact-integrity verification surface**, named here so the exit-code
+  roster is complete, not counted among the enforcement carriers
+  ([PD-8](DECISIONS.md#program-decisions)). Adding a verdict-carrying verb —
+  in either family — is a semantic change needing maintainer
   classification — not a cleanup, and not forbidden forever; never created by
   a refactor PR as a side effect.
 - **Projection** — a read-only derivation of canonical facts (graph, drift,
@@ -47,7 +54,7 @@ it may **do**, never by what it holds:
 The authority is the **evaluation lane** — one law, one vocabulary, one
 Decision constructor — not one function call. `check` is the lane's
 **primary enforcement surface**, the front door consumers meet; it is not an
-exclusive semantic entry point, and the four sibling carriers below are
+exclusive semantic entry point, and the enforcement carriers below are
 legitimate peers on the same law, not violations awaiting unification:
 
 ```
@@ -61,19 +68,22 @@ judgeTsconfigPaths (tsconfig-paths.mjs)    ┘
   the numbers live as a table), the status vocabulary
   (`ok/findings/no-verdict`), the one Decision constructor `buildDecision`
   (`src/governance/verdict.mjs:204-310`), and the law being evaluated.
-- **Plural — five verdict carriers, five fold sites**: exactly five verbs can
-  exit 1, each earning that role by reporting a verdict on every reachable
-  path or refusing to look silently (the doctrine's carrier roster,
-  `docs/reference/exit-codes.md`): `check` folds through `verdictFor`
-  (callers `cli.mjs:802` and `src/commands/check.mjs:1066`);
-  `delta --compare` folds at `cli.mjs:1060-1061` over a status computed at
-  `src/commands/delta.mjs:751-781` from `evaluateRun`'s re-judgment of both
-  sides; `change` at `cli.mjs:1377-1378` (`change.mjs:751-780`);
-  `fitness` at `cli.mjs:1539-1542` (`fitness.mjs:211-216`);
-  `rules verify` through an if-chain at `cli.mjs:2017-2019`
-  (`rules.mjs:444-448`). The carriers agree because they evaluate the same
-  law through the same engines (intent J), **not** because they share one
-  fold function — `verdictFor` is `check`'s fold, and only `check`'s.
+- **Plural — four enforcement carriers, four architecture fold sites, plus
+  the integrity fold beside them**: exactly five verbs can exit 1 (the
+  exit-code roster, `docs/reference/exit-codes.md`), but they are not one
+  family. The **enforcement carriers** fold the architecture law's verdict:
+  `check` through `verdictFor` (callers `cli.mjs:802` and
+  `src/commands/check.mjs:1066`); `delta --compare` folds at
+  `cli.mjs:1060-1061` over a status computed at `src/commands/delta.mjs:751-781`
+  from `evaluateRun`'s re-judgment of both sides; `change` at
+  `cli.mjs:1377-1378` (`change.mjs:751-780`); `fitness` at `cli.mjs:1539-1542`
+  (`fitness.mjs:211-216`). Those four evaluate the same law through the same
+  engines (intent J), **not** because they share one fold function —
+  `verdictFor` is `check`'s fold, and only `check`'s. The fifth verb,
+  `rules verify`, folds at `cli.mjs:2017-2019` (`rules.mjs:445-448`) over the
+  **artifact-integrity** law — the same status vocabulary, `EXIT` table, and
+  envelope latch, a different law, no lane membership
+  ([PD-8](DECISIONS.md#program-decisions)).
 - **What holds the folds honest**: `jsonEnvelope` refuses a status↔exitCode
   disagreement (`src/report/json.mjs:88-96`; every carrier eagerly builds its
   envelope), the exit-matrix suite pins per-verb sides, and
@@ -91,19 +101,20 @@ cleanup — `delta`'s `findings` status folds classification counts
 
 ## Decision rights by surface
 
-| Surface                            | May decide                                                                                                                          | Must not decide                                                                            | Audit verdict                                                                    |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| `check` evaluation lane            | verdict, exit, envelope decision                                                                                                    | —                                                                                          | singular                                                                         |
-| `fitness`                          | verdict via shared `fitnessVerdictFor`, folded into check                                                                           | its own exit table                                                                         | composes the lane                                                                |
-| `drift`                            | descriptive findings (never exit 1 itself; intent M)                                                                                | enforcement                                                                                | compliant                                                                        |
-| `delta`/`change` (compare)         | verdicts by re-judging both sides through `evaluateRun`                                                                             | local comparison semantics — material delta IS `diff`'s `computeDiff` (`change.mjs:14-18`) | composes                                                                         |
-| `explain`/`context`/`impact`       | nothing — judge through the same `evaluate`/`judgeEdge`/`computeImpactConstraints` check uses                                       | an independent evaluation that could disagree with check (intent J)                        | composes                                                                         |
-| `scenario`                         | nothing — virtual graph, `virtual/notAuthoritative`, never mutates, never emits events                                              | any write, any exit 1                                                                      | compliant                                                                        |
-| `report`/renderers (`src/report/`) | presentation only                                                                                                                   | verdicts, filtering, suppression                                                           | compliant; no scan enforces it (gap [G-5](BOUNDARIES.md#declared-but-unscanned)) |
-| LSP server                         | diagnostics publication (exactly two empty-publish sites)                                                                           | verdicts; its own graph discovery (see divergences)                                        | invariant intact; one divergence                                                 |
-| MCP tools (archkeep-mcp)           | nothing — nine tools compose `./commands` in-process; `propose` returns `requiresApproval:true, authoritative:false, written:false` | any write                                                                                  | compliant; one seam widening                                                     |
-| Providers (nx/moon/native)         | acquisition + normalization                                                                                                         | policy, verdicts                                                                           | one policy pressure (below)                                                      |
-| VS Code client                     | nothing — holds no analysis                                                                                                         | everything semantic                                                                        | compliant by construction                                                        |
+| Surface                             | May decide                                                                                                                          | Must not decide                                                                            | Audit verdict                                                                                                        |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `check` evaluation lane             | verdict, exit, envelope decision                                                                                                    | —                                                                                          | singular                                                                                                             |
+| `rules verify` (artifact integrity) | catalog-integrity findings: digest, contract version, host validity, artifact containment                                           | architecture law, a lane verdict over the workspace, entry into the evaluation lane        | bounded integrity authority ([PD-8](DECISIONS.md#program-decisions)); shares the vocabulary/table/latch, not the law |
+| `fitness`                           | verdict via shared `fitnessVerdictFor`, folded into check                                                                           | its own exit table                                                                         | composes the lane                                                                                                    |
+| `drift`                             | descriptive findings (never exit 1 itself; intent M)                                                                                | enforcement                                                                                | compliant                                                                                                            |
+| `delta`/`change` (compare)          | verdicts by re-judging both sides through `evaluateRun`                                                                             | local comparison semantics — material delta IS `diff`'s `computeDiff` (`change.mjs:14-18`) | composes                                                                                                             |
+| `explain`/`context`/`impact`        | nothing — judge through the same `evaluate`/`judgeEdge`/`computeImpactConstraints` check uses                                       | an independent evaluation that could disagree with check (intent J)                        | composes                                                                                                             |
+| `scenario`                          | nothing — virtual graph, `virtual/notAuthoritative`, never mutates, never emits events                                              | any write, any exit 1                                                                      | compliant                                                                                                            |
+| `report`/renderers (`src/report/`)  | presentation only                                                                                                                   | verdicts, filtering, suppression                                                           | compliant; no scan enforces it (gap [G-5](BOUNDARIES.md#declared-but-unscanned))                                     |
+| LSP server                          | diagnostics publication (exactly two empty-publish sites)                                                                           | verdicts; its own graph discovery (see divergences)                                        | invariant intact; one divergence                                                                                     |
+| MCP tools (archkeep-mcp)            | nothing — nine tools compose `./commands` in-process; `propose` returns `requiresApproval:true, authoritative:false, written:false` | any write                                                                                  | compliant; one seam widening                                                                                         |
+| Providers (nx/moon/native)          | acquisition + normalization                                                                                                         | policy, verdicts                                                                           | one policy pressure (below)                                                                                          |
+| VS Code client                      | nothing — holds no analysis                                                                                                         | everything semantic                                                                        | compliant by construction                                                                                            |
 
 ## Write doors (the complete census)
 
@@ -153,13 +164,17 @@ must not be "fixed" without its phase's differential:
 
 No second engine, no `GovernService`, no surface-local verdict, no provider
 judgment, no new write door outside this census, and no **new** exit
-computation bypassing the `EXIT` table — the five carriers' existing literal
-folds are the pinned baseline (INV-2's gap), not violations awaiting
-conformance. The mirror prohibitions: no mechanical unification of the
-five fold sites ([PD-6](DECISIONS.md#program-decisions) — routing sibling
-carriers through `verdictFor` changes semantics, it does not conform them),
-and no change that raises the semantic authority count above one — the count
-is one before this program and one after it
+computation bypassing the `EXIT` table — the carriers' existing literal
+folds (four enforcement folds plus the integrity fold) are the pinned
+baseline (INV-2's gap), not violations awaiting conformance. The mirror
+prohibitions: no mechanical unification of the fold sites
+([PD-6](DECISIONS.md#program-decisions) — routing the sibling carriers
+through `verdictFor` changes semantics, it does not conform them); no routing
+`rules verify` through `buildDecision`/`verdictFor` or into the
+architecture lane — its contract is the artifact-integrity contract
+([PD-8](DECISIONS.md#program-decisions)); and no change that raises the
+architecture semantic enforcement authority count above one — the count is
+one before this program and one after it
 ([INV-25](INVARIANTS.md)).
 [CON-1](CONSTITUTION.md#con-1--one-enforcement-authority),
 [CON-7](CONSTITUTION.md#con-7--proposal-reconciliation-decision-waiver-change-explain-stay-distinct),
