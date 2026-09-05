@@ -364,6 +364,27 @@ describe("reconcileDisposition", () => {
   it("answers no-verdict while a declared constraint could not be determined", () => {
     expect(reconcileDisposition("matched", [{ verdict: "unknown" }])).toBe("no-verdict");
   });
+
+  it("refuses a verdict axis value it has never heard of rather than accepting it", () => {
+    // The silent direction: any misspelling matches no named arm and lands on
+    // the final `accepted` — a fabricated acceptance is the one answer this
+    // mapping must never hand out over input it did not understand.
+    for (const verdict of ["matched ", "Matched", "accepted", "ok", "", 42, {}, undefined]) {
+      expect(() => reconcileDisposition(/** @type {any} */ (verdict), [])).toThrow(
+        /expected one of matched/,
+      );
+    }
+  });
+
+  it("refuses a constraint row whose verdict is outside the vocabulary", () => {
+    // Same silent direction one axis down: a stranger row verdict matches
+    // neither `unknown` nor `fail`, and the mapping reads it as consent.
+    for (const verdict of ["perhaps", "PASS", "pass ", "", 42, {}]) {
+      expect(() =>
+        reconcileDisposition("matched", [{ verdict: /** @type {any} */ (verdict) }]),
+      ).toThrow(/expected one of pass/);
+    }
+  });
 });
 
 describe("the additive result fields", () => {

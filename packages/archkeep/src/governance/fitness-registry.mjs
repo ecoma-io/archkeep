@@ -52,7 +52,7 @@ import { languageOf } from "../analysis/registry.mjs";
 import { canonicalizeJson } from "../canonical.mjs";
 import { describe, isPlainObject } from "../values.mjs";
 import { GOVERNANCE_ROW_KEYS, rowSchemaViolations } from "./row-schema.mjs";
-import { fitnessVerdict, isVerdict } from "./verdict.mjs";
+import { VERDICTS, fitnessVerdict, isVerdict } from "./verdict.mjs";
 import {
   coverageMinimum,
   cycleFree,
@@ -481,6 +481,19 @@ export function evaluateFitness(rows, snapshot) {
  * @returns {{verdict: "pass"|"fail"|"unknown"|"not_applicable", decisions: object[]}}
  */
 export function fitnessVerdictFor(decisions) {
+  // The fold is an overall-verdict constructor, so it owns the same vocabulary
+  // latch `buildDecision` does rather than trusting every caller to have
+  // latched its rows first: a stranger verdict matches none of the checks
+  // below and falls through to `pass` — the loudest clean state a governance
+  // run can emit, fabricated from a row nobody judged.
+  for (const decision of decisions) {
+    if (!isVerdict(decision.verdict)) {
+      throw new Error(
+        `archkeep: refusing to fold a fitness row whose verdict is ${describe(decision.verdict)} — ` +
+          `expected one of ${VERDICTS.join(", ")}. This is a bug in the rule that judged the row.`,
+      );
+    }
+  }
   if (decisions.some((d) => d.verdict === "fail")) return { verdict: "fail", decisions };
   if (decisions.some((d) => d.verdict === "unknown")) return { verdict: "unknown", decisions };
   if (decisions.length === 0 || decisions.every((d) => d.verdict === "not_applicable")) {
