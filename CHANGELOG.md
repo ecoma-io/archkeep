@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.25.1](https://github.com/ecoma-io/archkeep/compare/v0.25.0...v0.25.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* **archkeep:** refuse malformed verdict-fold inputs instead of folding them as zero ([#730](https://github.com/ecoma-io/archkeep/issues/730)) ([1e72eb0](https://github.com/ecoma-io/archkeep/commit/1e72eb0def0e8e8366ec9e69d44b6d095dfdab04))
+
+
+### Documentation
+
+* architecture refactor control plane — Phase 0 cartography ([#727](https://github.com/ecoma-io/archkeep/issues/727)) ([2408482](https://github.com/ecoma-io/archkeep/commit/2408482181c212a7085fda164d13c0b0bc9ec3f8))
+* **archkeep:** adjudicate the Moon provider's five embedded policies (Phase 1-C) ([#734](https://github.com/ecoma-io/archkeep/issues/734)) ([e58b29d](https://github.com/ecoma-io/archkeep/commit/e58b29d6b0a70e7642b9c14fd259be76e6901073))
+* **archkeep:** close riders D1-D6 — six measured sentences now state the truth (Phase 1-F) ([#733](https://github.com/ecoma-io/archkeep/issues/733)) ([3c8deb0](https://github.com/ecoma-io/archkeep/commit/3c8deb03e0f744551b2f42b6360f6c7c6c71c62a))
+* **archkeep:** pin the two edge-identity spellings to each other's headers (Phase 1-E) ([#732](https://github.com/ecoma-io/archkeep/issues/732)) ([63ed90d](https://github.com/ecoma-io/archkeep/commit/63ed90d46292135a482089930f4d135e7a5fc4ac))
+* close refactor decisions and lock phase 1 execution baseline ([#729](https://github.com/ecoma-io/archkeep/issues/729)) ([2b33ff4](https://github.com/ecoma-io/archkeep/commit/2b33ff46667a47a311a1d07dbb4ed99df911fa39))
+* verify the rules verify fold contract from source (Phase 1-B) ([#731](https://github.com/ecoma-io/archkeep/issues/731)) ([b31aaa6](https://github.com/ecoma-io/archkeep/commit/b31aaa6497f7ac2eb62167718235f22b535dd942))
+
 ## [0.25.0](https://github.com/ecoma-io/archkeep/compare/v0.24.1...v0.25.0) (2026-09-05)
 
 
