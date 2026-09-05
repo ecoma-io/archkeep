@@ -103,7 +103,8 @@ import { providerMismatch, readEvidenceSnapshot } from "./delta-snapshot.mjs";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { blindSpotRows } from "../analysis/source-util.mjs";
 import { cyclicProjects } from "../governance/fitness-rules.mjs";
-import { fitnessVerdict } from "../governance/verdict.mjs";
+import { VERDICTS, fitnessVerdict, isVerdict } from "../governance/verdict.mjs";
+import { describe } from "../values.mjs";
 import { buildDecision } from "../report/evidence.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatChangeReport } from "../report/change-text.mjs";
@@ -368,6 +369,9 @@ function reconciliationVerdict(lists, unprovenReasons) {
   return "matched";
 }
 
+/** The verdict axis `reconcileDisposition` maps — the four `reconciliationVerdict` answers. */
+const RECONCILE_VERDICTS = Object.freeze(["matched", "undeclared", "unfulfilled", "unproven"]);
+
 /**
  * The reconcile DISPOSITION mapping (wave 3, design §5) — the verdict axis
  * first, then the declared constraints' verdicts. Pure and exported so the
@@ -390,8 +394,33 @@ function reconciliationVerdict(lists, unprovenReasons) {
  *   this run — empty when none were declared or when the base identity was
  *   unproven (constraints are left unevaluated then).
  * @returns {"accepted"|"rejected"|"no-verdict"}
+ * @throws {Error} on an axis value outside the four, or a constraint row
+ *   whose verdict is outside the canonical vocabulary — a stranger would fold
+ *   to `accepted`, and a fabricated acceptance is the one answer this mapping
+ *   never hands out.
  */
 export function reconcileDisposition(verdict, constraints = []) {
+  // The mapping owns its input latch — it is exported and pure, the one place
+  // the precedence is stated, and a stranger axis value would match no named
+  // arm and land on `accepted`: a fabricated acceptance, the one answer this
+  // function must never hand out over input it did not understand.
+  if (!RECONCILE_VERDICTS.includes(verdict)) {
+    throw new Error(
+      `archkeep: refusing to map a reconcile verdict ${describe(verdict)} — ` +
+        `expected one of ${RECONCILE_VERDICTS.join(", ")}. This is a bug in the ` +
+        `reconciliation that produced it.`,
+    );
+  }
+  // Same latch one axis down: a constraint row verdict outside the four states
+  // matches neither `unknown` nor `fail`, and the mapping reads it as consent.
+  for (const row of constraints) {
+    if (!isVerdict(row.verdict)) {
+      throw new Error(
+        `archkeep: refusing to map a constraint row whose verdict is ${describe(row.verdict)} — ` +
+          `expected one of ${VERDICTS.join(", ")}. This is a bug in the judge that built the row.`,
+      );
+    }
+  }
   // used by its own test
   if (verdict === "unproven") return "no-verdict";
   if (verdict === "undeclared" || verdict === "unfulfilled") return "rejected";
