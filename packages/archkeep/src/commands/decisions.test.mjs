@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { decisionsCommand } from "./decisions.mjs";
+import { fitnessCommand } from "./fitness.mjs";
 import { ADR_DIR } from "../governance/adr-registry.mjs";
 
 /**
@@ -102,6 +103,26 @@ const SUPERSEDE_ADR = [
   "# Layers v2",
   "",
 ].join("\n");
+
+/** One accepted ADR binding a declared drift-free gate — the #737 parity pair. */
+const DRIFT_FREE_ADR = [
+  "---",
+  "id: 0001-layers",
+  "status: accepted",
+  "bindings:",
+  "  - fitness:intent-matches",
+  "---",
+  "",
+  "# Layers",
+  "",
+].join("\n");
+
+/** A clean intent model, as `architecture-intent.json` carries it on disk. */
+const CLEAN_INTENT_JSON = `${JSON.stringify({
+  version: "1",
+  boundaries: [{ name: "packages", match: ["tag:type-package"] }],
+  allowed: [{ from: "packages", to: "packages" }],
+})}\n`;
 
 /** A minimal command context in the `resolveCommandContext` shape. */
 function context(root, overrides = {}) {
@@ -354,5 +375,36 @@ describe("decisionsCommand — the chain", () => {
     const root = tree({ adrDirIsAFile: true });
     const ctx = context(root);
     expect(() => decisionsCommand("0001-layers", ctx, config(), { intent: null })).toThrow();
+  });
+
+  it("derives the fitness leg from the same verdict-shaped intent the fitness command feeds", async () => {
+    // Clean drift: a tracked intent the observed graph satisfies, a declared
+    // drift-free gate, and an accepted decision binding it. `fitness` derives
+    // the gate's verdict from `driftForCheck`'s shaped intent (`verdict: "ok"`
+    // → `pass`); this command used to feed the registry the RAW normalized
+    // model, whose lack of a `.verdict` field read as a fail — the two faces
+    // disagreed about the same workspace, the chain reporting `violated` over
+    // a clean tree: a false verdict on the silent path, announced confidently.
+    const root = tree({ adrs: { "0001-layers.md": DRIFT_FREE_ADR } });
+    writeFileSync(join(root, "architecture-intent.json"), CLEAN_INTENT_JSON);
+    const ctx = context(root, {
+      tracked: [...(trackedByRoot.get(root) ?? []), "architecture-intent.json"],
+    });
+    const law = config({
+      fitness: [
+        { name: "intent-matches", match: ["*"], condition: { type: "drift-free" }, reason: "r" },
+      ],
+    });
+
+    // The `fitness` face: the row both faces must derive identically.
+    const fitness = await fitnessCommand(ctx, { config: law });
+    expect(fitness.status).toBe("ok");
+    expect(fitness.fitness.functions).toMatchObject([{ name: "intent-matches", verdict: "pass" }]);
+
+    // The `decisions` face: the same row, projected through the bound gate —
+    // `pass` verifies the decision (`enforced`), never the false `violated`.
+    const result = await decisionsCommand("0001-layers", ctx, law, { intent: intent() });
+    expect(result.status).toBe("ok");
+    expect(result.result.fitness).toMatchObject({ level: "enforced", verified: true });
   });
 });
