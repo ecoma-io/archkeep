@@ -231,10 +231,15 @@ characters of the event id.
   exit 3): "could not read the store" never reads as "no events recorded". A
   missing directory is `[]` — an absent _optional_ store is not an error, and
   the caller states "no events recorded" itself when that matters.
-- **Identity-checked writes.** An event whose `id` or `dedupeKey` does not
-  match the canonical tuple is refused: a record that lies about its identity
-  would dedupe against the wrong key on rerun and manufacture duplicates —
-  the failure shape the store exists to rule out.
+- **Validated writes.** The write path enforces the same two laws the reads
+  do, before anything is persisted. Identity: an event whose `id` or
+  `dedupeKey` does not match the canonical tuple is refused — a record that
+  lies about its identity would dedupe against the wrong key on rerun and
+  manufacture duplicates, the failure shape the store exists to rule out.
+  Vocabulary: an event outside it — a wrong `schemaVersion`, a
+  `classification` or `disposition` the vocabularies do not name — is refused
+  too, so `writeEvent` never persists a record `readEvents` would refuse and
+  brick the store on (#738).
 
 A store that cannot be read is never silently appended to: `writeEvent`'s own
 dedupe scan throws on a file it cannot parse, because the unreadable file may
