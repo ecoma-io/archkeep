@@ -5,7 +5,10 @@
  * implementation that satisfies it. An intent test fails when the intent no
  * longer holds, regardless of which implementation detail changed.
  *
- * Each test is named by contract letter (A–L). Where feasible, tests import
+ * Each test is named by contract letter (describe blocks run A–L; contract
+ * M holds no describe block — the manifest load above certifies its digest,
+ * existence, discoverability, and no-skip structurally, and its behavior is
+ * proven by the test files its evidence names). Where feasible, tests import
  * and call the actual code (behavioral proof). Where that is not practical
  * (circular imports, process-level tests), tests read source instead — and
  * the method is part of the test's name, because the manifest's evidence
