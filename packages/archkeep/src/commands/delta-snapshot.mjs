@@ -274,7 +274,9 @@ export function buildEvidenceSnapshot({
  * order is the only order the format keeps, and `buildEvidenceSnapshot` sorts
  * every array whose source does not guarantee it. Two captures over one
  * unchanged tree produce byte-identical files, which is what makes a plain
- * `diff` of two baselines meaningful.
+ * `diff` of two baselines meaningful. That determinism is also why this
+ * family carries no identity field, by decision: the bytes are the identity
+ * (`../../../../docs/adr/0008-snapshot-identity-per-family.md`).
  *
  * @param {object} snapshot From `buildEvidenceSnapshot`.
  * @returns {string} The JSON text, newline-terminated.

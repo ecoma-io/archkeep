@@ -112,6 +112,12 @@ import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
  * Provider and provenance changes surface through the transition
  * classification instead.
  *
+ * This function is the graph-snapshot family's ONE identity — evolution event
+ * sides consume its output through `eventSnapshotSide` below, never a second
+ * derivation (`../../../../docs/adr/0008-snapshot-identity-per-family.md`
+ * records the one-identity-per-family decision, including why the evidence
+ * snapshot family deliberately carries no id at all).
+ *
  * @param {{projects: object[], dependencies: object[], policy?: {fingerprint: string}|null}} snapshot
  * @returns {string} A hex-encoded SHA-256.
  */

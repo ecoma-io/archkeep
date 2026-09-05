@@ -592,6 +592,7 @@ describe("backward compatibility — the repository's own registry (wave 2)", ()
       "0005-jvm-language-integration",
       "0006-dotnet-language-integration",
       "0007-no-semantic-model-expansion",
+      "0008-snapshot-identity-per-family",
     ]);
     for (const record of records) {
       expect(record.status).toBe("accepted");
