@@ -17,12 +17,12 @@ vocabulary.
 
 ## The four states
 
-| verdict          | means                                                                                             | envelope status | exitCode |
-| ---------------- | ------------------------------------------------------------------------------------------------- | --------------- | -------- |
-| `pass`           | looked, and found nothing to report                                                               | `"ok"`          | `0`      |
-| `fail`           | found at least one finding                                                                        | `"findings"`    | `1`      |
-| `unknown`        | could not reach a verdict — coverage incomplete, intent unestablished, an analysis threw          | `"no-verdict"`  | `3`      |
-| `not_applicable` | the rule did not apply — reserved for Fitness and Waivers, never emitted by engine behavior today | (none)          | (none)   |
+| verdict          | means                                                                                                                                                                                                                                                                                             | envelope status | exitCode |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------- |
+| `pass`           | looked, and found nothing to report                                                                                                                                                                                                                                                               | `"ok"`          | `0`      |
+| `fail`           | found at least one finding                                                                                                                                                                                                                                                                        | `"findings"`    | `1`      |
+| `unknown`        | could not reach a verdict — coverage incomplete, intent unestablished, an analysis threw                                                                                                                                                                                                          | `"no-verdict"`  | `3`      |
+| `not_applicable` | the rule did not apply — emitted on the paths that cannot judge (a fitness function whose `match` selects no project, `coverage-minimum` on a path-scoped run, decision fitness for a decision without authority, boundary metrics when no boundary config exists); no envelope status maps to it | (none)          | (none)   |
 
 The mapping from `status` to `verdict` is one-way and total over the three
 statuses the envelope can hold:
@@ -35,7 +35,7 @@ statuses the envelope can hold:
 
 `not_applicable` has **no source status** in this release. It is the vocabulary
 for capabilities that decide a rule does not apply (Fitness functions, Waivers)
-rather than that it passed or failed. Engine behavior never emits it: the
+rather than that it passed or failed. No envelope ever carries it: the
 envelope refuses a `decision` whose verdict contradicts its `status`, and no
 status maps to `not_applicable`, so the state is locked out of every envelope
 today. `src/governance/verdict.mjs` is where the vocabulary lives and `isVerdict`

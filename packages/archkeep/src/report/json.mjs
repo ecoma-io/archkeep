@@ -1,7 +1,8 @@
 /**
  * The versioned JSON envelope every command's `--format json` wraps its
- * result in — one wrapper, six commands, so a consumer writes one parser
- * rather than one per command. `../../../../docs/reference/json-output.md` is the
+ * result in — one wrapper over every command in the roster (`../../cli.mjs`'s
+ * `COMMAND_NAMES`), so a consumer writes one parser rather than one per
+ * command. `../../../../docs/reference/json-output.md` is the
  * published contract this module builds; this file is where the contract's
  * three consistency rules are enforced in code rather than left to a
  * docs page a later command author might not read.

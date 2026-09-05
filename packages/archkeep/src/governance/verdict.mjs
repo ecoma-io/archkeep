@@ -13,9 +13,17 @@
  *   `"findings"`   → `"fail"`
  *   `"no-verdict"` → `"unknown"`
  *
- * and `"not_applicable"` has no source status in this release — it is the
- * vocabulary for Fitness functions and Waivers (a follow-up capability),
- * never for engine behavior today.
+ * and `"not_applicable"` has no source status in this release — no envelope
+ * status maps to it, so it never rides an envelope. Engine behavior does emit
+ * it today, on the paths that cannot judge: the fitness registry answers it
+ * for a declared function whose `match` selects no observed project, and
+ * again for `coverage-minimum` on a path-scoped run, which no scoped run can
+ * judge; decision fitness derives it for a decision without authority; the
+ * boundary metrics answer it when there is no boundary config to judge
+ * against (`./metrics.mjs`). A
+ * custom rule may return it as its own verdict — the host requires a
+ * `notApplicableReason` (`../custom-rules/host.mjs`) — but no engine path
+ * answers it on a rule's behalf.
  *
  * ## The invariants, I1–I5
  *
