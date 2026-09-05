@@ -1,96 +1,102 @@
-# Open questions
+# Decision register
 
-Questions the Phase 0 audits raised and did not close, with the phase that
-owns each decision. A question here is not a blocker; it is a decision that
-has not yet been made, and the phase that owns it must answer it — by
-investigation, ADR, or maintainer ruling — before relying on either answer.
+Every question the Phase 0 audits raised holds exactly one of three states —
+**CLOSED — DECIDED** ([DECISIONS.md](DECISIONS.md#program-decisions)),
+**VERIFICATION REQUIRED** (a named work item owes named evidence), or
+**MAINTAINER GATED** (only the maintainer decides). "Open" is not a state
+([P-G](CONSTITUTION.md#process-articles)): no question floats without an
+owner, and "open question" never licenses a worker to choose. Each
+verification row names its owner, the exact evidence required, the phase that
+owes it, what evidence closes it, and the no-issue outcome — what is recorded
+when the answer comes back "no issue, no change needed".
 
-## Program-level
+## CLOSED — DECIDED
 
-- **OQ-1 — Capability-grouping vocabulary owner.** The words
-  analyze/check/inspect/compare/explain/govern/rules name surfaces with no
-  tracked doctrine owner (doctrine gap DG-5). Options: a new doctrine page,
-  `docs/concepts/architecture.md`, or this control plane once landed. Owner:
-  Phase 5 entry. (Until then [CON-9](CONSTITUTION.md#con-9--surface--package)
-  is the working statement.)
-- **OQ-2 — Event-identity law's home.** The law (identity =
-  sha256 of `{base, head, declarationDigest}`; storage paths never enter)
-  lives in code headers and ADR 0008's orbit, not in a numbered record of its
-  own (DG-3). ADR 0009 vs a SEMANTIC-MODEL section: ADRs are
-  immutable-once-accepted, the model page is the living map. Owner: Phase 2,
-  maintainer ruling if an ADR is drafted.
-- **OQ-3 — Verb regrouping classification.** Does regrouping CLI verbs into
-  capability surfaces require maintainer authorization as a semantic change,
-  or is it an in-scope 0.x minor? The compatibility contract reads as the
-  former; the plan's Phase 5 assumes spelling-stability anyway. Owner:
-  maintainer, before Phase 5 starts.
-- **OQ-4 — Review-enforced rows with no scan.** Static-reading-only (INV-20),
-  edges-never-nodes (INV-21): gain automated owners or stay review rows with
-  named adversarial checks? Owner: Phase 3's investigation.
+Each closure's full record — question, evidence, decision, rejected
+alternatives, consequences, compatibility impact, owner, acceptance evidence —
+lives in [DECISIONS.md](DECISIONS.md#program-decisions); this section states
+each closure in one line and links it.
 
-## Surfaced by the audits, unresolved
+- **OQ-13 — `rules verify`'s place in the authority map.** CLOSED by
+  [PD-8](DECISIONS.md#program-decisions): a bounded **artifact-integrity
+  verification authority** — outside the architecture enforcement lane; it
+  shares the status vocabulary, `EXIT` table, and envelope latch (the
+  contract), never `verdictFor`/`buildDecision`; not a "second architecture
+  authority" ([CON-1](CONSTITUTION.md#con-1--one-enforcement-authority),
+  [INV-25](INVARIANTS.md#inv-25--semantic-authority-count-is-one) cap
+  architecture semantic enforcement, and both state the scope). Evidence:
+  the fold at `rules.mjs:445-448` + `cli.mjs:2017-2019`, the envelope latch,
+  the catalog-only context (no workspace graph). Carried into
+  AUTHORITY-MAP/INV-4/INV-25/CON-1/SEMANTIC-MODEL/DATA-FLOW by the same PR
+  that closed it (Phase 0.5); Phase 1-B verifies and pins the contract from
+  source as its own unit.
+- **OQ-1 — capability vocabulary owner.** CLOSED by
+  [PD-9](DECISIONS.md#program-decisions): product capability vocabulary,
+  normatively owned by
+  [`docs/concepts/architecture.md`](../../concepts/architecture.md#the-24-commands);
+  the control plane holds no second owner and creates no new vocabulary page;
+  [CON-9](CONSTITUTION.md#con-9--surface--package) keeps the surface ≠ package
+  constraint and cites the concept owner. Closes DG-5.
+- **OQ-2 — event-identity law's home.** CLOSED by
+  [PD-10](DECISIONS.md#program-decisions): ADR-0008 stays the normative
+  source for the identity-family semantics it accepted; the event composition
+  (`{base, head, declarationDigest}`) stays implementation annotation in
+  `src/governance/evolution-event.mjs`, witnessed by its tests
+  ([INV-6](INVARIANTS.md#inv-6--event-identity-and-append-only-store));
+  [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md) stays the living ownership map. No
+  ADR-0009. Closes DG-3.
+- **OQ-3 — verb regrouping classification.** CLOSED by
+  [PD-11](DECISIONS.md#program-decisions): regrouping CLI verbs across the
+  capability words is a **product-surface semantic change** — spelling
+  stability does not make it behavior-free — so Phase 5's regrouping carries
+  its own maintainer decision record before implementation, and is never
+  bundled with mechanical extraction.
 
-- **OQ-5 — Reconciliation byte-identity pin.** The claim that `reconcile`
-  leaves the intent file byte-identical is asserted by an integration test
-  named in `docs/concepts/reconciliation.md:30-34`; the specific suite was
-  not opened by the governance audit. Verify and name it in
-  [VALIDATION-MATRIX.md](VALIDATION-MATRIX.md) during Phase 2.
-- **OQ-6 — Contract-K exempt-site roster.** The determinism source guard
-  names "exactly one" exempt production site (the clock); the roster beyond
-  it was not independently enumerated. Verify during Phase 3 (the guard's own
-  test is the authority).
-- **OQ-7 — `decisions` vs `fitness` snapshot equality.** Both compose the
-  same fitness registry; body-level equality between the two snapshots was
-  not diffed. Owner: Phase 2's finding-concept work touches this area;
-  verify then.
-- **OQ-8 — Golden corpus home.** In-repo (matching the
-  `envelope-shape.json` pattern and the human-gated-regen habit) vs CI
-  artifact comparison. The audit recommends in-repo; the decision lands with
-  GAP-A's implementation (Phase 4 entry).
-- **OQ-9 — `nightly.yml` and `check-docs-claims-parity.mjs` content.**
-  Discovered but unaudited; if nightly carries determinism/sweep legs it
-  changes the gap list. Owner: GAP-A implementation reads them first.
-- **OQ-10 — `trajectory` as first-class consumer.** It consumes
-  `classifyTransition`/`edgeIdentityKey` but sat outside the governance
-  audit's named scope. Decide its row in the SEMANTIC-MODEL consumer column
-  during Phase 2.
-- **OQ-11 — LSP golden responses scope.** What a minimal recorded-response
-  set covers (initialize, diagnostics on edit/close, the failure synthetic)
-  for a server refactor differential (GAP-E). Owner: Phase 7 entry.
-- **OQ-12 — Doc-divergence D6 fix discipline.** `docs/development/repository.md`'s
-  stale required-checks sentence is fixed by re-measuring the ruleset API at
-  fix time. Owner: Phase 1 rider D6.
-- **OQ-13 — `rules verify`'s place in the authority map.** Its catalog-integrity
-  findings drive exit 1 through their own fold (`rules.mjs:444-448`) — verdict
-  semantics by the carrier roster, but over artifact integrity rather than
-  workspace law. Name it in
-  [AUTHORITY-MAP.md](AUTHORITY-MAP.md) as a deliberate second judgment surface
-  (integrity, not architecture), or fold its vocabulary into the lane's.
-  Raised by adversarial review. Owner: Phase 1 (same PR as the fold
-  hardening).
-- **OQ-14 — INV-23's semantic-compatibility witness.** `verify-package.mjs`
-  witnesses the packed-artifact/install surface; _semantic_ compatibility
-  (same workspace, different meaning) is witnessed only by the per-PR review
-  discipline [P-B](CONSTITUTION.md#process-articles) makes PR-local, not
-  continuous. Decide whether that is enough or whether a semantic-baseline
-  differential (related to GAP-D) is owed. Owner: Phase 9's GAP-D decision.
+## VERIFICATION REQUIRED
 
-## Doctrine-gap register (DG-*)
+A row here is a work item, not uncertainty to be resolved by taste. Each
+names: owner (the phase that owes it), decision class, exact evidence
+required, the phase it blocks, what evidence closes it, and the no-issue
+outcome.
+
+| ID    | Question                                                                 | Owner                      | Evidence required                                                                                                                                                       | Blocks                                 | What closes it                                                                                                                                                                   | No-issue outcome                                                                                                                               |
+| ----- | ------------------------------------------------------------------------ | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| OQ-4  | Do INV-20/INV-21 (static-reading-only, edges-never-nodes) gain scans?    | Phase 3                    | The investigation's record: per candidate scan — mechanical-witness cost, false-positive rate, false-negative rate, maintenance burden, architectural gain              | Phase 3's G-scan work                  | A scan adopted with a red-twin demonstration, **or** the recorded decision that none earns it — "no scan" is a legitimate outcome; a scan is not added because it can be written | The recorded "no scan" decision, with its reasons                                                                                              |
+| OQ-5  | Does a test witness `reconcile`'s byte-identity claim?                   | Phase 2                    | The integration suite named at `docs/concepts/reconciliation.md:30-34` opened, its assertion read, and the pin recorded in [VALIDATION-MATRIX.md](VALIDATION-MATRIX.md) | Phase 2                                | The named suite cited in VALIDATION-MATRIX with what it actually pins                                                                                                            | The claim recorded as unwitnessed (an INV-8 gap note) — either answer is a closed row                                                          |
+| OQ-6  | What is the Contract-K exempt-site roster beyond the clock?              | Phase 3                    | The determinism source guard's own test enumerates the roster; record it beside [INV-16](INVARIANTS.md#inv-16--clock-discipline)                                        | Phase 3                                | The enumerated roster recorded with its witness                                                                                                                                  | "Clock only" recorded with the guard's test as the witness                                                                                     |
+| OQ-7  | Are `decisions`/`fitness` snapshot bodies equal?                         | Phase 2                    | A body-level diff of the two verbs' snapshot outputs over one fixture                                                                                                   | Phase 2                                | Equality recorded as verified, or the inequality adjudicated as a Phase 2 finding                                                                                                | Equality recorded — the composition claim was already true                                                                                     |
+| OQ-9  | What do `nightly.yml` and `check-docs-claims-parity.mjs` actually carry? | GAP-A work (Phase 4 entry) | Both files read; the [gap list](VALIDATION-MATRIX.md#differential-gaps-what-the-harness-cannot-prove-today) updated if nightly carries determinism/sweep legs           | GAP-A's implementation (Phase 4 entry) | A recorded reading of both files, gap list updated or confirmed                                                                                                                  | Gap list confirmed unchanged — GAP-A's gates unaffected                                                                                        |
+| OQ-10 | Is `trajectory` a first-class consumer in the semantic model?            | Phase 2                    | Its row written into the [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md) consumer column, with the consumption edges named                                                       | Phase 2                                | The row recorded (and any unowned concept it consumes flagged)                                                                                                                   | The row recorded — no gap either way                                                                                                           |
+| OQ-12 | D6: what does the branch ruleset actually require today?                 | Phase 1-F (rider D6)       | The GitHub ruleset API re-measured **at fix time**; the corrected sentence cites its measurement date                                                                   | Phase 1-F                              | The measured truth + date written into `docs/development/repository.md`                                                                                                          | If measurement confirms the current sentence, the rider still closes by recording the dated measurement — the stale part was the undated claim |
+
+## MAINTAINER GATED
+
+A row here names the gate at which the maintainer decides; nothing is
+decided here, and nothing is decided before its gate.
+
+| ID    | Question                                    | Gate                                 | What the maintainer decides                                                                                               | What closes it                                                                                                                             |
+| ----- | ------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| OQ-8  | Golden corpus home — in-repo vs CI artifact | GAP-A implementation (Phase 4 entry) | The home for the golden-output corpus; the audit recommends in-repo (the `envelope-shape.json` habit, human-gated regen)  | The maintainer's choice recorded at GAP-A's implementation PR                                                                              |
+| OQ-11 | LSP golden-response scope (GAP-E)           | Phase 7 entry                        | The minimal recorded-response set for a server-refactor differential                                                      | The approved scope recorded at Phase 7's entry                                                                                             |
+| OQ-14 | INV-23's semantic-compatibility witness     | Phase 9's GAP-D decision             | Whether a cross-version semantic-baseline differential is owed, or the corpus + differentials + review discipline suffice | Adoption, or the reasoned no-fix per budget honesty ([CON-0](CONSTITUTION.md#con-0--do-not-trade-semantic-maturity-for-structural-purity)) |
+
+## Doctrine-gap register (DG-\*)
 
 From the doctrine audit; each names a sentence that binds but lives nowhere
 tracked, or a claim with no gate. Owners are phases or the maintainer.
 
 - **DG-1** single-owner-per-semantic-concept lived only in the (then
-  untracked) constitution — closing with this control plane's landing
-  ([SEMANTIC-MODEL.md](SEMANTIC-MODEL.md) is the owner).
+  untracked) constitution — closed: [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md)
+  is the owner.
 - **DG-2** no stated/tested intra-`src/` dependency DAG — Phase 3.
-- **DG-3** snapshot/event family semantics beyond ADR 0008 live in code
-  headers — OQ-2.
+- **DG-3** snapshot/event family semantics beyond ADR-0008 live in code
+  headers — [closed by PD-10](#closed--decided).
 - **DG-4** "descriptive commands project canonical evaluation; they never
   re-evaluate" is pinned by contracts I/J but stated nowhere as a general law
   — Phase 5's facade work states it once in
   [AUTHORITY-MAP.md](AUTHORITY-MAP.md) or doctrine, not both.
-- **DG-5** capability-grouping vocabulary owner — OQ-1.
+- **DG-5** capability-grouping vocabulary owner —
+  [closed by PD-9](#closed--decided).
 - **DG-6** the determinism sweep's file roster lives in test code; file moves
   must keep it pointed — Phase 4 budget line (INV-18's sibling concern).
 - **DG-7** this registry itself must stay an index of IDs, never a
@@ -98,7 +104,9 @@ tracked, or a claim with no gate. Owners are phases or the maintainer.
   by the docs gates and review.
 - **DG-8** authority doctrine's six-role table did not restate the
   verdict-carrier roster — closed: [AUTHORITY-MAP.md](AUTHORITY-MAP.md)
-  carries it.
+  carries it (now split into the four enforcement carriers and the
+  artifact-integrity verification surface, per
+  [PD-8](DECISIONS.md#program-decisions)).
 - **DG-9** edges-only and static-reading have no automated owner — OQ-4.
 - **DG-10** coverage semantics has three homes; the binding copy per consumer
   is named by `docs/README.md`'s ownership map — consumers cite the map, and

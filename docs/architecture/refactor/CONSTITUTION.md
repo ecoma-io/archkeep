@@ -55,18 +55,28 @@ a split would.
 
 ## CON-1 — One enforcement authority
 
-Archkeep has exactly one semantic enforcement authority: the **evaluation
-lane** — one law, one verdict vocabulary, one `EXIT` table, one Decision
-constructor (instantiated in
-[AUTHORITY-MAP.md](AUTHORITY-MAP.md#the-one-enforcement-authority)). The
+Archkeep has exactly one **architecture semantic enforcement** authority: the
+**evaluation lane** — one law, the architecture boundary law — with one
+verdict vocabulary, one `EXIT` table, one Decision constructor (instantiated
+in [AUTHORITY-MAP.md](AUTHORITY-MAP.md#the-one-enforcement-authority)). The
 `check` command is the **primary enforcement surface** on that authority —
-its front door — not an exclusive semantic entry point: four sibling verdict
-carriers (`fitness`, `delta --compare`, `change`, `rules verify`) report
-verdicts through their own fold sites, legitimately, because they evaluate
-the same law through the same engines. What no surface may do is judge: CLI,
+its front door — not an exclusive semantic entry point: three sibling verdict
+carriers (`fitness`, `delta --compare`, `change`) report verdicts through
+their own fold sites, legitimately, because they evaluate the same
+architecture law through the same engines. `rules verify` is **not** in this
+roster: it is a bounded **artifact-integrity verification** authority
+([PD-8](DECISIONS.md#program-decisions)) — it verifies declared rule
+artifacts against their catalog, shares the status vocabulary, the `EXIT`
+table, and the envelope latch (the **contract**), and evaluates a different
+law (catalog integrity), outside the lane. "One authority" does not mean
+every bounded verification domain shares one evaluator; it means exactly one
+authority judges the architecture. What no surface may do is judge: CLI,
 MCP, LSP, providers, renderers, reporters, and command facades hold no
 judgment of their own, and no second engine ("CheckEngine", "MCPCheckEngine",
-"CLI evaluator", "Report evaluator", or semantic equivalent) may be created.
+"CLI evaluator", "Report evaluator", `RulesVerifyEngine`, `IntegrityEngine`,
+or semantic equivalent) may be created — the integrity domain's
+implementation stays as it is absent a proven gain
+([CON-0](#con-0--do-not-trade-semantic-maturity-for-structural-purity)).
 
 The mirror rule holds with equal force: **the fold sites must not be
 mechanically unified either.** Routing the sibling carriers through
@@ -74,8 +84,8 @@ mechanically unified either.** Routing the sibling carriers through
 classification counts `verdictFor` has no inputs for — it is a semantic
 change wearing a cleanup's clothes
 ([PD-6](DECISIONS.md#program-decisions)). One authority means one law and one
-vocabulary, not one function: the five carriers are legitimate exactly as
-they stand ([INV-25](INVARIANTS.md)). What the one authority already states
+vocabulary, not one function: the carriers, as classified, are legitimate
+exactly as they stand ([INV-25](INVARIANTS.md)). What the one authority already states
 is
 [`docs/doctrine/architecture-authority.md`](../../doctrine/architecture-authority.md)'s
 "The boundary, stated once"; this article extends it from _what neighbours
@@ -155,11 +165,17 @@ a concrete requirement proves it necessary.
 
 ## CON-9 — Surface ≠ package
 
-CLI verbs are capabilities and product surfaces, not a package layout.
-`analyze` observes; `check` evaluates and enforces; `inspect` introspects
-canonical state; `compare` operates on canonical snapshots; `explain`
-projects causal explanation from canonical evidence; `govern` groups
-governance capabilities; `rules` serves the rule catalog. Surfaces stay thin.
+CLI verbs are capabilities and product surfaces, not a package layout. The
+capability words themselves (`analyze`, `check`, `inspect`, `compare`,
+`explain`, `govern`, `rules`) are **product vocabulary**, owned by the
+concept documentation,
+[`docs/concepts/architecture.md`](../../concepts/architecture.md#the-24-commands)
+([PD-9](DECISIONS.md#program-decisions)) — this article holds only the
+refactor constraint. Regrouping verbs across the capability words is a
+product-surface semantic change ([PD-11](DECISIONS.md#program-decisions)),
+carrying its own maintainer decision record before implementation — never
+bundled with mechanical extraction, and never described as a pure internal
+refactor. Surfaces stay thin.
 A capability facade delegates to the canonical core — it is composition, not
 re-implementation.
 
@@ -254,7 +270,18 @@ contract names is a stop condition (item 9 under P-D).
   interpretations, implementation stops: the conflict becomes a decision
   record first, and work resumes under the recorded answer.
 - **P-F — Ownership locks.** No two PRs may simultaneously change the same
-  canonical model, authority boundary, or provider seam. PRs overlap only
+  canonical model, authority boundary, or
+  provider seam. PRs overlap only
   across disjoint locks, and disjointness is proven by the dependency graph,
   not asserted: the coordinator names each PR's lock in its work-item
   contract and refuses a second PR the same lock until the first merges.
+- **P-G — Decisions before implementation.** Every architecture-affecting
+  question is classified **before** the code that would depend on it, as
+  exactly one of: already decided by doctrine or an accepted ADR; decided by
+  a program decision ([DECISIONS.md](DECISIONS.md)); **verification-required**
+  ([OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) names the owner, the evidence
+  required, and the closing outcome for each); or **maintainer-gated** (only
+  the maintainer decides). "Open" is never a license to choose: a worker may
+  investigate and may propose; the coordinator or maintainer decides. A
+  question with no classification is a [P-D](#process-articles) stop, not a
+  judgment call.

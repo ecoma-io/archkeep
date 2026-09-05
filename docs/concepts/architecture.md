@@ -123,6 +123,17 @@ never a rule that found nothing.
 
 ## The 24 commands
 
+The command layer is organized by capability. Seven words name the
+capabilities a workspace asks for — `analyze` observes the architecture,
+`check` evaluates and enforces it, `inspect` introspects canonical state,
+`compare` operates on canonical snapshots, `explain` projects causal
+explanation from recorded evidence, `govern` groups the governance
+lifecycle's read side, and `rules` serves the rule catalog. The words name
+product capabilities — not packages, and not objects in the engine's
+semantic model — and this page owns them. The table below is every verb
+today; the capability words are the vocabulary a verb's description uses,
+not a second command list.
+
 | command      | what it does                                                                                                       | finds violations |
 | ------------ | ------------------------------------------------------------------------------------------------------------------ | ---------------- |
 | `check`      | Judges every import site against the boundary law, plus the intent                                                 | yes — exits 1    |

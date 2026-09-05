@@ -101,10 +101,13 @@ provider, workspace shape, or language toolchain happened to be present.
   ([concepts/boundaries.md](../concepts/boundaries.md),
   [concepts/policies.md](../concepts/policies.md)) — **hardened**.
 - **The verdict system.** `check` is the gate and the only command holding all
-  four exit codes; `fitness`, `delta`, `change` and `rules verify` are
-  verdict-carriers on their own questions under the same law; every other
-  command only ever reads. The four-state vocabulary (`pass`/`fail`/`unknown`/
-  `not_applicable`), coverage on every result, and `ok` refused over
+  four exit codes; `fitness`, `delta` and `change` are verdict-carriers on
+  their own questions under the same boundary law as `check`, and
+  `rules verify` is the verdict-carrier for the rule catalog's
+  **artifact-integrity** law — a different law, sharing only the status
+  vocabulary and exit table; every other command only ever reads. The
+  four-state vocabulary (`pass`/`fail`/`unknown`/`not_applicable`), coverage
+  on every result, and `ok` refused over
   incomplete coverage — enforced in the envelope builder, not just documented.
   ([reference/exit-codes.md](../reference/exit-codes.md)) — **hardened**: the
   exit-code matrix drives all 24 commands on both sides of their exit
@@ -521,9 +524,11 @@ The structural criteria are the phases' own: [Phase 1](#phase-1--authority)
 and [Phase 2](#phase-2--evidence) exit criteria read met, and with them:
 
 - **Exactly one enforcement authority.** `check` is the gate; `fitness`,
-  `delta`, `change` and `rules verify` are verdict-carriers on their own
-  questions under the same law; ADR, Decision, Waiver and fitness create no
-  second authority.
+  `delta` and `change` are verdict-carriers on their own questions under the
+  same boundary law, and `rules verify` is the bounded artifact-integrity
+  verification surface for the rule catalog (it verifies rule artifacts, not
+  the architecture — one law fewer, not one authority more); ADR, Decision,
+  Waiver and fitness create no second authority.
 - **Verdicts are deterministic and reproducible** — byte-identical output on
   unchanged trees, swept and asserted.
 - **Verdicts are evidence-backed** — every verdict cites the constraint row,
