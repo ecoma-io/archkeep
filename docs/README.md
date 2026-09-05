@@ -187,16 +187,18 @@ waits on, and the later maturity beyond them.
 Numbered, immutable once accepted, and cited by the pages whose behaviour they
 decided rather than summarized into them.
 
-| record                                                                                               | what it decided                                                                          |
-| ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| [0001-boundary-levels.md](adr/0001-boundary-levels.md)                                               | The engine and its extension enforce their boundary levels                               |
-| [0002-custom-rules-one-contract.md](adr/0002-custom-rules-one-contract.md)                           | Custom rules are one contract, not one system per language — and four SDKs               |
-| [0003-rename-lattice-to-archkeep.md](adr/0003-rename-lattice-to-archkeep.md)                         | Archkeep replaces Lattice as the project's public identity, and what that costs          |
-| [0004-correct-old-name-deprecation-mechanics.md](adr/0004-correct-old-name-deprecation-mechanics.md) | Corrects ADR 0003's crates.io and Go deprecation mechanics, and records what ran         |
-| [0005-jvm-language-integration.md](adr/0005-jvm-language-integration.md)                             | Java and Kotlin enter through the existing seams, behind one shared JVM core             |
-| [0006-dotnet-language-integration.md](adr/0006-dotnet-language-integration.md)                       | C#/.NET enters through the existing seams, behind one shared dotnet core                 |
-| [0007-no-semantic-model-expansion.md](adr/0007-no-semantic-model-expansion.md)                       | The semantic model is not expanded after the Phase 4 adversarial audit                   |
-| [0008-snapshot-identity-per-family.md](adr/0008-snapshot-identity-per-family.md)                     | Snapshot identity is stated once per family; the evidence family's identity is its bytes |
+| record                                                                                               | what it decided                                                                                                |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| [0001-boundary-levels.md](adr/0001-boundary-levels.md)                                               | The engine and its extension enforce their boundary levels                                                     |
+| [0002-custom-rules-one-contract.md](adr/0002-custom-rules-one-contract.md)                           | Custom rules are one contract, not one system per language — and four SDKs                                     |
+| [0003-rename-lattice-to-archkeep.md](adr/0003-rename-lattice-to-archkeep.md)                         | Archkeep replaces Lattice as the project's public identity, and what that costs                                |
+| [0004-correct-old-name-deprecation-mechanics.md](adr/0004-correct-old-name-deprecation-mechanics.md) | Corrects ADR 0003's crates.io and Go deprecation mechanics, and records what ran                               |
+| [0005-jvm-language-integration.md](adr/0005-jvm-language-integration.md)                             | Java and Kotlin enter through the existing seams, behind one shared JVM core                                   |
+| [0006-dotnet-language-integration.md](adr/0006-dotnet-language-integration.md)                       | C#/.NET enters through the existing seams, behind one shared dotnet core                                       |
+| [0007-no-semantic-model-expansion.md](adr/0007-no-semantic-model-expansion.md)                       | The semantic model is not expanded after the Phase 4 adversarial audit                                         |
+| [0008-snapshot-identity-per-family.md](adr/0008-snapshot-identity-per-family.md)                     | Snapshot identity is stated once per family; the evidence family's identity is its bytes                       |
+| [0009-moon-derived-tags-provider-policy.md](adr/0009-moon-derived-tags-provider-policy.md)           | The Moon provider derives `layer:`/`stack:` tags from Moon's own classification — recorded provider policy     |
+| [0010-moon-workspace-layout-inference.md](adr/0010-moon-workspace-layout-inference.md)               | The Moon provider infers `workspaceLayout` from project roots, complete or withheld — recorded provider policy |
 
 ## Doctrine
 
