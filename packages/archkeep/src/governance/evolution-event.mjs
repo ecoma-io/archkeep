@@ -191,6 +191,21 @@ export function escapeIdentityField(value) {
  * string (#627) — while a triple with no delimiter in any field spells
  * exactly what earlier versions spelled, byte for byte.
  *
+ * One other spelling of edge identity exists in this package, for a
+ * different medium, and the two are deliberately not unified:
+ * `edgeIdentityKey` (`../commands/diff.mjs`) joins the same triple with
+ * `\0` for in-memory set arithmetic in the diff family — `computeDiff`'s
+ * index maps, `trajectory`'s persistence sets — and is never stored. Different
+ * media, one law: each family keeps exactly one identity constructor, and
+ * consumers consume a constructor's output rather than re-deriving a second
+ * spelling of it (`../../../../docs/adr/0008-snapshot-identity-per-family.md`,
+ * INV-6 in `../../../../docs/architecture/refactor/INVARIANTS.md`). An edge
+ * reaches this module only as its raw triple, never as a pre-built string
+ * from either spelling (`evolutionBoundary` below refuses one), and a
+ * `\0`-joined diff key written into an event would give one edge two
+ * spellings inside the store — every identity string it already holds reads
+ * `source>target:type`.
+ *
  * @param {{source: string, target: string, type: string}} edge
  * @returns {string}
  */

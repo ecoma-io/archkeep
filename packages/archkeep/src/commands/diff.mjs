@@ -236,6 +236,20 @@ function buildHeadSnapshot(commandContext) {
  * consumer wants to see: it is a real architectural event, not an
  * implementation detail.
  *
+ * This key is in-memory arithmetic and nothing else: `Map`/`Set` keys inside
+ * one run, never persisted and never emitted — only counts derived from
+ * those sets reach an envelope. The STORED spelling of edge identity is
+ * `edgeEvolutionIdentity` (`../governance/evolution-event.mjs`), the escaped
+ * `source>target:type` string evolution events carry, and the two spellings
+ * are deliberately not unified — each medium keeps exactly one identity
+ * constructor (`../../../../docs/adr/0008-snapshot-identity-per-family.md`;
+ * INV-6 in `../../../../docs/architecture/refactor/INVARIANTS.md`). An edge
+ * crosses from a structural diff into an event as its raw
+ * `{source, target, type}` triple, mapped through that function at the
+ * command boundary; a `\0`-joined key written into an event record would
+ * give one edge two spellings inside the store, and anything comparing
+ * identity strings across events would read them as different boundaries.
+ *
  * @param {{source: string, target: string, type: string}} edge
  * @returns {string}
  */

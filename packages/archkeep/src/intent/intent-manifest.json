@@ -136,7 +136,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "parseBaseline validates schemaVersion; refuses unknown versions",
-          "sha256": "e28620e288b58e35916e8cd41de446b999bdc2c4e5fcb5f3a617ab0ee449b0fd"
+          "sha256": "92db6da416cd0229ba059bb4751d1bc4a1502af364d39ed182c7a3e3b1b63996"
         }
       ],
       "status": "proven"
@@ -156,7 +156,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "computeDiff returns structural diff; policyMismatch detected via fingerprint; computeRuleImpact for depConstraints-only context",
-          "sha256": "e28620e288b58e35916e8cd41de446b999bdc2c4e5fcb5f3a617ab0ee449b0fd"
+          "sha256": "92db6da416cd0229ba059bb4751d1bc4a1502af364d39ed182c7a3e3b1b63996"
         }
       ],
       "status": "proven"
@@ -266,7 +266,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "coverage.notes warns when ruleImpact is computed (depConstraints only, 3 of 15)",
-          "sha256": "e28620e288b58e35916e8cd41de446b999bdc2c4e5fcb5f3a617ab0ee449b0fd"
+          "sha256": "92db6da416cd0229ba059bb4751d1bc4a1502af364d39ed182c7a3e3b1b63996"
         },
         {
           "type": "documentation",
