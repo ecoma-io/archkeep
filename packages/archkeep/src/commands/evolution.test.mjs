@@ -14,7 +14,12 @@ import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { evolutionCommand, resolveRevision, selectLinearRange } from "./evolution.mjs";
+import {
+  buildEvolutionSummary,
+  evolutionCommand,
+  resolveRevision,
+  selectLinearRange,
+} from "./evolution.mjs";
 
 const SHA = (digit) => String(digit).repeat(40);
 const BASE = SHA(1);
@@ -474,5 +479,44 @@ describe("the worktree lifecycle and the envelope", () => {
     const first = await happyRun();
     const second = await happyRun();
     expect(first.result.result).toEqual(second.result.result);
+  });
+});
+
+describe("the summary's disposition latch (#739)", () => {
+  // A minimal comparison carrying only what the fold reads: the disposition
+  // loop runs before the axis unions, and every axis those touch is present
+  // and empty, so the assertions see the latch and nothing else.
+  const comparison = (disposition) => ({
+    disposition,
+    observed: {
+      architectureChanged: false,
+      projects: { added: [], removed: [], changed: [] },
+      edges: { added: [], removed: [] },
+      policyChanged: false,
+      providerChanged: false,
+    },
+    findings: { introduced: [], resolved: [], unknown: [] },
+    debt: { introduced: [], resolved: [] },
+    fitness: { verdictDeltas: [] },
+  });
+
+  it("keeps the worst disposition across transitions — the valid path is untouched", () => {
+    expect(
+      buildEvolutionSummary([comparison("accepted"), comparison("rejected")]).disposition,
+    ).toBe("rejected");
+    expect(buildEvolutionSummary([comparison("accepted")]).disposition).toBe("accepted");
+    expect(buildEvolutionSummary([comparison("no-verdict")]).disposition).toBe("no-verdict");
+  });
+
+  it("throws on a garbled disposition instead of folding it to accepted's rank", () => {
+    // The old `?? 1` fold read any unknown disposition as rank 1 — accepted's
+    // own rank — so a typo could silently drop the summary's worst transition.
+    expect(() => buildEvolutionSummary([comparison("accepetd")])).toThrow(
+      '"accepetd" is not one of',
+    );
+  });
+
+  it("throws on an absent disposition", () => {
+    expect(() => buildEvolutionSummary([{}])).toThrow("undefined is not one of");
   });
 });

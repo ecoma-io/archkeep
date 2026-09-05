@@ -335,6 +335,24 @@ describe("deltaDisposition", () => {
   it("is no-verdict on any unknown — the delta verb wins over every class", () => {
     expect(deltaDisposition({ status: "no-verdict" })).toBe("no-verdict");
   });
+
+  // The latch (#739): a stranger status is a bug in the caller, never a
+  // disposition — the old fall-through folded any of these to `accepted`.
+  it("throws on a stranger status — 'OK ' is not 'ok'", () => {
+    expect(() => deltaDisposition({ status: "OK " })).toThrow(
+      'unknown delta status string ("OK ")',
+    );
+  });
+
+  it("throws on an absent status", () => {
+    expect(() => deltaDisposition({})).toThrow("unknown delta status undefined (undefined)");
+  });
+
+  it("throws on a typo'd status", () => {
+    expect(() => deltaDisposition({ status: "ok_" })).toThrow(
+      'unknown delta status string ("ok_")',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

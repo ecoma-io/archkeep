@@ -383,11 +383,15 @@ export function sourceProjectAttributor(headGraph, baselineProjects) {
  *   a custom-rule-only introduced finding never reaches the VIOLATION
  *   predicate, so a classifications scan would read "accepted" on an exit-1
  *   run — the silent direction;
- * - everything else — a clean comparable capture (`ok`, `[]` classifications),
- *   an `ok` capture with a fact class (REPAIR, CHANGE, DRIFT,
- *   DECISION_CHANGE — each accepted by the vocabulary `classification` earns),
- *   or an `ok` capture holding a WAIVED violation (a waiver is a tracked
- *   acceptance — which is exactly what kept the gate `ok`) ⇒ `accepted`.
+ * - `ok` status — a clean comparable capture (`[]` classifications), an `ok`
+ *   capture with a fact class (REPAIR, CHANGE, DRIFT, DECISION_CHANGE — each
+ *   accepted by the vocabulary `classification` earns), or an `ok` capture
+ *   holding a WAIVED violation (a waiver is a tracked acceptance — which is
+ *   exactly what kept the gate `ok`) ⇒ `accepted`;
+ * - any OTHER status — a typo, a case- or whitespace-mangled spelling, an
+ *   absent field — THROWS naming the input, the input latch `verdictFor`
+ *   holds. There is no fourth status to fold, and folding a stranger to a
+ *   verdict would be the silent direction.
  *
  * The two refusals that can never reach this mapping — an unjudgeable head
  * and a provider mismatch — THROW before any event exists, so a delta that
@@ -396,12 +400,20 @@ export function sourceProjectAttributor(headGraph, baselineProjects) {
  *
  * @param {{status: "ok"|"findings"|"no-verdict"}} input
  * @returns {"accepted"|"rejected"|"no-verdict"}
+ * @throws {Error} On any `status` outside the three-verb contract, naming the
+ *   input.
  */
 export function deltaDisposition({ status }) {
   // used by its own test
   if (status === "no-verdict") return "no-verdict";
   if (status === "findings") return "rejected";
-  return "accepted";
+  if (status === "ok") return "accepted";
+  throw new Error(
+    `deltaDisposition: unknown delta status ${describe(status)} — expected "ok", "findings", ` +
+      `or "no-verdict". A status outside the delta verb's own contract has no disposition; ` +
+      `guessing one would be the silent direction. This is a bug in archkeep, not a fact about ` +
+      `the workspace.`,
+  );
 }
 
 /**
