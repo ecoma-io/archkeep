@@ -590,6 +590,35 @@ describe("deltaCommand event output", () => {
     expect(event.base.evidence).toBe("/invented/base.json");
   });
 
+  it("keeps the event id stable when the baseline is relocated — identity never names a path", async () => {
+    // The baseline's path is a storage reference on the machine that ran the
+    // command; an event store committed to git is read by machines where that
+    // path does not exist. The identity names the STATE the evidence holds,
+    // never where the file sat — so the same transition judged over the same
+    // evidence at a different path is the SAME event, and the store dedupes
+    // it instead of appending a machine-specific twin.
+    const law = config();
+    const baseline = baselineOf({ law, root: gitRoot });
+    /** @type {(baselinePath: string, dir: string) => Promise<object>} */
+    const runAt = async (baselinePath, dir) => {
+      await deltaCommand(baselinePath, contextOf({ records: [crossingRecord()], root: gitRoot }), {
+        config: law,
+        readBaseline: baseline.readBaseline,
+        now: NOW,
+        eventOut: join(eventsDir, dir),
+      });
+      const [event] = readEvents(join(eventsDir, dir));
+      return event;
+    };
+    const here = await runAt("baseline.json", "relocate-here");
+    const elsewhere = await runAt("/var/archkeep/elsewhere/baseline.json", "relocate-elsewhere");
+    expect(elsewhere.dedupeKey).toBe(here.dedupeKey);
+    expect(elsewhere.id).toBe(here.id);
+    // The relocation is still disclosed — outside the identity.
+    expect(here.evidence).toBe("baseline.json");
+    expect(elsewhere.evidence).toBe("/var/archkeep/elsewhere/baseline.json");
+  });
+
   it("re-judges the intent over base and head and emits the real debt id debt actually introduced", async () => {
     // The lifecycle closure for the delta producer (F-DEB-1 delta): with an
     // intent present, the event's debt ids are the SAME ids the ledger would
