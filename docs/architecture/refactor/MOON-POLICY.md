@@ -336,13 +336,13 @@ The last two rows joined by the 2-A record
 | `moon:declared` targets synthesis | (b) Targets declared in Moon manifests are synthesized at the provider boundary (`moon.mjs:717-737`); twin parity with `archkeep:declared`; decides nothing beyond Moon's own statements                                   |
 | `nodeTypeFromLayer`               | (b) Moon `layer` → node type, the same translation class as item 4; the unknown-layer `lib` fallback is stated, not derived; decides nothing                                                                               |
 
-The suite that pins the original five is
-`packages/archkeep/src/providers/moon.test.mjs`; the two 2-A rows record
-existing behavior, and whether either needs its own pin is 2-B's
-relationship-pin work, not this record's. This unit added no behavior pin
-because none was missing — every adjudicated
-behavior already has its pin, verified green in this unit's validation run
-(see the PR's validation report). The one test this unit touches is not a
+The suite that pins all seven rows is
+`packages/archkeep/src/providers/moon.test.mjs` — the two 2-A rows
+included (the layer→type mapping and the taskTargets synthesis are its
+existing cases). This unit added no behavior pin because none was missing —
+every adjudicated behavior already has its pin, verified green in this
+unit's validation run (see the PR's validation report). The one test this
+unit touches is not a
 behavior pin: the ADR registry's backward-compatibility roster lists every
 record the registry scans, and ADRs 0009/0010 join that list — a roster pin
 moving with its roster, nothing more. A future pin gap in any of the five is

@@ -54,9 +54,10 @@ into the one verdict lane. The lane is singular (good,
 feeding it is plural in spelling. The 2-A adjudication
 ([PD-13](DECISIONS.md#program-decisions)) ruled **outcome (c)**: no canonical
 Finding object. What binds instead is the relationship pin: every finding
-feeds the one verdict lane through families → count keys → `verdictFor`, and
-`check.mjs:519-523` is the documented normalization seam where the four
-shapes become one evaluation input. The "violation" word-collision map is
+feeds the one verdict lane — four families converging as count keys into
+`verdictFor` — and `check.mjs:519-523` is the documented seam where
+`judgeEdge`'s markdown-pairing verdicts are reshaped into the exact
+`Violation` record `violationOf` builds. The "violation" word-collision map is
 pinned in
 [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening)'s
 2-A inputs, and a Finding that grows judgment fields, lifecycle state, or
@@ -122,10 +123,10 @@ construction. Registers, not defects:
   lane) and `src/governance/verdict.mjs` (the vocabulary/decision owner).
   Deliberate layering (`verdictFor` composes `buildDecision`), but imports
   read ambiguously and a mis-route is silent. Phase 2 candidate: rename one or
-  pin the relationship in both headers. The 2-A audit added a third collision
-  inside `src/verdict.mjs` itself: `judgeIntent`'s result carries a
-  `.verdict` field — the word for a different carrier (WI-4, rename at its
-  own gate).
+  pin the relationship in both headers. The 2-A audit added a third collision:
+  `judgeIntent` (`architecture-intent/judge.mjs`) names its result field
+  `.verdict` — the word for a different carrier (WI-4, rename at its own
+  gate).
 - **Four "intent" surfaces** — `src/architecture-intent/` (the
   constraint-table law, `architecture-intent.json`), `src/intent/` (the
   manifest + Contract-K guard), the declared-change grammar at
@@ -160,11 +161,11 @@ object, relationships pinned.
 
 | Concept     | Outcome               | The pin                                                                                                    |
 | ----------- | --------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Finding     | (c)                   | families → count keys → `verdictFor`; `check.mjs:519-523` the normalization seam                           |
+| Finding     | (c)                   | families → count keys → `verdictFor`; `check.mjs:519-523` the edge-verdict reshape seam                    |
 | Evidence    | (c)                   | five families, two identity conventions; `report/evidence.mjs` rename = WI-3                               |
-| Observation | (a)                   | `observation.mjs`, family-consistent construction                                                          |
+| Observation | (a)                   | the `src/analysis/` record family (living-ownership table above)                                           |
 | Evaluation  | (c)                   | `evaluation-primitives.mjs` hosts helpers, never a canonical object                                        |
-| Violation   | (a)                   | `violationOf`; `src/analysis/contract.md` stays the shape law                                              |
+| Violation   | (a)                   | `violationOf` (`rules/index.mjs:428`) — the rules lane's canonical record                                  |
 | Decision    | (a), split by meaning | envelope: `buildDecision` (`governance/verdict.mjs`); ADR record: `adr-registry`                           |
 | Verdict     | (a), per module       | `fitnessVerdict` co-located by family; `judgeIntent`'s `.verdict` field = WI-4                             |
 | Policy      | (a)                   | `policy.mjs` owns the disposition ladder; the `provenance-command.mjs:267` bypass = WI-2                   |

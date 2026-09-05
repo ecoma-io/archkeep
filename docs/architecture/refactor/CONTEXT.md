@@ -364,7 +364,7 @@ branch `johnitvn/refactor-2a-adjudication`).
   `buildDecision` in `governance/verdict.mjs`; ADR record =
   `adr-registry`); trajectory's consumption edges are stated (OQ-10).
 - **Dependency-boundary changes**: none inside `packages/`;
-  [BOUNDARIES.md](BOUNDARIES.md)'s seam table resolves its three
+  [BOUNDARIES.md](BOUNDARIES.md)'s seam table resolves its four
   `verdict-pending` markers into the recorded ledger — seven candidates,
   six verdicts (b), one no-verdict — plus the `workspaceLayoutSource`
   vocabulary contract ([PD-14](DECISIONS.md#program-decisions)).
@@ -376,7 +376,7 @@ branch `johnitvn/refactor-2a-adjudication`).
   drift-free `pass` from `fitness` and `fail` from `decisions` (root
   measured at `decisions.mjs:126-136` vs `fitness.mjs:221-240`).
 - **Architectural debt budget**: before — four open questions (OQ-5/7/10/
-  15), three verdict-pending seam markers, R4's mis-stated timing, the
+  15), four verdict-pending seam markers, R4's mis-stated timing, the
   unscoped byte-identity claim in
   [`docs/concepts/reconciliation.md`](../../concepts/reconciliation.md);
   closed — all of them; introduced — work items WI-1..WI-6 (recorded,

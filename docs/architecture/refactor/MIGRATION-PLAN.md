@@ -348,19 +348,19 @@ One owner per concept, in fact and in name.
      (`architecture-intent/model.mjs:11`, `report/drift-text.mjs`,
      `governance/fitness-registry.mjs`), hiding its
      normalization+derivation. Six bounded-derivation behaviors surfaced
-     by the Phase 1 close carry no per-item verdict of their own. Three
+     by the Phase 1 close carry no per-item verdict of their own. Four
      are marked verdict-pending in the seam table: `judgeCoverage`'s
-     provider-local coverage gate; `moon:declared` targets synthesis
-     (`moon.mjs:725-737`, the twin the native row records as bounded
-     derivation but MOON-POLICY's five missed — surfaced by the
-     close-time hostile review); and `nodeTypeFromLayer`'s unknown-layer
-     `lib` fallback (`moon.mjs:352-361`, analogy-recorded in
-     MOON-POLICY, explicitly "not a sixth verdict"). Three are named
-     only here: `buildDependencies`' root-target edge suppression and
-     `nodeTypeOf`'s `lib` fallback (primitives the LSP row records as
-     shared, not second copies), and `isDotnetGeneratedOutput`'s
-     generated-output exclusion (`native/discover.mjs:218`). Each needs
-     its per-item verdict, with 1-C's two ADRs as the precedent shape.
+     provider-local coverage gate; `isRoot`'s root-target edge suppression;
+     `moon:declared` targets synthesis (`moon.mjs:725-737`, the twin the
+     native row records as bounded derivation but MOON-POLICY's five
+     missed — surfaced by the close-time hostile review); and
+     `nodeTypeFromLayer`'s unknown-layer `lib` fallback
+     (`moon.mjs:352-361`, analogy-recorded in MOON-POLICY, explicitly
+     "not a sixth verdict"). Two are named only here: `nodeTypeOf`'s
+     `lib` fallback and `isDotnetGeneratedOutput`'s generated-output
+     exclusion (`native/discover.mjs:218`) — primitives the LSP row
+     records as shared, not second copies. Each needs its per-item
+     verdict, with 1-C's two ADRs as the precedent shape.
      For the ladder question specifically, the same audit found no
      demonstrated defect class that tests cannot pin, and stages
      interleaved inside single functions. Its "no second consumer of a

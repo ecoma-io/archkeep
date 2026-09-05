@@ -311,26 +311,30 @@ exists). A record never restates the constitution — a field whose answer is
     **executed**: the same clean workspace, `fitness` emits a drift-free
     `pass` (`fitness.mjs:221-240` feeds verdict-shape intent), `decisions`
     emits `fail` (`decisions.mjs:126-136` feeds the raw model, which
-    `fitness-rules.mjs:632-677` default-fails on). Filed as
+    `fitness-rules.mjs:632-668` default-fails on). Filed as
     [#737](https://github.com/ecoma-io/archkeep/issues/737); fix = work item
     WI-1, Phase 2 correctness hardening (0.x minor, silent-direction
     regression test required).
   - _Decision_: per-concept rulings, all maintainer-approved 2026-09-06 —
     **Finding (c)** (violationOf stays the import-site lane record;
     families→count keys→`verdictFor` pinned as relationships;
-    `check.mjs:519-523` the documented normalization seam); **Evidence (c)**
+    `check.mjs:519-523` the edge-verdict normalization seam); **Evidence (c)**
     (five families, two identity conventions, never unified;
-    `report/evidence.mjs`'s misnomer = WI-3); **Observation (a)** (one
-    canonical object, `observation.mjs`, family-consistent construction);
+    `report/evidence.mjs`'s misnomer = WI-3); **Observation (a)** (the
+    `src/analysis/` record family — constructors in `analysis/analyze.mjs`
+    (`analyzerFor:209`, `analyzeFile:235`), shape law
+    `src/analysis/contract.md` — family-consistent construction);
     **Evaluation (c)** (`evaluation-primitives.mjs` hosts helpers, never a
-    canonical object); **Violation (a)** (one canonical object;
-    `analysis/contract.md` stays the shape law); **Decision — two meanings,
+    canonical object); **Violation (a)** (one canonical object,
+    `violationOf` — the rules lane's canonical record and normalization
+    target); **Decision — two meanings,
     split by meaning** (the run-envelope decision object: governance-owned,
     `verdict.mjs`/`buildDecision`; the ADR-record family: ADR 0008's home;
     never one type); **Verdict (a) per module** (`fitnessVerdict` co-located
     by family; `judgeIntent`'s `.verdict` field collision = WI-4);
     **Policy (a)** (`policy.mjs` owns the disposition ladder; its
-    `:41-45` "eleven sites" comment is stale — 16 measured — plus the
+    `:34-47` "eleven sites" comment is stale (the audit measured 16 call
+    sites) — plus the
     `provenance-command.mjs:267` bypass = WI-2, fold-or-ADR);
     **Intent (c)** (four surfaces — architecture-intent, intent contracts,
     declared-change grammar `src/commands/change-intent.mjs`, run envelope
@@ -345,7 +349,8 @@ exists). A record never restates the constitution — a field whose answer is
     the seam table's pending markers): `judgeCoverage` (b), `moon:declared`
     targets synthesis (b), `nodeTypeFromLayer` (b, unknown-layer `lib`
     fallback recorded), `isRoot` root-target suppression (b, twin with
-    Nx's own rule), `nodeTypeOf` lib default (b, `nodeTypeOf-lib` marker),
+    Nx's own rule), `nodeTypeOf` lib default (b; the `lib` fallback pinned
+    at `native/discover.mjs:64-69`),
     `isDotnetGeneratedOutput` (b), the seventh candidate (no verdict — the
     config-key roster at
     [`docs/reference/configuration.md:32-97`](../../reference/configuration.md)
