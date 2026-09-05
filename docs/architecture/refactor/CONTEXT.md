@@ -48,23 +48,24 @@ A missing field is a review defect, not a style preference.
 
 ## Program state
 
-| Phase                                               | Status                                    | Record                       |
-| --------------------------------------------------- | ----------------------------------------- | ---------------------------- |
-| 0 — Architecture cartography                        | **complete** (PR #727 merged)             | CHK-0 below                  |
-| 0.5 — Decision closure & Phase 1 execution baseline | **complete** (PR #729 merged)             | CHK-1-PREP below             |
-| 1 — Authority hardening                             | **complete** (PRs #730–#734 + this PR)    | CHK-1-CLOSE below            |
-| 2 — Canonical model hardening                       | ready — entry brief in MIGRATION-PLAN 2-A | entry: Phase 1 exit recorded |
-| 3 — Boundary enforcement                            | not started                               | blocked by 2                 |
-| 4 — Internal extraction                             | not started                               | **blocked by GAP-A** (PD-4)  |
-| 5 — Capability facades                              | not started                               | blocked by 4                 |
-| 6 — CLI recomposition                               | not started                               | blocked by 5                 |
-| 7 — Additional surfaces                             | not started                               | blocked by 6                 |
-| 8 — Federation readiness                            | not started                               | maintainer-gated             |
-| 9 — Final hardening                                 | not started                               | blocked by 8 (or waiver)     |
+| Phase                                               | Status                                  | Record                      |
+| --------------------------------------------------- | --------------------------------------- | --------------------------- |
+| 0 — Architecture cartography                        | **complete** (PR #727 merged)           | CHK-0 below                 |
+| 0.5 — Decision closure & Phase 1 execution baseline | **complete** (PR #729 merged)           | CHK-1-PREP below            |
+| 1 — Authority hardening                             | **complete** (PRs #730–#734 + #736)     | CHK-1-CLOSE below           |
+| 2 — Canonical model hardening                       | in progress — 2-A adjudicated (PR #740) | CHK-2-A below               |
+| 3 — Boundary enforcement                            | not started                             | blocked by 2                |
+| 4 — Internal extraction                             | not started                             | **blocked by GAP-A** (PD-4) |
+| 5 — Capability facades                              | not started                             | blocked by 4                |
+| 6 — CLI recomposition                               | not started                             | blocked by 5                |
+| 7 — Additional surfaces                             | not started                             | blocked by 6                |
+| 8 — Federation readiness                            | not started                             | maintainer-gated            |
+| 9 — Final hardening                                 | not started                             | blocked by 8 (or waiver)    |
 
 Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
-#729 (Phase 0.5), PRs #730–#734 (Phase 1 units A, B, E, F, C), and this PR
-(Phase 1-D + the Phase 1 close, branch `johnitvn/phase1-d-seam-contract`).
+#729 (Phase 0.5), PRs #730–#734 (Phase 1 units A, B, E, F, C), PR #736
+(the Phase 1 close), and this PR (#740 — the 2-A adjudication record,
+branch `johnitvn/refactor-2a-adjudication`).
 
 ## Checkpoints
 
@@ -341,6 +342,61 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
   [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
   No code; no package moves; no Finding canonicalization before 2-A's
   recorded, maintainer-approved adjudication.
+
+### CHK-2-A — Phase 2, 2-A canonical semantic audit (2026-09-06)
+
+- **ID**: CHK-2-A. **Phase**: 2 (item 2-A). **Status**: complete — the
+  adjudication is recorded ([PD-13](DECISIONS.md#program-decisions),
+  [PD-14](DECISIONS.md#program-decisions)) and maintainer-approved;
+  pending merge of PR #740.
+- **Goal**: adjudicate the canonical semantic audit — one outcome per
+  audited concept (a/b/c), the provider ladder's standing, per-item
+  verdicts for the bounded-derivation candidates — and close the open
+  questions the audits raised, before any 2-B code.
+- **Invariants touched**: none in code (a docs-only record). R4's
+  documented validation timing corrected to the measured behavior (write
+  validates identity; vocabulary is read-time); INV-9's
+  policy-adjudication half closes with
+  [BOUNDARIES.md](BOUNDARIES.md)'s verdict ledger.
+- **Canonical ownership changes**: no owner moved, no rename.
+  [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md) gains the 2-A outcomes table;
+  Decision's two meanings are split by meaning (envelope =
+  `buildDecision` in `governance/verdict.mjs`; ADR record =
+  `adr-registry`); trajectory's consumption edges are stated (OQ-10).
+- **Dependency-boundary changes**: none inside `packages/`;
+  [BOUNDARIES.md](BOUNDARIES.md)'s seam table resolves its four
+  `verdict-pending` markers into the recorded ledger — seven candidates,
+  six verdicts (b), one no-verdict — plus the `workspaceLayoutSource`
+  vocabulary contract ([PD-14](DECISIONS.md#program-decisions)).
+- **Contracts affected and compatibility classification**:
+  DOCUMENTATION-CONTRACT CLARIFICATION only. WI-1 (#737's fix) will be a
+  0.x minor when it lands; #738/#739 take the same lane in their own PRs.
+- **Differential evidence**: the audit's own — four read-only audits over
+  `eee9d22`, plus OQ-7 **executed**: the same clean workspace emits a
+  drift-free `pass` from `fitness` and `fail` from `decisions` (root
+  measured at `decisions.mjs:126-136` vs `fitness.mjs:221-240`).
+- **Architectural debt budget**: before — four open questions (OQ-5/7/10/
+  15), four verdict-pending seam markers, R4's mis-stated timing, the
+  unscoped byte-identity claim in
+  [`docs/concepts/reconciliation.md`](../../concepts/reconciliation.md);
+  closed — all of them; introduced — work items WI-1..WI-6 (recorded,
+  owner-named; WI-1 = #737's approved fix); net — negative.
+- **Unresolved questions**: none new. OQ-4/6/9 remain VERIFICATION
+  REQUIRED (Phase 3 / GAP-A); OQ-8/11/14 maintainer-gated. WI-2 (fold the
+  provenance bypass or ADR it) and WI-6 (`recordDecisionLifecycle`
+  wire-or-delete) carry maintainer gates at their own PRs.
+- **Rejected approaches**: a canonical Finding object (CON-3); unifying
+  Evidence or Evaluation into one type; a named-type ladder model (its
+  revisit trigger renamed to mid-ladder entry); widening
+  `workspaceLayoutSource` (PD-14 keeps two values); folding #738/#739
+  fixes into this docs PR (separate correctness-hardening PRs).
+- **Forbidden next moves and the next objective**: do not start 2-B
+  before this PR merges; do not canonicalize a Finding, Evidence, or
+  Evaluation object (ruled (c)); do not alter the seam's recorded
+  verdicts without a new adjudication; do not fix #737/#738/#739 on this
+  branch. Next: **2-B — relationship pins** per outcome (c)
+  ([MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening)),
+  and in parallel WI-1 through its own gate (#737 → branch → draft PR).
 
 ## Conventions maintained here
 

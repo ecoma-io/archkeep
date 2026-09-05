@@ -296,3 +296,114 @@ exists). A record never restates the constitution — a field whose answer is
   worker may investigate and may propose; the coordinator or maintainer
   decides. Recorded here as program history — the binding statement is
   [P-G](CONSTITUTION.md#process-articles).
+- **PD-13 (2026-09-06) — The 2-A canonical semantic audit's adjudication
+  (closes OQ-5, OQ-7, OQ-10).**
+  - _Question_: for each audited concept — Finding, Evidence, Observation,
+    Evaluation, Violation, Decision, Verdict, Policy, Intent, Snapshot,
+    Provenance — is the engine's existing ownership a canonical domain
+    object (a), a shared construction contract (b), or no canonical object
+    with relationships pinned (c); does the provider ladder become an
+    architectural model or stay an implementation boundary; and what is each
+    bounded-derivation behavior's per-item verdict.
+  - _Evidence_: four read-only audits over `eee9d22` — a constructor census
+    per concept (path:line for every family member), a bounded-derivation
+    dossier, a register/drift sweep, and the OQ-7 probes. OQ-7's evidence is
+    **executed**: the same clean workspace, `fitness` emits a drift-free
+    `pass` (`fitness.mjs:221-240` feeds verdict-shape intent), `decisions`
+    emits `fail` (`decisions.mjs:126-136` feeds the raw model, which
+    `fitness-rules.mjs:632-668` default-fails on). Filed as
+    [#737](https://github.com/ecoma-io/archkeep/issues/737); fix = work item
+    WI-1, Phase 2 correctness hardening (0.x minor, silent-direction
+    regression test required).
+  - _Decision_: per-concept rulings, all maintainer-approved 2026-09-06 —
+    **Finding (c)** (violationOf stays the import-site lane record;
+    families→count keys→`verdictFor` pinned as relationships;
+    `check.mjs:519-523` the edge-verdict normalization seam); **Evidence (c)**
+    (five families, two identity conventions, never unified;
+    `report/evidence.mjs`'s misnomer = WI-3); **Observation (a)** (the
+    `src/analysis/` record family — constructors in `analysis/analyze.mjs`
+    (`analyzerFor:209`, `analyzeFile:235`), shape law
+    `src/analysis/contract.md` — family-consistent construction);
+    **Evaluation (c)** (`evaluation-primitives.mjs` hosts helpers, never a
+    canonical object); **Violation (a)** (one canonical object,
+    `violationOf` — the rules lane's canonical record and normalization
+    target); **Decision — two meanings,
+    split by meaning** (the run-envelope decision object: governance-owned,
+    `verdict.mjs`/`buildDecision`; the ADR-record family: ADR 0008's home;
+    never one type); **Verdict (a) per module** (`fitnessVerdict` co-located
+    by family; `judgeIntent`'s `.verdict` field collision = WI-4);
+    **Policy (a)** (`policy.mjs` owns the disposition ladder; its
+    `:34-47` "eleven sites" comment is stale (the audit measured 16 call
+    sites) — plus the
+    `provenance-command.mjs:267` bypass = WI-2, fold-or-ADR);
+    **Intent (c)** (four surfaces — architecture-intent, intent contracts,
+    declared-change grammar `src/commands/change-intent.mjs`, run envelope
+    intent shape); **Snapshot (a) per family** (two snapshot concepts —
+    declaration `snapshotIdentity` vs observation `captureDelta` — never
+    mixed); **Provenance (a) per family** (`recordDecisionLifecycle`
+    dormant = WI-6, wire-or-delete). The ladder **stays an implementation
+    boundary** (no named-type model); D2's "no second consumer" holds only
+    for intermediate stages in isolation — the trigger class for revisiting
+    is **mid-ladder entry** (a second path entering between stages), not
+    downstream consumption. Bounded-derivation verdicts (per-item, closing
+    the seam table's pending markers): `judgeCoverage` (b), `moon:declared`
+    targets synthesis (b), `nodeTypeFromLayer` (b, unknown-layer `lib`
+    fallback recorded), `isRoot` root-target suppression (b, twin with
+    Nx's own rule), `nodeTypeOf` lib default (b; the `lib` fallback pinned
+    at `native/discover.mjs:64-69`),
+    `isDotnetGeneratedOutput` (b), the seventh candidate (no verdict — the
+    config-key roster at
+    [`docs/reference/configuration.md:32-97`](../../reference/configuration.md)
+    is the bounded source list, not a derivation).
+  - _Scope_: documentation-contract records only; no code. The work items
+    it names (WI-1 #737 fix; WI-2 policy bypass fold-or-ADR; WI-3
+    `report/evidence.mjs` rename; WI-4 `judgeIntent` field rename; WI-5
+    `policy.mjs` comment correction; WI-6 lifecycle wire-or-delete) are
+    their own gate items.
+  - _Alternatives rejected_: a canonical Finding object (collapses distinct
+    per-surface grammars no defect class needs unified — CON-3); unifying
+    Evidence (five meanings, two identity conventions); one Evaluation type
+    (distinct carriers); a named-type ladder model (no mid-ladder consumer;
+    zero behavioral drift to buy the type with); widening
+    `workspaceLayoutSource` (PD-14).
+  - _Consequences_: 2-B proceeds as relationship pins (outcome (c));
+    #738 and [#739](https://github.com/ecoma-io/archkeep/issues/739),
+    filed from the same audit and maintainer-ruled bugs, are separate fix
+    PRs; SEMANTIC-MODEL/BOUNDARIES/MOON-POLICY rows update in the same PR
+    as this record.
+  - _Compatibility impact_: none — docs only. WI-1, when it lands, is a
+    0.x minor with the behavior change named in the changelog.
+  - _Owner_: [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md) (living map),
+    [BOUNDARIES.md](BOUNDARIES.md) (seam verdicts),
+    [MOON-POLICY.md](MOON-POLICY.md) (promoted rows).
+  - _Verification/acceptance evidence_: docs gates green on the recording
+    PR; every ruling cites measured `path:line` from the audit payloads;
+    OQ-7's evidence is an executed differential, not an argument.
+  - _Supersedes_: nothing.
+- **PD-14 (2026-09-06) — `workspaceLayoutSource` keeps its two-value
+  vocabulary (closes OQ-15).**
+  - _Question_: does the two-value vocabulary overclaim provenance — a
+    Moon-inferred layout reporting `"declared"`
+    ([ADR 0010](../../adr/0010-moon-workspace-layout-inference.md))?
+  - _Evidence_: ADR 0010's own consequences clause names the widening as
+    its own compatibility-classified change; the 2-A audit's register sweep
+    surfaced the reading ambiguity, and OQ-15's no-issue outcome named
+    exactly the correction recorded here.
+  - _Decision_: **two values kept**; the corrected meaning is the
+    documented contract — the graph carries the layout **key**
+    (config-named or Moon-derived), and the `"declared"` slot records the
+    key's presence, not who named it. Widening to a third value remains
+    available as its own compatibility-classified change.
+  - _Scope_: documentation; the contract sentence lives once in
+    [BOUNDARIES.md](BOUNDARIES.md)'s provider seam section.
+  - _Alternatives rejected_: widening now (an output-contract change with
+    no consumer need measured); per-provider sub-status inside the
+    existing values (a second vocabulary in one field).
+  - _Consequences_: the vocabulary's meaning is stated once and cited;
+    ADR 0010's cost record stands.
+  - _Compatibility impact_: none.
+  - _Owner_: [BOUNDARIES.md](BOUNDARIES.md) (provider seam).
+  - _Verification/acceptance evidence_: the row moves to CLOSED — DECIDED
+    in [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md); the contract sentence is in
+    the seam section of the same PR.
+  - _Supersedes_: nothing.

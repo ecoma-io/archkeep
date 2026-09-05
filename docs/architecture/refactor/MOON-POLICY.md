@@ -298,15 +298,19 @@ policy, never as silent behavior.
 ## Boundary of this adjudication
 
 The finding named five transformations; this record adjudicates exactly
-those five. Two neighbours are named so the boundary is explicit rather
-than discovered later:
+those five. Two neighbours were named so the boundary would be explicit
+rather than discovered later — one since adjudicated by the 2-A record
+([PD-13](DECISIONS.md#program-decisions)), one standing as recorded
+loudness behavior:
 
 - **`nodeTypeFromLayer`** (Moon `layer` → node type `app`/`e2e`/`lib`) is
   the same translation class as item 4 — a Moon-stated classification
-  projected into a coarser engine vocabulary the rules read — and reads
-  under ADR 0009's reasoning by direct analogy. It is not a sixth verdict,
-  and a future adjudication of it starts from that analogy, not from
-  blank.
+  projected into a coarser engine vocabulary the rules read. The 2-A
+  record ([PD-13](DECISIONS.md#program-decisions)) adjudicated it from
+  that analogy: recorded policy (b), its unknown-layer `lib` fallback
+  (`moon.mjs:352-361`) stated in
+  [BOUNDARIES.md](BOUNDARIES.md)'s verdict ledger. It is not a sixth
+  verdict.
 - **`canonicalMoonRoot` and the anomaly refusals** (the collect-and-throw
   posture and the root-spelling discipline, cited in `moon.mjs` as #365/#367)
   are loudness behavior at the acquisition boundary, already recorded by their
@@ -319,18 +323,26 @@ Each row below is self-contained — contract sentence or ADR — so the
 provider-seam table can cite this page and the two ADRs without re-deriving
 anything:
 
-| Transformation             | Normalization contract (a) or policy record (b)                                                                                                                                                                            |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Root-scoped edge exclusion | (a) The governed graph is project-to-project edges; a `root`-scoped dependency names the workspace-root principal, outside the domain — excluded before judgment, never judged, never refused; the check precedes `source` |
-| Vocabulary inversion       | (a) Moon `source: "explicit"` ≡ Archkeep type `"implicit"` (one fact, two vocabularies); translate by fact, never spelling; `type === "implicit"` consumers see exactly the hand-declared set (#262)                       |
-| Scope collapse             | (a) Edge `type` is a source-text fact only analysis attests; a scope is a manifest fact; every scope → `static`, `dynamic` only via `mergeImportEdges` (#280)                                                              |
-| Tag synthesis              | (b) [ADR 0009](../../adr/0009-moon-derived-tags-provider-policy.md): derive only Moon-stated `layer`/`stack`, colon-form; declared tags verbatim; decides nothing                                                          |
-| Workspace-layout inference | (b) [ADR 0010](../../adr/0010-moon-workspace-layout-inference.md): infer only from Moon-stated roots × layer; complete-or-withheld; root projects contribute nothing; never supplies the default                           |
+The last two rows joined by the 2-A record
+([PD-13](DECISIONS.md#program-decisions)); same self-containment contract.
 
-The suite that pins all five is `packages/archkeep/src/providers/moon.test.mjs`;
-this unit added no behavior pin because none was missing — every adjudicated
-behavior already has its pin, verified green in this unit's validation run
-(see the PR's validation report). The one test this unit touches is not a
+| Transformation                    | Normalization contract (a) or policy record (b)                                                                                                                                                                            |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Root-scoped edge exclusion        | (a) The governed graph is project-to-project edges; a `root`-scoped dependency names the workspace-root principal, outside the domain — excluded before judgment, never judged, never refused; the check precedes `source` |
+| Vocabulary inversion              | (a) Moon `source: "explicit"` ≡ Archkeep type `"implicit"` (one fact, two vocabularies); translate by fact, never spelling; `type === "implicit"` consumers see exactly the hand-declared set (#262)                       |
+| Scope collapse                    | (a) Edge `type` is a source-text fact only analysis attests; a scope is a manifest fact; every scope → `static`, `dynamic` only via `mergeImportEdges` (#280)                                                              |
+| Tag synthesis                     | (b) [ADR 0009](../../adr/0009-moon-derived-tags-provider-policy.md): derive only Moon-stated `layer`/`stack`, colon-form; declared tags verbatim; decides nothing                                                          |
+| Workspace-layout inference        | (b) [ADR 0010](../../adr/0010-moon-workspace-layout-inference.md): infer only from Moon-stated roots × layer; complete-or-withheld; root projects contribute nothing; never supplies the default                           |
+| `moon:declared` targets synthesis | (b) Targets declared in Moon manifests are synthesized at the provider boundary (`moon.mjs:717-737`); twin parity with `archkeep:declared`; decides nothing beyond Moon's own statements                                   |
+| `nodeTypeFromLayer`               | (b) Moon `layer` → node type, the same translation class as item 4; the unknown-layer `lib` fallback is stated, not derived; decides nothing                                                                               |
+
+The suite that pins all seven rows is
+`packages/archkeep/src/providers/moon.test.mjs` — the two 2-A rows
+included (the layer→type mapping and the taskTargets synthesis are its
+existing cases). This unit added no behavior pin because none was missing —
+every adjudicated behavior already has its pin, verified green in this
+unit's validation run (see the PR's validation report). The one test this
+unit touches is not a
 behavior pin: the ADR registry's backward-compatibility roster lists every
 record the registry scans, and ADRs 0009/0010 join that list — a roster pin
 moving with its roster, nothing more. A future pin gap in any of the five is
