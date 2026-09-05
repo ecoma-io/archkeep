@@ -12,6 +12,7 @@ import {
   EVOLUTION_EVENT_SCHEMA_VERSION,
   EVENT_CLASSIFICATIONS,
 } from "./evolution-event.mjs";
+import { snapshotIdentity } from "../commands/history.mjs";
 
 const base = { revision: "abc123", snapshot: "0001-11111111.json" };
 const head = { revision: "def456", snapshot: "0002-22222222.json" };
@@ -107,6 +108,71 @@ describe("eventId", () => {
     expect(eventId(makeEvent({ recordedAt: later.recordedAt }))).toBe(eventId(event));
     expect(eventId(makeEvent({ notes: differentNotes.notes }))).toBe(eventId(event));
     expect(eventId(makeEvent({ provenance: differentProvenance.provenance }))).toBe(eventId(event));
+  });
+});
+
+describe("the identity names architecture states, never storage", () => {
+  // A side of the tuple is the reference to one state: a revision when one is
+  // known, plus the snapshot identity of the graph that side was judged over
+  // — `snapshotIdentity` (../commands/history.mjs), the ONE graph hash, never
+  // a re-derivation and never a storage path. An event store committed to git
+  // is read by machines where the writing machine's paths do not exist, so a
+  // path inside the tuple would make idempotency a per-machine property.
+  const graphA = {
+    projects: [{ name: "a", root: "libs/a", type: "lib", tags: [] }],
+    dependencies: [],
+  };
+  const graphB = {
+    projects: [
+      { name: "a", root: "libs/a", type: "lib", tags: [] },
+      { name: "b", root: "libs/b", type: "lib", tags: [] },
+    ],
+    dependencies: [{ source: "a", target: "b", sourceFile: "libs/a/src/a.ts", type: "static" }],
+  };
+  /** @type {(graph: object, fingerprint?: string) => string} */
+  const snapshotOf = (graph, fingerprint) =>
+    snapshotIdentity({ ...graph, policy: fingerprint === undefined ? null : { fingerprint } });
+
+  it("distinguishes the same revisions over different graphs — the snapshot identity is identity material", () => {
+    const event = makeEvent({
+      base: { revision: base.revision, snapshot: snapshotOf(graphA) },
+      head: { revision: head.revision, snapshot: snapshotOf(graphB) },
+    });
+    const moved = makeEvent({
+      base: { revision: base.revision, snapshot: snapshotOf(graphB) },
+      head: { revision: head.revision, snapshot: snapshotOf(graphB) },
+    });
+    expect(event.base.snapshot).not.toBe(moved.base.snapshot);
+    expect(eventDedupeKey(event)).not.toBe(eventDedupeKey(moved));
+    expect(eventId(event)).not.toBe(eventId(moved));
+  });
+
+  it("distinguishes the same graph under a different policy fingerprint — the law is architectural", () => {
+    const event = makeEvent({
+      base: { revision: base.revision, snapshot: snapshotOf(graphA) },
+      head: { revision: head.revision, snapshot: snapshotOf(graphA, "the-law") },
+    });
+    const reLawed = makeEvent({
+      base: { revision: base.revision, snapshot: snapshotOf(graphA) },
+      head: { revision: head.revision, snapshot: snapshotOf(graphA, "another-law") },
+    });
+    expect(eventDedupeKey(event)).not.toBe(eventDedupeKey(reLawed));
+    expect(eventId(event)).not.toBe(eventId(reLawed));
+  });
+
+  it("collapses a provider-only difference — which provider read the graph is provenance, not state", () => {
+    // The same transition read by a different provider is the same
+    // architectural fact: the provider is a fact about the READING
+    // (excluded from `snapshotIdentity` by design), so it reaches the
+    // identity by no route — the sides carry no provider field, and the
+    // event-level record of the reading sits outside the tuple.
+    const event = makeEvent();
+    const otherReader = makeEvent({
+      provenance: [{ kind: "provider", ref: "moon" }],
+      notes: ["read by moon this time"],
+    });
+    expect(eventId(event)).toBe(eventId(otherReader));
+    expect(eventDedupeKey(event)).toBe(eventDedupeKey(otherReader));
   });
 });
 

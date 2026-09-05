@@ -230,20 +230,22 @@ function emptyRowsManifest(overrides = {}) {
  * always injected (FUTURE) so the event's `recordedAt` is deterministic.
  *
  * @param {{ctx?: object, baseline: {readBaseline: (path: string) => object},
- *   intent?: object|undefined, config?: object|undefined, eventOut?: string,
+ *   baselinePath?: string, intent?: object|undefined, config?: object|undefined,
+ *   eventOut?: string,
  *   writeEvent?: (dir: string, event: object) => {id: string, duplicate: boolean},
  *   loadIntentOverride?: (root: string, opts?: object) => Promise<object|undefined>}} input
  */
 async function run({
   ctx,
   baseline,
+  baselinePath = "baseline.json",
   intent,
   config: law,
   eventOut,
   writeEvent,
   loadIntentOverride,
 }) {
-  return changeCommand("baseline.json", "intent.json", ctx ?? contextOf(), {
+  return changeCommand(baselinePath, "intent.json", ctx ?? contextOf(), {
     config: law ?? config(),
     readBaseline: baseline.readBaseline,
     ...(intent === undefined
@@ -539,8 +541,16 @@ describe("the reconcile event (--event-out)", () => {
     expect(event.kind).toBe("reconcile");
     expect(event.source).toBe("change");
     expect(event.declaration).toEqual({ file: "intent.json", digest: declarationDigest(intent) });
-    expect(event.base).toEqual({ revision: provenanceCommit(), evidence: "baseline.json" });
-    expect(event.head).toEqual({ revision: provenanceCommit() });
+    expect(event.base).toEqual({ revision: provenanceCommit(), snapshot: expect.any(String) });
+    expect(event.head).toEqual({ revision: provenanceCommit(), snapshot: expect.any(String) });
+    // Each side names a STATE — the snapshot identity of the graph that side
+    // was judged over, and the two states differ because the architecture
+    // moved. The baseline's storage path is disclosed one level up, outside
+    // the identity.
+    expect(event.base.snapshot).toMatch(/^[0-9a-f]{64}$/);
+    expect(event.head.snapshot).toMatch(/^[0-9a-f]{64}$/);
+    expect(event.base.snapshot).not.toBe(event.head.snapshot);
+    expect(event.evidence).toBe("baseline.json");
     expect(event.observed.architectureChanged).toBe(true);
     expect(event.observed.projects).toEqual({ added: ["acme-payments"], removed: [], changed: [] });
     expect(event.observed.edges).toEqual({ added: ["acme-api>acme-payments:static"], removed: [] });
@@ -593,6 +603,39 @@ describe("the reconcile event (--event-out)", () => {
       manifest({ summary: "a completely different way of saying the same change" }),
     );
     expect(reworded.id).toBe(first.id);
+  });
+
+  it("keeps the event id stable when the baseline is relocated — identity never names a path", async () => {
+    // The baseline's path is a storage reference on the machine that ran the
+    // command; an event store committed to git is read by machines where that
+    // path does not exist. The identity names the STATE the evidence holds,
+    // never where the file sat — so the same transition judged over the same
+    // evidence at a different path is the SAME event, and the store dedupes
+    // it instead of appending a machine-specific twin.
+    /** @type {(baselinePath: string) => Promise<object>} */
+    const oneRun = async (baselinePath) => {
+      /** @type {object[]} */
+      const events = [];
+      await run({
+        ctx: contextOf({ graph: declaredHeadGraph() }),
+        baseline: baselineOf(),
+        baselinePath,
+        intent: manifest({ summary: "add payments" }),
+        eventOut: "events",
+        writeEvent: (_dir, event) => {
+          events.push(event);
+          return { id: event.id, duplicate: false };
+        },
+      });
+      return events[0];
+    };
+    const here = await oneRun("baseline.json");
+    const elsewhere = await oneRun("/var/archkeep/elsewhere/baseline.json");
+    expect(elsewhere.dedupeKey).toBe(here.dedupeKey);
+    expect(elsewhere.id).toBe(here.id);
+    // The relocation is still disclosed — outside the identity.
+    expect(here.evidence).toBe("baseline.json");
+    expect(elsewhere.evidence).toBe("/var/archkeep/elsewhere/baseline.json");
   });
 
   it("maps the violation delta into the event findings and rejects on it", async () => {

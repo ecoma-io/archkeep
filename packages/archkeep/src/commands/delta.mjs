@@ -106,6 +106,7 @@ import {
 } from "./delta-snapshot.mjs";
 import { computeDiff } from "./diff.mjs";
 import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
+import { snapshotIdentity } from "./history.mjs";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
@@ -588,10 +589,11 @@ export async function deltaCommand(
   // a second spelling of "changed". The head side is rebuilt by the same
   // `buildProjects`/`buildDependencies` the snapshot stores
   // (`./delta-snapshot.mjs`), which is what makes the two sides comparable.
-  const structuralDiff = computeDiff(baseline.graph, {
+  const headGraph = {
     projects: buildProjects(graph.nodes),
     dependencies: buildDependencies(graph.dependencies),
-  });
+  };
+  const structuralDiff = computeDiff(baseline.graph, headGraph);
   const structural = {
     projects: {
       added: structuralDiff.addedProjects.map((project) => project.name),
@@ -880,11 +882,29 @@ export async function deltaCommand(
       source: "delta",
       base: {
         ...(typeof baseCommit === "string" ? { revision: baseCommit } : {}),
-        // The evidence ref is the baseline file this run actually compared
-        // against — a pointer into the evidence, never a graph.
-        evidence: baselinePath,
+        // The state this side names: the snapshot identity of the evidence
+        // graph the run actually compared against — `snapshotIdentity`, the
+        // ONE graph hash (`./history.mjs`), never the baseline's storage
+        // path. A path is machine-local; an event store committed to git is
+        // deduped across machines, so the identity tuple may not name one.
+        snapshot: snapshotIdentity({
+          projects: baseline.graph.projects,
+          dependencies: baseline.graph.dependencies,
+          policy:
+            baseline.policyFingerprint === undefined || baseline.policyFingerprint === null
+              ? null
+              : { fingerprint: baseline.policyFingerprint },
+        }),
       },
-      head: typeof headCommit === "string" ? { revision: headCommit } : {},
+      head: {
+        ...(typeof headCommit === "string" ? { revision: headCommit } : {}),
+        snapshot: snapshotIdentity({ ...headGraph, policy: { fingerprint: headFingerprint } }),
+      },
+      // The evidence ref is the baseline file this run actually compared
+      // against — a pointer into the evidence, never a graph, and disclosed
+      // OUTSIDE the identity: the tuple above names the state itself, so a
+      // relocated baseline is still the same event.
+      evidence: baselinePath,
       recordedAt: recordOrigin({
         by: "cli",
         tool: `archkeep:v${TOOL_VERSION}`,

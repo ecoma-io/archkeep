@@ -24,8 +24,9 @@ must not disagree with what is written here.
   "id": "92f4…a1c0",
   "dedupeKey": "{\"base\":…,\"head\":…}",
   "recordedAt": { "by": "ci", "tool": "archkeep:v1", "on": "2026-08-30T00:00:00.000Z" },
-  "base": { "revision": "abc123", "snapshot": "0001-deadbeef.json" },
-  "head": { "revision": "def456", "snapshot": "0002-cafebabe.json" },
+  "base": { "revision": "abc123", "snapshot": "3f9c…8b21" },
+  "head": { "revision": "def456", "snapshot": "c41a…d70e" },
+  "evidence": "evidence/baseline.json",
   "declaration": { "file": "change-intent.json", "digest": "7d0c…9e11" },
   "observed": {
     "architectureChanged": true,
@@ -51,9 +52,14 @@ must not disagree with what is written here.
 ```
 
 The record carries **references, never graphs**: `base`/`head` name revisions
-and snapshot files, `findings`/`debt` carry identity strings, and each
-`affected` list holds identity strings only. An event is a pointer into the
-evidence, not a second copy of it.
+and snapshot identities — the hash `snapshotIdentity` computes over exactly the
+graph that side was judged over — `findings`/`debt` carry identity strings, and
+each `affected` list holds identity strings only. An event is a pointer into the
+evidence, not a second copy of it. The two commands that consume a baseline
+file (`delta`, `change`) also disclose where that file sat on the writing
+machine in a top-level `evidence` reference, the same way a `change` event's
+`declaration.file` names the intent file — a storage pointer, deliberately
+outside the identity.
 
 Those identity strings are delimiter joins — an edge spells
 `source>target:type`, a violation finding spells `messageId:source:target`
@@ -91,6 +97,14 @@ dedupeKey, so the store can prove idempotency instead of guessing it. An id
 that included `recordedAt` would make every rerun a new event, and re-running
 `archkeep change --event-out` over an unchanged transition would append a
 duplicate of itself forever.
+
+**Nor does a storage path.** The identity sides carry the state itself — a
+`revision` and the snapshot identity — never a file location, so the same
+transition judged over the same evidence at a different path (a copied
+worktree, a different CI checkout, a machine whose evidence directory lives
+elsewhere) is the same event and the store dedupes it. The writing machine's
+path reaches the record only through the top-level `evidence` disclosure
+described above, which no part of the tuple hashes.
 
 **The identity is only reproducible from committed, clean evidence.** A
 commitless head serializes its `head` as `{}`, and a dirty tree names a commit
