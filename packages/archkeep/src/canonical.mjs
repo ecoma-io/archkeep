@@ -11,7 +11,8 @@
  * correct.
  *
  * Used by `computePolicyFingerprint` (`../commands/graph.mjs`), the intent
- * fingerprint (`./intent-fingerprint.mjs`), the evidence-snapshot serializer
+ * fingerprint (`./architecture-intent/intent-fingerprint.mjs`), the
+ * evidence-snapshot serializer
  * (`./commands/delta-snapshot.mjs`, through the exported replacer below), and
  * anything else a fingerprint or a byte-deterministic file is produced from —
  * one canonicalizer, in one place, so two serializations cannot drift.

@@ -121,13 +121,12 @@ only blocks on `failure`.
 `.github/workflows/analysis.yml` runs CodeQL (both `javascript-typescript` and
 `actions`), Semgrep, and Gitleaks, aggregated behind an `analysis-gate` job.
 
-**Two required checks, and `analysis-gate` is not one of them.** The branch
-ruleset requires `ci-gate` and `Semgrep`, the latter named directly — measured
-against the ruleset on 2026-08-22, not assumed. So CodeQL or Gitleaks going red
-turns `analysis-gate` red and still lets a merge through: that aggregate is a
-signal to read, not a wall. `ci-gate` being a name rather than a job list is
-what lets a job added to `ci.yml` later tighten the gate with no repository
-setting touched.
+**Two required checks, and both are walls.** The branch ruleset requires
+`ci-gate` and `analysis-gate` — measured against the ruleset API on
+2026-09-05, not assumed — so a red CodeQL or Gitleaks leg fails
+`analysis-gate`, and a failing `analysis-gate` blocks the merge. `ci-gate`
+being a name rather than a job list is what lets a job added to `ci.yml` later
+tighten the gate with no repository setting touched.
 
 ## The boundary law
 

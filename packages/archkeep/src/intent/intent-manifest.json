@@ -110,7 +110,7 @@
           "type": "source-evidence",
           "path": "src/report/json.mjs",
           "assertion": "SCHEMA_VERSION = 2 — the envelope's schemaVersion constant",
-          "sha256": "090418f6f60dec51638976dff658c55f8a932012bfc7c8bc59952b0f03543340"
+          "sha256": "ac6db6e74b4ef7e54db12cc14ef57a7c5080ad081d7bf1273beb5ba543dcac24"
         },
         {
           "type": "source-evidence",
