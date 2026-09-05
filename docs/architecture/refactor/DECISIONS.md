@@ -151,7 +151,37 @@ exists). A record never restates the constitution — a field whose answer is
     AUTHORITY-MAP, CON-1, INV-4, INV-25 in the same PR.
   - _Verification/acceptance evidence_: doc gates green; the hostile-reader
     misreading list ([CONTEXT.md](CONTEXT.md#chk-1-prep--phase-05--decision-closure--phase-1-execution-baseline-2026-09-05))
-    re-derived with none surviving.
+    re-derived with none surviving. _Re-verified from source 2026-09-05
+    (Phase 1-B)_: the status fold is the three-state ternary at
+    `src/commands/rules.mjs:445-446`, folded to the envelope `exitCode` from
+    the shared `EXIT` table at `rules.mjs:448`, and to the process exit at
+    `cli.mjs:2040-2042` — the map's `cli.mjs:2039-2042` names the site, and
+    2039 is the comment naming all three codes. The envelope is built through
+    the shared `jsonEnvelope` at `rules.mjs:479-494` and held by the
+    `EXIT_FOR_STATUS` refusal at `src/report/json.mjs:92` (comment `:88-91`,
+    thrown message `:93-98`; the status-keyed view is derived from `EXIT` at
+    `src/verdict.mjs:37-42`), and it carries `result`, never `decision`
+    (`delta.mjs:1085-1094` and `change.mjs:1147-1156` do carry one). No lane
+    symbol is imported (`rules.mjs:58-66`); `rulesVerifyCommand` is consumed
+    only by `cli.mjs` (import `:138`, dispatch `:1999`) and re-exported by
+    `commands.mjs:54`. AUTHORITY-MAP's carrier entry, fold-roster bullet, and
+    decision-rights row re-read true against this source — its five exit-1
+    verbs match [exit-codes.md](../../reference/exit-codes.md) — so no
+    amendment was needed. Pins as measured: the envelope side is held through
+    the real latch (`rules.test.mjs` ok→0 `:183-184`; findings→1 `:125-126`,
+    `:170-171`, `:223-224`; the unreadable-catalog throw `:77-83`), the
+    spawned exit-1 side by `exit-matrix.integration.test.mjs:626-630`, and
+    the verb's spawned exit-3 side by that matrix's `ok` row `:622`
+    (`rules list` over the catalogless fixture world — the same dispatch
+    catch). One side is unpinned — a spawned clean-catalog exit 0 for
+    `rules verify`: the matrix's fixture deliberately drives the findings
+    side (`:412-413`), and a behavioral pin rides 1-A per this unit's
+    isolation rule, so this documentation unit adds none and no code was
+    touched. Measured for 1-A: the ternary's `no-verdict` arm is
+    unreachable today — every rule lands in exactly `findings` or `passed`,
+    and the `unknown` array at `rules.mjs:362` is never pushed — so exit 3 on
+    an unreadable catalog arrives through the dispatch catch at
+    `cli.mjs:2023-2025`, not the status fold.
   - _Supersedes_: the carrier-roster wording of
     [PD-6](#program-decisions) (five carriers → four enforcement carriers
     plus the integrity surface); PD-6's five-fold-site count stands.
