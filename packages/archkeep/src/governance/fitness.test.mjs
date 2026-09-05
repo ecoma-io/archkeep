@@ -1240,6 +1240,34 @@ describe("fitnessSnapshot and evaluateFitness", () => {
     expect(fitnessVerdictFor([notApplicable]).verdict).toBe("not_applicable");
     expect(fitnessVerdictFor([]).verdict).toBe("not_applicable");
   });
+
+  it("keeps the precedence loud across the mixed fold combinations", () => {
+    const pass = { verdict: "pass", name: "a", evidence: {}, message: "m" };
+    const fail = { verdict: "fail", name: "b", evidence: {}, message: "m" };
+    const unknown = { verdict: "unknown", name: "c", evidence: {}, message: "m" };
+    const notApplicable = { verdict: "not_applicable", name: "d", evidence: {}, message: "m" };
+    // P1-19: `not_applicable` beside a judged row is a report row, not a
+    // verdict — it neither fails the run nor demotes it.
+    expect(fitnessVerdictFor([notApplicable, pass]).verdict).toBe("pass");
+    expect(fitnessVerdictFor([notApplicable, unknown]).verdict).toBe("unknown");
+    expect(fitnessVerdictFor([notApplicable, fail]).verdict).toBe("fail");
+    expect(fitnessVerdictFor([pass, unknown, fail]).verdict).toBe("fail");
+  });
+
+  it("refuses a row whose verdict is outside the vocabulary — a malformed row folds to pass today", () => {
+    // The silent direction: a stranger verdict matches none of the fold's
+    // named arms and lands on `pass` — the loudest clean state a governance
+    // run can emit, fabricated from a row nobody judged. The fold is an
+    // overall-verdict constructor, so it owns the same latch buildDecision
+    // does rather than trusting every caller to have latched first.
+    for (const verdict of ["perhaps", "PASS", "pass ", "skipped", "", 42, true, {}]) {
+      expect(() =>
+        fitnessVerdictFor([
+          { verdict: /** @type {any} */ (verdict), name: "ghost", evidence: {}, message: "m" },
+        ]),
+      ).toThrow(/expected one of/);
+    }
+  });
 });
 
 describe("determinism", () => {
