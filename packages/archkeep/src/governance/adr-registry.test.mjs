@@ -593,6 +593,8 @@ describe("backward compatibility — the repository's own registry (wave 2)", ()
       "0006-dotnet-language-integration",
       "0007-no-semantic-model-expansion",
       "0008-snapshot-identity-per-family",
+      "0009-moon-derived-tags-provider-policy",
+      "0010-moon-workspace-layout-inference",
     ]);
     for (const record of records) {
       expect(record.status).toBe("accepted");
