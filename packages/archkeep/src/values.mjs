@@ -37,6 +37,17 @@ export const isStringArray = (value) =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
 
 /**
+ * Whether a value is a string a reader could actually act on — non-empty
+ * after trimming. The verdict contract's reason fields (I3/I4) refuse
+ * everything else: `""` and `"   "` are byte-present but semantically
+ * absent, and a non-string reason would ship a `typeof` artifact where the
+ * reader was promised a sentence.
+ *
+ * @type {(value: unknown) => value is string}
+ */
+export const isNonEmptyString = (value) => typeof value === "string" && value.trim() !== "";
+
+/**
  * A value's type, for an error message that shows what was actually there.
  *
  * @param {unknown} value

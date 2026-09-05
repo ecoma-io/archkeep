@@ -43,6 +43,8 @@
  * path — a path, never a second implementation.
  */
 
+import { describe, isNonEmptyString } from "../values.mjs";
+
 /** The four canonical verdict values. */
 export const VERDICTS = Object.freeze(["pass", "fail", "unknown", "not_applicable"]);
 
@@ -113,7 +115,7 @@ export function fitnessVerdict({ verdict, name, evidence, message, rows, notAppl
         `expected one of ${VERDICTS.join(", ")}.`,
     );
   }
-  if (verdict === "not_applicable" && notApplicableReason === undefined) {
+  if (verdict === "not_applicable" && !isNonEmptyString(notApplicableReason)) {
     throw new Error(
       `archkeep: fitness function "${name}" returned "not_applicable" without ` +
         `notApplicableReason — invariant I4: the reader must be told why the ` +
@@ -206,6 +208,21 @@ export function buildDecision(run) {
     throw new Error("archkeep: buildDecision needs either a status or an explicit verdict");
   }
   const verdict = run.verdict ?? verdictForStatus(run.status);
+  // The vocabulary latch. `verdictForStatus` cannot produce a stranger, so
+  // this refuses exactly the explicitly-passed verdicts — and it must run
+  // BEFORE the status-conflict check below, so a malformed verdict reports
+  // the vocabulary it violated rather than a conflict it never had. Without
+  // this latch, "perhaps", "PASS", `42` and `{}` fell through the
+  // pass/fail/unknown arms into the not_applicable one and SHIPPED whenever
+  // `notApplicableReason` happened to be truthy — a byte-legal decision
+  // about a workspace nobody judged.
+  if (!isVerdict(verdict)) {
+    throw new Error(
+      `archkeep: refusing to build a decision with verdict ${describe(run.verdict)} — ` +
+        `expected one of ${VERDICTS.join(", ")}. This is a bug in the command that ` +
+        `built the decision.`,
+    );
+  }
   if (
     run.verdict !== undefined &&
     run.status !== undefined &&
@@ -260,17 +277,32 @@ export function buildDecision(run) {
   }
 
   if (verdict === "unknown") {
+    // An absent reason (undefined/null) still defaults to the generic one —
+    // absence is not emptiness. A SUPPLIED reason must actually say
+    // something: "" and "   " are byte-present but semantically absent, and
+    // a non-string reason would ship a `typeof` artifact where the reader
+    // was promised a sentence (I3).
     const reason =
       run.reason ??
       (run.coverageComplete === true ? "no verdict was reached" : "coverage was incomplete");
+    if (!isNonEmptyString(reason)) {
+      throw new Error(
+        `archkeep: refusing to emit an "unknown" decision with a ${describe(run.reason)} reason — ` +
+          `I3 requires a non-empty reason naming why no verdict was reached. ` +
+          `This is a bug in the command that built the decision.`,
+      );
+    }
     return withSampleTime({ verdict, reason }, run.sampleTime);
   }
 
-  // verdict === "not_applicable" (I4).
-  if (!run.notApplicableReason) {
+  // verdict === "not_applicable" (I4). The reason must be a string a reader
+  // could act on — the falsy check this replaces refused "" but SHIPPED
+  // "   " and non-strings, the same byte-present-semantically-absent hole.
+  if (!isNonEmptyString(run.notApplicableReason)) {
     throw new Error(
       `archkeep: refusing to emit a "not_applicable" decision without notApplicableReason — ` +
-        `"did not apply" and "did not run" must never be indistinguishable. ` +
+        `"did not apply" and "did not run" must never be indistinguishable, and a reason of ` +
+        `${describe(run.notApplicableReason)} tells the reader nothing. ` +
         `This is a bug in the command that built the decision.`,
     );
   }

@@ -39,6 +39,7 @@
  */
 import { EXIT_FOR_STATUS } from "../verdict.mjs";
 import { verdictForStatus } from "../governance/verdict.mjs";
+import { describe, isNonEmptyString } from "../values.mjs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -163,10 +164,11 @@ export function jsonEnvelope({ command, context, status, exitCode, coverage, res
     // `result`. A hand-built "fail" with no findings is still a loud lie
     // (status "findings", exitCode 1, verdict "fail"), never the silent
     // direction.
-    if (decision.verdict === "unknown" && decision.reason === undefined) {
+    if (decision.verdict === "unknown" && !isNonEmptyString(decision.reason)) {
       throw new Error(
         `archkeep: refusing to build a JSON envelope where an "unknown" decision has no reason — ` +
-          `I3: an unknown verdict must say why no verdict was reached, or it reads as a shrug. ` +
+          `I3: an unknown verdict must say why no verdict was reached, or it reads as a shrug ` +
+          `(a reason of ${describe(decision.reason)} is not a reason). ` +
           `This is a bug in the command that built the envelope.`,
       );
     }
