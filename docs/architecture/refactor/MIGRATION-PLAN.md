@@ -334,8 +334,12 @@ One owner per concept, in fact and in name.
      with validation-message string arrays (`findNativeModelViolations`,
      the config-law validators, `originViolations` — all exit 3); code
      moving between the classes silently changes what "clean" means.
-     **Decision** carries two unrelated meanings (run envelope vs ADR
-     record, both live inside `commands/evaluation-primitives.mjs`);
+     **Decision** carries two unrelated meanings (the run-envelope decision
+     object — governance-owned, `verdict.mjs`'s `buildDecision` — vs the
+     ADR-record family in `adr-registry`;
+     `commands/evaluation-primitives.mjs` hosts only the record meaning —
+     corrected by the 2-A audit against the Phase 1 close's "both live
+     inside `evaluation-primitives.mjs`");
      **Evidence** has four spellings (custom-rule bundle, delta evidence
      snapshot, `Violation.evidence` string, fitness/decision evidence
      objects) beside the naming hazard `report/evidence.mjs` (which is the
@@ -356,15 +360,18 @@ One owner per concept, in fact and in name.
      `nodeTypeOf`'s `lib` fallback (primitives the LSP row records as
      shared, not second copies), and `isDotnetGeneratedOutput`'s
      generated-output exclusion (`native/discover.mjs:218`). Each needs
-     its per-item verdict, with 1-C's two ADRs as the precedent shape. For
-     the ladder question specifically, the same audit found no
-     demonstrated defect class that tests cannot pin, stages interleaved
-     inside single functions, and no second consumer of a stage's output —
-     evidence for "implementation boundary" — and named the graduation
-     triggers that would justify revisiting: a second consumer needing a
-     stage's output independently of evaluation, the LSP fourth path
-     regrowing after Phase 7's collapse, a seam defect tests demonstrably
-     cannot pin, or a stage word with drifting constructor sites.
+     its per-item verdict, with 1-C's two ADRs as the precedent shape.
+     For the ladder question specifically, the same audit found no
+     demonstrated defect class that tests cannot pin, and stages
+     interleaved inside single functions. Its "no second consumer of a
+     stage's output" clause was corrected by the 2-A adjudication: it holds
+     only for the intermediate stages viewed in isolation, so the
+     graduation trigger is **mid-ladder entry** — a second computation path
+     arriving between two stages — not downstream consumption of the
+     ladder's composed outputs. The remaining triggers stand: the LSP
+     fourth path regrowing after Phase 7's collapse, a seam defect tests
+     demonstrably cannot pin, or a stage word with drifting constructor
+     sites.
    - recommend one of exactly three outcomes **per audited concept** —
      **(a)** a canonical domain object, **(b)** a shared construction
      contract with no new object, or **(c) no canonical object at all** (the
@@ -381,6 +388,19 @@ One owner per concept, in fact and in name.
    architecture decision) and maintainer-approved **before** item 2-B starts.
    Classification: DOCUMENTATION-CONTRACT CLARIFICATION; acceptance: the
    recorded, approved decision; rollback: revert the record.
+   **Outcome (2026-09-06): adjudicated and maintainer-approved —
+   [PD-13](DECISIONS.md#program-decisions).** Eleven per-concept rulings
+   (Observation/Violation/Verdict/Policy/Provenance = (a);
+   Finding/Evidence/Evaluation/Intent/Snapshot = (c); Decision = two
+   meanings split by meaning), the ladder stays an implementation boundary
+   with its revisit trigger renamed to mid-ladder entry (above), and seven
+   bounded-derivation verdicts recorded in
+   [BOUNDARIES.md](BOUNDARIES.md)'s provider-seam section. OQ-5, OQ-7, and
+   OQ-10 close with this record — OQ-7 as an **inequality**, its defect
+   filed as [#737](https://github.com/ecoma-io/archkeep/issues/737) (work
+   item WI-1, Phase 2 correctness hardening) — and OQ-15 closes by
+   [PD-14](DECISIONS.md#program-decisions). Item 2-B proceeds as
+   relationship pins per outcome (c).
 
 2. **2-B — The finding concept** — implement 2-A's approved outcome across
    the four judgment sites

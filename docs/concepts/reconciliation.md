@@ -28,8 +28,9 @@ Reconciliation is **read-only by design**. It reports divergence and it
 **proposes** repair paths — an add-only, removal, tag-change, or
 boundary-change candidate — each marked `proposed: true` and
 `notAuthoritative`, and it never applies one. The feature has no write-back
-path: `architecture-intent.json` stays byte-identical after every run, which is
-a property the integration test asserts. Authority over the model stays with
+path: `architecture-intent.json` stays byte-identical across the command's
+runs — the property `reconcile.integration.test.mjs` asserts for both
+`--propose` shapes. Authority over the model stays with
 the intentional human or agent; the tool's job is to make the gap and the
 options concrete, not to decide the architecture.
 

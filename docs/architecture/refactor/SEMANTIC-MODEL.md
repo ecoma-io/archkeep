@@ -51,12 +51,18 @@ Across the four judgment construction sites (`violationOf`, `judgeEdge`,
 Each site builds its own shape and its own message wording, then all four fold
 into the one verdict lane. The lane is singular (good,
 [CON-1](CONSTITUTION.md#con-1--one-enforcement-authority)); the finding concept
-feeding it is plural in spelling. This is the largest
-[CON-4](CONSTITUTION.md#con-4--canonical-semantic-models) gap Phase 2 owns —
-and Phase 2 **starts with the audit, not an object**: work item 2-A
-adjudicates what a Finding is before any canonicalization, and "no canonical
-Finding object" is one of its three legitimate outcomes
-([MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening)).
+feeding it is plural in spelling. The 2-A adjudication
+([PD-13](DECISIONS.md#program-decisions)) ruled **outcome (c)**: no canonical
+Finding object. What binds instead is the relationship pin: every finding
+feeds the one verdict lane through families → count keys → `verdictFor`, and
+`check.mjs:519-523` is the documented normalization seam where the four
+shapes become one evaluation input. The "violation" word-collision map is
+pinned in
+[MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening)'s
+2-A inputs, and a Finding that grows judgment fields, lifecycle state, or
+surface-specific rendering stays rejected at review
+([CON-3](CONSTITUTION.md#con-3--generalize-computation-not-domain-vocabulary),
+[CON-4](CONSTITUTION.md#con-4--canonical-semantic-models)).
 
 ## Message-template registries — one shape, three homes
 
@@ -86,9 +92,17 @@ construction. Registers, not defects:
 - **R3** — reconciliation verdicts `matched/undeclared/unfulfilled/unproven`
   (`change.mjs:27-45`; membership guard refuses strangers).
 - **R4** — evolution dispositions: stored vocabulary in
-  `evolution-event.mjs:48`, but the mapping functions in `delta.mjs:399-404`,
+  `evolution-event.mjs:48`; the mapping functions in `delta.mjs:399-404`,
   `change.mjs:403-431` and `evolution.mjs:802-830` do not validate their
-  output against it — only the store does, at write time.
+  output against it. Measured by the 2-A audit: the store validates
+  identity at **write** time and vocabulary at **read** time
+  (`validateEventRecord`, reachable only from `readEvents`) — so the write
+  path accepts records the read path refuses
+  ([#738](https://github.com/ecoma-io/archkeep/issues/738)), and
+  `deltaDisposition` answers `accepted` for any status outside its
+  documented three ([#739](https://github.com/ecoma-io/archkeep/issues/739)).
+  Phase 2 correctness hardening owns both fixes; this register states the
+  gap, not the fix.
 - **R5** — delta verdict-deltas `pass|fail` words from counts
   (`delta-classify.mjs:635-641`); a projection, not a verdict record.
 - **R6** — history transition signals are per-record facts; classification
@@ -108,14 +122,75 @@ construction. Registers, not defects:
   lane) and `src/governance/verdict.mjs` (the vocabulary/decision owner).
   Deliberate layering (`verdictFor` composes `buildDecision`), but imports
   read ambiguously and a mis-route is silent. Phase 2 candidate: rename one or
-  pin the relationship in both headers.
-- **Three "intent" nouns** — `src/architecture-intent/` (the constraint-table
-  law, `architecture-intent.json`), `src/intent/` (the manifest + Contract-K
-  guard), `change-intent.mjs` (declared-change grammar). Different concepts,
-  shared word. The ownership table above is the disambiguator; a rename is a
-  Phase 2 candidate judged under
+  pin the relationship in both headers. The 2-A audit added a third collision
+  inside `src/verdict.mjs` itself: `judgeIntent`'s result carries a
+  `.verdict` field — the word for a different carrier (WI-4, rename at its
+  own gate).
+- **Four "intent" surfaces** — `src/architecture-intent/` (the
+  constraint-table law, `architecture-intent.json`), `src/intent/` (the
+  manifest + Contract-K guard), the declared-change grammar at
+  `src/commands/change-intent.mjs`, and the run envelope's intent shape
+  (the §1 mapping input `delta`/`change` build). Different concepts, one
+  word; [PD-13](DECISIONS.md#program-decisions) ruled (c) — four surfaces,
+  never one type. The ownership table above is the disambiguator; a rename
+  is a Phase 2 candidate judged under
   [CON-3](CONSTITUTION.md#con-3--generalize-computation-not-domain-vocabulary)
   (keep domain words; rename only the homonyms).
+- **`observed` hides the ladder** — the drift/fitness family calls the
+  provider graph "observed" (`architecture-intent/model.mjs:11`,
+  `report/drift-text.mjs`, `governance/fitness-registry.mjs`), but the
+  graph it names is the ladder's composed output — observed **plus**
+  normalized and derived — never the raw read. [PD-13](DECISIONS.md#program-decisions)
+  keeps the word per family; what binds is
+  [BOUNDARIES.md](BOUNDARIES.md)'s ladder boundary sentence, not a rename.
+- **`evidence` five spellings, one a misnomer** — the custom-rule evidence
+  bundle (`custom-rules/evidence.mjs`), the delta evidence snapshot
+  (`delta-snapshot.mjs`, bytes-identity by decision), the
+  `Violation.evidence` string, the fitness/decision evidence objects, and
+  `report/evidence.mjs` — which is the `buildDecision` re-export and is
+  not evidence at all (WI-3 rename). [PD-13](DECISIONS.md#program-decisions)
+  ruled (c): five families, two identity conventions, never unified.
+
+## 2-A adjudication — per-concept outcomes
+
+[PD-13](DECISIONS.md#program-decisions) is the full record; this table is
+the living map's summary. Outcome classes: **(a)** a canonical domain
+object, **(b)** a shared construction contract, **(c)** no canonical
+object, relationships pinned.
+
+| Concept     | Outcome               | The pin                                                                                                    |
+| ----------- | --------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Finding     | (c)                   | families → count keys → `verdictFor`; `check.mjs:519-523` the normalization seam                           |
+| Evidence    | (c)                   | five families, two identity conventions; `report/evidence.mjs` rename = WI-3                               |
+| Observation | (a)                   | `observation.mjs`, family-consistent construction                                                          |
+| Evaluation  | (c)                   | `evaluation-primitives.mjs` hosts helpers, never a canonical object                                        |
+| Violation   | (a)                   | `violationOf`; `src/analysis/contract.md` stays the shape law                                              |
+| Decision    | (a), split by meaning | envelope: `buildDecision` (`governance/verdict.mjs`); ADR record: `adr-registry`                           |
+| Verdict     | (a), per module       | `fitnessVerdict` co-located by family; `judgeIntent`'s `.verdict` field = WI-4                             |
+| Policy      | (a)                   | `policy.mjs` owns the disposition ladder; the `provenance-command.mjs:267` bypass = WI-2                   |
+| Intent      | (c)                   | four surfaces (naming hazards above)                                                                       |
+| Snapshot    | (a), per family       | declaration snapshots (`snapshotIdentity`, ADR 0008) vs observation captures (`captureDelta`); never mixed |
+| Provenance  | (a), per family       | `resolveProvenance` (repo origin); `recordDecisionLifecycle` dormant = WI-6 (wire-or-delete)               |
+
+Two family facts the table compresses, stated once here:
+
+- **Snapshot is two concepts, not one.** The declaration-snapshot family
+  (graph captures, ADR 0008 identity) and the delta evidence snapshot
+  (bytes-identity, no id field) share a word and nothing else. A consumer
+  of one never imports the other's identity or classifier — the
+  trajectory paragraph below is the checked instance.
+- **Trajectory's consumption edges (OQ-10).** Trajectory is a first-class
+  consumer of the Graph snapshot family: it imports
+  `readSnapshots`/`classifyTransition`/`edgeIdentityKey` plus the envelope
+  internals, and imports none of
+  `snapshotIdentity`/`classifyEvolution`/`fitnessSnapshot` — the
+  declaration-snapshot family is not its lane.
+
+The seven bounded-derivation verdicts (`judgeCoverage`, `moon:declared`
+synthesis, `nodeTypeFromLayer`, `isRoot` suppression, `nodeTypeOf`'s lib
+default, `isDotnetGeneratedOutput`, and the seventh candidate that earned
+no verdict) live where the behaviors live:
+[BOUNDARIES.md](BOUNDARIES.md)'s provider-seam section.
 
 ## Change rules
 
