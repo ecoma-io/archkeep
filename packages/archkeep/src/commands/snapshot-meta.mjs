@@ -24,6 +24,39 @@
  */
 
 /**
+ * The one wording for the dirty-baseline disclosure, shared by every command
+ * that compares a snapshot pair (`diff`, `delta`, `change`). Three copies of
+ * one disclosure spell drift three ways, so the wording lives beside the fact
+ * it translates. A consumer that pins the baseline by its own contract names
+ * that pin (`pinned`) — `change`'s contract carries `base.commit`; a diff or
+ * delta pair has no such pin, so its note names the commit the snapshot
+ * itself claims.
+ *
+ * @param {boolean} pinned Whether the consumer's contract pins the base commit.
+ * @returns {string} The disclosure note.
+ */
+export function dirtyBaselineNote(pinned) {
+  return pinned
+    ? "the baseline was captured from a dirty working tree — its evidence is not a reproducible " +
+        "claim about the commit the contract pins"
+    : "the baseline was captured from a dirty working tree — its evidence is not a reproducible " +
+        "claim about the commit it names";
+}
+
+/**
+ * The one wording for the dirty-head disclosure — byte-identical in every
+ * consumer, so it is stated exactly once.
+ *
+ * @returns {string} The disclosure note.
+ */
+export function dirtyHeadNote() {
+  return (
+    "this run's working tree is dirty — the head side describes uncommitted state, not the " +
+    "commit HEAD names"
+  );
+}
+
+/**
  * Compares the provider, provenance, and policy fingerprint of two graph
  * envelopes.
  *

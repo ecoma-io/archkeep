@@ -103,14 +103,14 @@ import { providerMismatch, readEvidenceSnapshot } from "./delta-snapshot.mjs";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { blindSpotRows } from "../analysis/source-util.mjs";
 import { cyclicProjects } from "../governance/fitness-rules.mjs";
-import { snapshotIdentity } from "./history.mjs";
+import { eventSnapshotSide } from "./history.mjs";
 import { VERDICTS, fitnessVerdict, isVerdict } from "../governance/verdict.mjs";
 import { describe } from "../values.mjs";
 import { buildDecision } from "../report/evidence.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatChangeReport } from "../report/change-text.mjs";
 import { evaluateRun } from "../rules/index.mjs";
-import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
+import { compareSnapshotMetadata, dirtyBaselineNote, dirtyHeadNote } from "./snapshot-meta.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { referenceTime } from "../governance/clock.mjs";
 import {
@@ -766,16 +766,10 @@ export async function changeCommand(
     );
   }
   if (meta.dirtyBaseline) {
-    notes.push(
-      "the baseline was captured from a dirty working tree — its evidence is not a reproducible " +
-        "claim about the commit the contract pins",
-    );
+    notes.push(dirtyBaselineNote(true));
   }
   if (meta.dirtyHead) {
-    notes.push(
-      "this run's working tree is dirty — the head side describes uncommitted state, not the " +
-        "commit HEAD names",
-    );
+    notes.push(dirtyHeadNote());
   }
   if (meta.provenanceOneSided) {
     notes.push(
@@ -892,25 +886,23 @@ export async function changeCommand(
     schemaVersion: EVOLUTION_EVENT_SCHEMA_VERSION,
     kind: "reconcile",
     source: "change",
-    base: {
-      ...(typeof baseCommit === "string" ? { revision: baseCommit } : {}),
-      // The state this side names: the snapshot identity of the baseline
-      // graph the run consumed — `snapshotIdentity`, the ONE graph hash
-      // (`./history.mjs`), never the baseline's storage path. A path is
-      // machine-local; an event store committed to git is deduped across
-      // machines, so the identity tuple may not name one.
-      snapshot: snapshotIdentity({
-        ...baseGraphForDiff,
-        policy:
-          baseline.policyFingerprint === undefined || baseline.policyFingerprint === null
-            ? null
-            : { fingerprint: baseline.policyFingerprint },
-      }),
-    },
-    head: {
-      ...(typeof headCommit === "string" ? { revision: headCommit } : {}),
-      snapshot: snapshotIdentity({ ...headGraphForDiff, policy: { fingerprint: headFingerprint } }),
-    },
+    // Both sides are built through the ONE identity spelling
+    // (`eventSnapshotSide`, ./history.mjs): a revision when one is known,
+    // plus the snapshot identity of the graph the side was judged over —
+    // never the baseline's storage path, which is machine-local and must
+    // not make the identity a per-machine property.
+    base: eventSnapshotSide({
+      revision: baseCommit,
+      projects: baseGraphForDiff.projects,
+      dependencies: baseGraphForDiff.dependencies,
+      policyFingerprint: baseline.policyFingerprint,
+    }),
+    head: eventSnapshotSide({
+      revision: headCommit,
+      projects: headGraphForDiff.projects,
+      dependencies: headGraphForDiff.dependencies,
+      policyFingerprint: headFingerprint,
+    }),
     // The caller's own evidence ref — the baseline file this run consumed,
     // spelled as the run received it (the same convention `declaration.file`
     // uses for the intent path). Disclosed OUTSIDE the identity: the tuple
