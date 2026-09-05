@@ -105,7 +105,7 @@ import { blindSpotRows } from "../analysis/source-util.mjs";
 import { cyclicProjects } from "../governance/fitness-rules.mjs";
 import { eventSnapshotSide } from "./history.mjs";
 import { VERDICTS, fitnessVerdict, isVerdict } from "../governance/verdict.mjs";
-import { describe } from "../values.mjs";
+import { describe, isStringArray } from "../values.mjs";
 import { buildDecision } from "../report/evidence.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatChangeReport } from "../report/change-text.mjs";
@@ -431,6 +431,124 @@ export function reconcileDisposition(verdict, constraints = []) {
 }
 
 /**
+ * The input latch for `changeFold`: names the first way its inputs are not a
+ * shape the fold can count, or `null` when they are. A returned problem
+ * becomes the fold's refusal — never a throw, the same in-band lane
+ * `deltaFold`'s latch takes one module over.
+ *
+ * @param {object} reconciliation From `reconcileMaterialDelta`.
+ * @param {object[]} constraints Judged `fitnessVerdict` rows.
+ * @param {string[]} unprovenReasons Why the base identity could not be proven.
+ * @returns {string|null}
+ */
+function changeFoldInputProblem(reconciliation, constraints, unprovenReasons) {
+  for (const key of ["matched", "unexpected", "missingExpected"]) {
+    if (!Array.isArray(reconciliation?.[key])) {
+      return `the change fold counts "reconciliation.${key}", which is ${describe(reconciliation?.[key])} — a list that is not an array counts as empty in every lane, and an empty reconciliation reads "matched". This is a bug in archkeep, not a fact about the workspace.`;
+    }
+  }
+  if (!Array.isArray(constraints)) {
+    return `the change fold counts "constraints", which is ${describe(constraints)} — a list that is not an array counts as empty in every lane, and an empty constraint list reads "every declared constraint passing". This is a bug in archkeep, not a fact about the workspace.`;
+  }
+  for (const [index, row] of constraints.entries()) {
+    if (!isVerdict(row?.verdict)) {
+      return `the change fold counts the verdict of constraint row ${index}, which is ${describe(row?.verdict)} — a verdict outside ${VERDICTS.join(", ")} matches neither the fail nor the unknown lane, and reads as consent. This is a bug in archkeep, not a fact about the workspace.`;
+    }
+  }
+  if (!isStringArray(unprovenReasons)) {
+    return `the change fold reads "unprovenReasons", which is ${describe(unprovenReasons)} — reasons that are not a string array read as "no reasons" below, and an unproven base then reads "matched". This is a bug in archkeep, not a fact about the workspace.`;
+  }
+  return null;
+}
+
+/**
+ * The `change` exit fold, lifted out of `changeCommand` as a pure function so
+ * the mapping from the reconciliation lists and the judged constraints to the
+ * verdict is a fact a test can pin (`reconcileDisposition` directly above is
+ * the arrangement's precedent — it latches the EVENT disposition; this is the
+ * STATUS fold the envelope and the exit code read). Lane order: an unproven
+ * base identity or any undetermined constraint → `no-verdict`/3; else any
+ * unexpected fact, missing expected fact, or failed constraint →
+ * `findings`/1; else `ok`/0.
+ *
+ * The input latch runs first: input the fold cannot read is refused as a
+ * no-verdict whose single reason names it (`refused`), never folded past as a
+ * silently-empty count — `reconciliationVerdict` reads `unprovenReasons`
+ * before any list, so a malformed one reaching it unguarded can name the
+ * whole run unproven or matched for reasons the counts never supported. The
+ * literals stay hand-rolled per site by decision — the carrier folds are the
+ * pinned baseline INV-2 names, not a table to be converged
+ * (`docs/architecture/refactor/AUTHORITY-MAP.md`).
+ *
+ * @param {{matched: object[], unexpected: object[], missingExpected: object[]}} reconciliation
+ * @param {{verdict: string}[]} constraints Judged `fitnessVerdict` rows —
+ *   empty when none were declared or the base identity was unproven.
+ * @param {string[]} unprovenReasons Why the base identity could not be proven.
+ * @returns {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3,
+ *   decision: object, verdict: "matched"|"undeclared"|"unfulfilled"|"unproven",
+ *   refused?: undefined}|
+ *   {status: "no-verdict", exitCode: 3, decision: object, verdict?: undefined,
+ *   refused: string}}
+ *   `verdict` rides every judged lane because the event's `declaredIntentRows`
+ *   and `result.reconciliation` report it whichever lane fired; a refusal
+ *   carries `refused` and no verdict, and is the one return whose
+ *   `decision.reason` names a malformed input rather than a fact about the
+ *   trees.
+ */
+export function changeFold(reconciliation, constraints, unprovenReasons) {
+  const problem = changeFoldInputProblem(reconciliation, constraints, unprovenReasons);
+  if (problem !== null) {
+    return {
+      status: "no-verdict",
+      exitCode: 3,
+      decision: buildDecision({
+        status: "no-verdict",
+        coverageComplete: true,
+        findings: 0,
+        reason: problem,
+      }),
+      refused: problem,
+    };
+  }
+  const verdict = reconciliationVerdict(reconciliation, unprovenReasons);
+  const failedConstraints = constraints.filter((row) => row.verdict === "fail").length;
+  const unknownConstraints = constraints.filter((row) => row.verdict === "unknown").length;
+  const findings =
+    reconciliation.unexpected.length + reconciliation.missingExpected.length + failedConstraints;
+
+  if (verdict === "unproven" || unknownConstraints > 0) {
+    return {
+      status: "no-verdict",
+      exitCode: 3,
+      decision: buildDecision({
+        status: "no-verdict",
+        coverageComplete: true,
+        findings: 0,
+        reason:
+          verdict === "unproven"
+            ? `the change intent could not be verified against the declared base: ${unprovenReasons[0]}`
+            : `${unknownConstraints} declared constraint${unknownConstraints === 1 ? "" : "s"} could not be determined`,
+      }),
+      verdict,
+    };
+  }
+  if (findings > 0) {
+    return {
+      status: "findings",
+      exitCode: 1,
+      decision: buildDecision({ status: "findings", coverageComplete: true, findings }),
+      verdict,
+    };
+  }
+  return {
+    status: "ok",
+    exitCode: 0,
+    decision: buildDecision({ status: "ok", coverageComplete: true, findings: 0 }),
+    verdict,
+  };
+}
+
+/**
  * Judges the constraints the contract declares, through the shared engine —
  * both sides re-judged under the CURRENT law and one shared instant, exactly
  * the `delta` arrangement, so a policy edit between capture and verify cannot
@@ -746,38 +864,13 @@ export async function changeCommand(
     liveViolations = headEval.violations.length;
   }
 
-  const verdict = reconciliationVerdict(reconciliation, unprovenReasons);
-  const failedConstraints = constraints.filter((row) => row.verdict === "fail").length;
-  const unknownConstraints = constraints.filter((row) => row.verdict === "unknown").length;
-  const findings =
-    reconciliation.unexpected.length + reconciliation.missingExpected.length + failedConstraints;
-
-  /** @type {"ok"|"findings"|"no-verdict"} */
-  let status;
-  /** @type {0|1|3} */
-  let exitCode;
-  let decision;
-  if (verdict === "unproven" || unknownConstraints > 0) {
-    status = "no-verdict";
-    exitCode = 3;
-    decision = buildDecision({
-      status,
-      coverageComplete: true,
-      findings: 0,
-      reason:
-        verdict === "unproven"
-          ? `the change intent could not be verified against the declared base: ${unprovenReasons[0]}`
-          : `${unknownConstraints} declared constraint${unknownConstraints === 1 ? "" : "s"} could not be determined`,
-    });
-  } else if (findings > 0) {
-    status = "findings";
-    exitCode = 1;
-    decision = buildDecision({ status, coverageComplete: true, findings });
-  } else {
-    status = "ok";
-    exitCode = 0;
-    decision = buildDecision({ status, coverageComplete: true, findings: 0 });
-  }
+  // The verdict comes from the one fold — `changeFold` above owns the lane
+  // order and the input latch — but it is TAKEN after the notes and coverage
+  // blocks below, so a refusal can carry the disclosures (policy-changed,
+  // dirty sides) the run already computed: a withheld verdict that dropped
+  // them would hide a weaker-evidence fact from the only envelope the run
+  // emits. Nothing between this comment and the fold call reads the fold's
+  // inputs or outputs.
 
   /** @type {string[]} */
   const notes = [];
@@ -814,6 +907,39 @@ export async function changeCommand(
     blindSpots: blindSpotRows(analysis.failures),
     notes,
   };
+
+  // The exit fold, at the input boundary: input the fold cannot read is
+  // refused in-band (no-verdict, exit 3, the field named), never counted past
+  // as a silently-empty list. The refusal withholds `result` and the event
+  // exactly the coverage refusal does: a comparison whose counts could not be
+  // read has no verdict to report, and the refusal rides the envelope beside
+  // the coverage notes the run already earned.
+  const fold = changeFold(reconciliation, constraints, unprovenReasons);
+  if (fold.refused !== undefined) {
+    const refusalCoverage = { ...coverage, notes: [...notes, fold.refused] };
+    return {
+      status: fold.status,
+      coverage: refusalCoverage,
+      report: {
+        text: `change: no verdict — ${fold.refused}\n`,
+        json: renderJson(
+          jsonEnvelope({
+            command: "change",
+            context: { root, provider, marker, provenance: headProvenance },
+            status: fold.status,
+            exitCode: fold.exitCode,
+            coverage: refusalCoverage,
+            // The refusal-withheld payload, stated the way `coverageRefusal`
+            // states it: `jsonEnvelope` requires the key, the refusal has no
+            // result to report.
+            result: undefined,
+            decision: fold.decision,
+          }),
+        ),
+      },
+    };
+  }
+  const { status, exitCode, decision, verdict } = fold;
 
   // Wave 3 (design §1, §2, §5): the evolution classification and the reconcile
   // event. The classification is ALWAYS computed — it rides the envelope

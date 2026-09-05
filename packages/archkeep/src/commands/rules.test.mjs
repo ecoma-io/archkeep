@@ -235,6 +235,47 @@ describe("rulesVerifyCommand", () => {
     const json = JSON.parse(result.report.json);
     expect(json.command).toBe("rules verify");
   });
+
+  it("reports a misspelled digest key as a finding, never as a clean verify", async () => {
+    // The rules-verify fold's silent-direction twin (Phase 1-A): the fold
+    // counts `findings.length`, `passed.length`, and `catalog.rules.length`
+    // — local array literals and an array `loadCatalog` already validates —
+    // so the misspelled-key class that silently zeroes `verdictFor`'s
+    // counts cannot reach it. The one keyed input the fold's counts depend
+    // on is each catalog entry's `sha256`: a digest field silently defaulted
+    // (the misspelling `sha56` standing in for a `?? recorded` comparison)
+    // would verify a tampered artifact as clean — exit 0 over bytes the
+    // catalog never certified. This pins that it cannot: the mis-keyed
+    // entry is a digest-mismatch finding naming the rule, exit 1.
+    const misspelledDir = mkdtempSync(join(tmpdir(), "archkeep-mis-keyed-"));
+    const misspelledPath = join(misspelledDir, "catalog.json");
+
+    const catalog = JSON.parse(readFileSync(catalogPath, "utf8"));
+    const { sha256: recorded, ...entryWithout } = catalog.rules[0];
+    expect(recorded).toMatch(/^[0-9a-f]{64}$/u);
+    catalog.rules[0] = { ...entryWithout, sha56: recorded };
+    writeFileSync(misspelledPath, JSON.stringify(catalog));
+
+    const rulesDir = join(misspelledDir, "rules");
+    mkdirSync(rulesDir, { recursive: true });
+    for (const wasmFile of require("node:fs")
+      .readdirSync(join(tempCatalogDir, "rules"))
+      .filter((f) => f.endsWith(".wasm"))) {
+      writeFileSync(
+        join(rulesDir, wasmFile),
+        readFileSync(join(tempCatalogDir, "rules", wasmFile)),
+      );
+    }
+
+    const result = await rulesVerifyCommand({ catalog: misspelledPath }, { cwd: misspelledDir });
+
+    expect(result.status).toBe("findings");
+    expect(JSON.parse(result.report.json).exitCode).toBe(1);
+    expect(result.report.text).toContain(catalog.rules[0].name);
+    expect(result.report.text).toContain("Digest mismatch");
+
+    rmSync(misspelledDir, { recursive: true, force: true });
+  });
 });
 
 describe("rulesAddCommand", () => {

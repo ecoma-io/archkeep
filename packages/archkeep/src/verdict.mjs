@@ -17,6 +17,7 @@
  */
 
 import { buildDecision } from "./governance/verdict.mjs";
+import { describe, isPlainObject } from "./values.mjs";
 
 export const EXIT = Object.freeze({
   ok: 0,
@@ -89,6 +90,79 @@ export function coverageComplete({ unchecked, blindSpotCount, analyzed }) {
 }
 
 /**
+ * The count keys `verdictFor` folds, spelled as a roster because the
+ * destructure inside that function cannot be introspected. Every key is a
+ * non-negative integer or `undefined` (optional keys only); anything else —
+ * and any key not on this roster — is refused by the input latch below rather
+ * than destructured, because a misspelled key drops out of the destructure
+ * as `undefined` and `undefined > 0` is `false` in every lane: the missing
+ * count reads as zero, and a failing run can pass. The roster and the
+ * destructure are one list in two spellings; a key added to either without
+ * the other is a no-verdict on every `check` run, not a silent default.
+ */
+const REQUIRED_COUNT_KEYS = Object.freeze([
+  "violations",
+  "declaredEdgeFindings",
+  "goWorkDrift",
+  "tsconfigPathsDead",
+  "intentFindings",
+  "intentUnresolved",
+  "unchecked",
+  "analyzed",
+  "blindSpots",
+]);
+const OPTIONAL_COUNT_KEYS = Object.freeze([
+  "intentUnresolvedDecisionRefs",
+  "fitnessFail",
+  "fitnessUnknown",
+  "customRuleFail",
+  "customRuleUnknown",
+]);
+const KNOWN_COUNT_KEYS = new Set([...REQUIRED_COUNT_KEYS, ...OPTIONAL_COUNT_KEYS]);
+
+/**
+ * Whether a value is a count `verdictFor` can fold — a non-negative integer.
+ *
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isCount(value) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+/**
+ * The input latch for `verdictFor`: names the first way `counts` is not a
+ * shape the fold can read, or `null` when it is. A returned problem becomes
+ * a no-verdict verdict, not a throw — the fold's contract is the same triple
+ * every verdict-bearing caller already consumes, and a malformed internal
+ * count is a fact about the run the caller reports the same way it reports a
+ * blind spot.
+ *
+ * @param {object} counts
+ * @returns {string|null}
+ */
+function countInputProblem(counts) {
+  if (!isPlainObject(counts)) {
+    return `the verdict fold refuses counts of ${describe(counts)} — the counts must be an object for any lane of the fold to read. This is a bug in archkeep, not a fact about the workspace.`;
+  }
+  const unknownKey = Object.keys(counts).find((key) => !KNOWN_COUNT_KEYS.has(key));
+  if (unknownKey !== undefined) {
+    return `the verdict fold refuses the unknown count key "${unknownKey}" — expected one of ${[...KNOWN_COUNT_KEYS].join(", ")}. A misspelled count key would read as 0 in every lane below and can flip a failing run into a pass. This is a bug in archkeep, not a fact about the workspace.`;
+  }
+  for (const key of REQUIRED_COUNT_KEYS) {
+    if (!isCount(counts[key])) {
+      return `the verdict fold refuses counts where the required key "${key}" is ${describe(counts[key])} — every count must be a non-negative integer, or a missing one reads as 0 in every lane below. This is a bug in archkeep, not a fact about the workspace.`;
+    }
+  }
+  for (const key of OPTIONAL_COUNT_KEYS) {
+    if (counts[key] !== undefined && !isCount(counts[key])) {
+      return `the verdict fold refuses counts where the optional key "${key}" is ${describe(counts[key])} — every count must be a non-negative integer, or a malformed one reads as 0 in every lane below. This is a bug in archkeep, not a fact about the workspace.`;
+    }
+  }
+  return null;
+}
+
+/**
  * The one place that turns a run's counts into the verdict every format
  * agrees on. `runCheck` uses it for the process's exit code; `check` uses the
  * same function to word its own `--format json` envelope's `status` and
@@ -102,6 +176,12 @@ export function coverageComplete({ unchecked, blindSpotCount, analyzed }) {
  * file nobody could analyze — or an architecture-intent boundary nobody could
  * verify — is the case that must not read `ok`, because `ok` is read as
  * "checked, and fine".
+ *
+ * The input latch runs before any lane: counts the fold cannot read are
+ * refused as a no-verdict whose single reason names the malformed input
+ * (`countInputProblem` above), never folded past as silent zeros. The refusal
+ * carries `coverageComplete: false` because the coverage counts are among the
+ * unread input — a coverage claim over them would be a second unread field.
  *
  * The `decision` is the canonical 4-state verb of the same verdict
  * (`./governance/verdict.mjs`), built from the same counts so the envelope's
@@ -118,22 +198,37 @@ export function coverageComplete({ unchecked, blindSpotCount, analyzed }) {
  *   clean one. `decision.reason` joins it with the intent/fitness/custom
  *   clauses where the lane is no-verdict.
  */
-export function verdictFor({
-  violations,
-  declaredEdgeFindings,
-  goWorkDrift,
-  tsconfigPathsDead,
-  intentFindings,
-  intentUnresolved,
-  intentUnresolvedDecisionRefs = 0,
-  unchecked,
-  analyzed,
-  blindSpots,
-  fitnessFail = 0,
-  fitnessUnknown = 0,
-  customRuleFail = 0,
-  customRuleUnknown = 0,
-}) {
+export function verdictFor(counts) {
+  const problem = countInputProblem(counts);
+  if (problem !== null) {
+    return {
+      status: "no-verdict",
+      exitCode: EXIT_FOR_STATUS["no-verdict"],
+      reasons: [problem],
+      decision: buildDecision({
+        status: "no-verdict",
+        coverageComplete: false,
+        findings: 0,
+        reason: problem,
+      }),
+    };
+  }
+  const {
+    violations,
+    declaredEdgeFindings,
+    goWorkDrift,
+    tsconfigPathsDead,
+    intentFindings,
+    intentUnresolved,
+    intentUnresolvedDecisionRefs = 0,
+    unchecked,
+    analyzed,
+    blindSpots,
+    fitnessFail = 0,
+    fitnessUnknown = 0,
+    customRuleFail = 0,
+    customRuleUnknown = 0,
+  } = counts;
   const coverageReasons = coverageIncompleteReasons({ unchecked, blindSpots, analyzed });
   if (
     violations > 0 ||
