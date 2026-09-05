@@ -208,6 +208,26 @@ describe("snapshotIdentity", () => {
     expect(snapshotIdentity({ ...base, policy: null })).toBe(snapshotIdentity(base));
   });
 
+  it("moves when a project is relocated — root is identity material", () => {
+    // `root` is one of the four fields the projection keeps, so moving a
+    // project directory is an architecture change the identity must see — a
+    // rename on disk that left the identity behind would let a relocation
+    // hide inside a snapshot the ledger calls unchanged. The root here is
+    // workspace-relative by the providers' enforced contracts
+    // (`../../providers/native/model.mjs` refuses absolute and escaping
+    // roots), which is what keeps this sensitivity from becoming
+    // machine-dependence: relocating the WORKSPACE moves no id at all.
+    const before = snapshotIdentity({
+      projects: [{ name: "a", root: "libs/a", tags: [] }],
+      dependencies: [],
+    });
+    const after = snapshotIdentity({
+      projects: [{ name: "a", root: "libs/a-moved", tags: [] }],
+      dependencies: [],
+    });
+    expect(after).not.toBe(before);
+  });
+
   it("digests the same bytes the retired inline canonicalizer produced (#613)", () => {
     // `snapshotIdentity` used to inline its own key-sorting `JSON.stringify`
     // beside `../canonical.mjs` — the last private serialization spelling in
