@@ -759,6 +759,29 @@ describe("deltaCommand event output", () => {
     }
   });
 
+  it("still judges a dirty head without --event-out — weaker evidence, disclosed, never a refusal", async () => {
+    // The dirty-capability matrix's WEAKER_EVIDENCE row for the head side:
+    // uncommitted state is readable evidence about uncommitted state — the
+    // run proceeds and says so; only the event write (the test above) is
+    // refused, because that is the write that would pin a commit the
+    // evidence does not back.
+    const law = config();
+    const baseline = baselineOf({ law, root: gitRoot });
+    const readme = join(gitRoot, "README.md");
+    const committed = readFileSync(readme, "utf8");
+    writeFileSync(readme, `${committed}uncommitted\n`);
+    try {
+      const result = await deltaCommand(
+        "/invented/base.json",
+        contextOf({ records: [crossingRecord()], root: gitRoot }),
+        { config: law, readBaseline: baseline.readBaseline, now: NOW },
+      );
+      expect(result.coverage.notes.join(" ")).toMatch(/working tree is dirty/u);
+    } finally {
+      writeFileSync(readme, committed);
+    }
+  });
+
   it("writes the event when the only dirt is an untracked file — the gate is tracked-file dirt (#683)", async () => {
     const law = config();
     const baseline = baselineOf({ law, root: gitRoot });

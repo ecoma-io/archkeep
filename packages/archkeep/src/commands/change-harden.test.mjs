@@ -879,6 +879,29 @@ describe("the event identity gate (--event-out) (#701)", () => {
       expect(result.coverage.notes.join(" ")).toMatch(/working tree is dirty/u);
     });
   });
+
+  it("still reconciles a dirty baseline without --event-out — weaker evidence, disclosed, never a refusal", async () => {
+    // The dirty-capability matrix's WEAKER_EVIDENCE row for the base side: a
+    // baseline captured from an uncommitted tree is readable evidence about
+    // uncommitted state — the run proceeds and says so; only the event write
+    // (the test above) is refused, because that is the write that would pin
+    // a commit the evidence does not back.
+    const clean = baselineOf();
+    const baseline = {
+      readBaseline: (path) => {
+        const snapshot = clean.readBaseline(path);
+        return { ...snapshot, provenance: { ...snapshot.provenance, dirty: true } };
+      },
+    };
+    const result = await run({
+      ctx: contextOf({ graph: declaredHeadGraph() }),
+      baseline,
+      intent: manifest({ summary: "add payments" }),
+    });
+    expect(result.coverage.notes.join(" ")).toMatch(
+      /baseline was captured from a dirty working tree/u,
+    );
+  });
 });
 
 describe("the CLI surface", () => {
