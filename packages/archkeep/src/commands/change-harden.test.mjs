@@ -230,7 +230,8 @@ function emptyRowsManifest(overrides = {}) {
  * always injected (FUTURE) so the event's `recordedAt` is deterministic.
  *
  * @param {{ctx?: object, baseline: {readBaseline: (path: string) => object},
- *   intent?: object|undefined, config?: object|undefined, eventOut?: string,
+ *   baselinePath?: string, intent?: object|undefined, config?: object|undefined,
+ *   eventOut?: string,
  *   writeEvent?: (dir: string, event: object) => {id: string, duplicate: boolean},
  *   loadIntentOverride?: (root: string, opts?: object) => Promise<object|undefined>}} input
  */
@@ -540,8 +541,16 @@ describe("the reconcile event (--event-out)", () => {
     expect(event.kind).toBe("reconcile");
     expect(event.source).toBe("change");
     expect(event.declaration).toEqual({ file: "intent.json", digest: declarationDigest(intent) });
-    expect(event.base).toEqual({ revision: provenanceCommit(), evidence: "baseline.json" });
-    expect(event.head).toEqual({ revision: provenanceCommit() });
+    expect(event.base).toEqual({ revision: provenanceCommit(), snapshot: expect.any(String) });
+    expect(event.head).toEqual({ revision: provenanceCommit(), snapshot: expect.any(String) });
+    // Each side names a STATE — the snapshot identity of the graph that side
+    // was judged over, and the two states differ because the architecture
+    // moved. The baseline's storage path is disclosed one level up, outside
+    // the identity.
+    expect(event.base.snapshot).toMatch(/^[0-9a-f]{64}$/);
+    expect(event.head.snapshot).toMatch(/^[0-9a-f]{64}$/);
+    expect(event.base.snapshot).not.toBe(event.head.snapshot);
+    expect(event.evidence).toBe("baseline.json");
     expect(event.observed.architectureChanged).toBe(true);
     expect(event.observed.projects).toEqual({ added: ["acme-payments"], removed: [], changed: [] });
     expect(event.observed.edges).toEqual({ added: ["acme-api>acme-payments:static"], removed: [] });

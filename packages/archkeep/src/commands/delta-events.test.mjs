@@ -587,7 +587,12 @@ describe("deltaCommand event output", () => {
       { constraint: CONSTRAINT_ID, base: "pass", head: "fail" },
     ]);
     expect(event.debt).toEqual({ introduced: [], resolved: [], note: expect.any(String) });
-    expect(event.base.evidence).toBe("/invented/base.json");
+    // Each side names a STATE — the snapshot identity of the graph that side
+    // was judged over — and the baseline's storage path is disclosed one
+    // level up, outside the identity.
+    expect(event.evidence).toBe("/invented/base.json");
+    expect(event.base.snapshot).toMatch(/^[0-9a-f]{64}$/);
+    expect(event.head.snapshot).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("keeps the event id stable when the baseline is relocated — identity never names a path", async () => {

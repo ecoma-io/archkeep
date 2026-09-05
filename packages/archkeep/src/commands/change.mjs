@@ -103,6 +103,7 @@ import { providerMismatch, readEvidenceSnapshot } from "./delta-snapshot.mjs";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { blindSpotRows } from "../analysis/source-util.mjs";
 import { cyclicProjects } from "../governance/fitness-rules.mjs";
+import { snapshotIdentity } from "./history.mjs";
 import { VERDICTS, fitnessVerdict, isVerdict } from "../governance/verdict.mjs";
 import { describe } from "../values.mjs";
 import { buildDecision } from "../report/evidence.mjs";
@@ -893,14 +894,29 @@ export async function changeCommand(
     source: "change",
     base: {
       ...(typeof baseCommit === "string" ? { revision: baseCommit } : {}),
-      // The caller's own evidence ref — the baseline file this run consumed,
-      // spelled as the run received it (the same convention `declaration.file`
-      // uses for the intent path).
-      evidence: baselinePath,
+      // The state this side names: the snapshot identity of the baseline
+      // graph the run consumed — `snapshotIdentity`, the ONE graph hash
+      // (`./history.mjs`), never the baseline's storage path. A path is
+      // machine-local; an event store committed to git is deduped across
+      // machines, so the identity tuple may not name one.
+      snapshot: snapshotIdentity({
+        ...baseGraphForDiff,
+        policy:
+          baseline.policyFingerprint === undefined || baseline.policyFingerprint === null
+            ? null
+            : { fingerprint: baseline.policyFingerprint },
+      }),
     },
     head: {
       ...(typeof headCommit === "string" ? { revision: headCommit } : {}),
+      snapshot: snapshotIdentity({ ...headGraphForDiff, policy: { fingerprint: headFingerprint } }),
     },
+    // The caller's own evidence ref — the baseline file this run consumed,
+    // spelled as the run received it (the same convention `declaration.file`
+    // uses for the intent path). Disclosed OUTSIDE the identity: the tuple
+    // above names the state itself, so a relocated baseline is still the
+    // same event.
+    evidence: baselinePath,
     declaration: { file: intentPath, digest: declarationDigest(intent) },
     observed,
     affected: evolution.affected,
