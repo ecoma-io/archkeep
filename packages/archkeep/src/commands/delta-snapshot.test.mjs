@@ -453,6 +453,30 @@ describe("parseEvidenceSnapshot", () => {
     );
   });
 
+  it("refuses a provenance whose dirty bit is not a boolean — the split-brain reads clean at the gates", () => {
+    // The silent direction this closes: every gate reads `dirty === true`
+    // while every renderer interpolates truthiness, so a value of any other
+    // type parses, renders "(dirty)" where a renderer shows it, and reads
+    // CLEAN at the event gate — an event written over evidence no gate
+    // called dirty. Refused at the one door every consumer enters through;
+    // `undefined` rides along as the absent key after the JSON round-trip.
+    for (const dirty of ["yes", 1, null, {}, undefined]) {
+      const parsed = validParsed();
+      parsed.provenance = { commit: "0123abc", remote: null, dirty };
+      expect(() => parseEvidenceSnapshot(JSON.stringify(parsed), "/prov.json")).toThrow(
+        /provenance\.dirty: must be a boolean/,
+      );
+    }
+  });
+
+  it("refuses a provenance whose remote is neither string nor null", () => {
+    const parsed = validParsed();
+    parsed.provenance = { commit: "0123abc", remote: 42, dirty: false };
+    expect(() => parseEvidenceSnapshot(JSON.stringify(parsed), "/prov.json")).toThrow(
+      /provenance\.remote: must be a string or null/,
+    );
+  });
+
   it("refuses an incomplete baseline, naming how many files went unanalyzed", () => {
     const parsed = validParsed();
     parsed.coverage = {
