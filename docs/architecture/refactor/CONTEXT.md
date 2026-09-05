@@ -48,22 +48,23 @@ A missing field is a review defect, not a style preference.
 
 ## Program state
 
-| Phase                                               | Status                        | Record                      |
-| --------------------------------------------------- | ----------------------------- | --------------------------- |
-| 0 — Architecture cartography                        | **complete** (PR #727 merged) | CHK-0 below                 |
-| 0.5 — Decision closure & Phase 1 execution baseline | **complete** (this PR)        | CHK-1-PREP below            |
-| 1 — Authority hardening                             | ready — first PR is 1-A       | entry: CHK-1-PREP satisfied |
-| 2 — Canonical model hardening                       | not started                   | blocked by 1                |
-| 3 — Boundary enforcement                            | not started                   | blocked by 2                |
-| 4 — Internal extraction                             | not started                   | **blocked by GAP-A** (PD-4) |
-| 5 — Capability facades                              | not started                   | blocked by 4                |
-| 6 — CLI recomposition                               | not started                   | blocked by 5                |
-| 7 — Additional surfaces                             | not started                   | blocked by 6                |
-| 8 — Federation readiness                            | not started                   | maintainer-gated            |
-| 9 — Final hardening                                 | not started                   | blocked by 8 (or waiver)    |
+| Phase                                               | Status                                    | Record                       |
+| --------------------------------------------------- | ----------------------------------------- | ---------------------------- |
+| 0 — Architecture cartography                        | **complete** (PR #727 merged)             | CHK-0 below                  |
+| 0.5 — Decision closure & Phase 1 execution baseline | **complete** (PR #729 merged)             | CHK-1-PREP below             |
+| 1 — Authority hardening                             | **complete** (PRs #730–#734 + this PR)    | CHK-1-CLOSE below            |
+| 2 — Canonical model hardening                       | ready — entry brief in MIGRATION-PLAN 2-A | entry: Phase 1 exit recorded |
+| 3 — Boundary enforcement                            | not started                               | blocked by 2                 |
+| 4 — Internal extraction                             | not started                               | **blocked by GAP-A** (PD-4)  |
+| 5 — Capability facades                              | not started                               | blocked by 4                 |
+| 6 — CLI recomposition                               | not started                               | blocked by 5                 |
+| 7 — Additional surfaces                             | not started                               | blocked by 6                 |
+| 8 — Federation readiness                            | not started                               | maintainer-gated             |
+| 9 — Final hardening                                 | not started                               | blocked by 8 (or waiver)     |
 
-Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), and
-the Phase 0.5 PR (this one, branch `johnitvn/docs-control-plane-decisions`).
+Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
+#729 (Phase 0.5), PRs #730–#734 (Phase 1 units A, B, E, F, C), and this PR
+(Phase 1-D + the Phase 1 close, branch `johnitvn/phase1-d-seam-contract`).
 
 ## Checkpoints
 
@@ -220,9 +221,113 @@ the Phase 0.5 PR (this one, branch `johnitvn/docs-control-plane-decisions`).
   `pnpm test`, `typecheck` — plus a full control-plane consistency pass and
   an independent hostile-reader pass (12 misreadings attempted, none
   derivable); no code diff, no package diff, no generated-artifact drift.
-- **Next-phase entry criteria**: Phase 0.5 accepted (this PR merged) →
+- **Next-phase entry criteria**: Phase 0.5 accepted (PR #729 merged) →
   begin **Phase 1-A** per
   [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-1--authority-hardening).
+
+### CHK-1-CLOSE — Phase 1, authority hardening (2026-09-06)
+
+- **ID**: CHK-1-CLOSE. **Phase**: 1. **Status**: complete; every exit-gate
+  row PASS with reviewed evidence
+  ([MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-1--authority-hardening)).
+- **Goal**: harden the verdict-fold inputs against the silent direction
+  (1-A); verify the `rules verify` classification against source (1-B);
+  adjudicate the Moon provider's policy surface per item (1-C); define the
+  provider seam as a source-verified contract (1-D); pin the two
+  edge-identity spellings against each other (1-E); close the six
+  documentation divergences (1-F). Contract clarity throughout; no
+  abstraction created.
+- **Units**:
+  - 1-A → PR #730 (`1e72eb0`): refusal latches at all five fold sites
+    (`verdictFor`, delta/change/fitness folds, `rules verify` fold, CLI
+    exit folds); red-by-construction twins planted, demonstrated red,
+    restored; valid-input fixtures byte-identical; exit-matrix green.
+    Behavior change by design (malformed inputs now refuse instead of
+    folding to zero), named in the changelog.
+  - 1-B → PR #731 (`b31aaa6`): dated PD-8 verification extension in
+    DECISIONS.md; AUTHORITY-MAP re-read true against source; every line
+    ref re-measured after 1-A's merge; no `packages/` change.
+  - 1-C → PR #734 (`e58b29d`): MOON-POLICY.md adjudicates all five embedded
+    policies — three contract-backed normalizations (root-edge domain
+    exclusion; the #262 vocabulary inversion; the #280 scope collapse) and
+    two recorded provider policies
+    ([ADR 0009](../../adr/0009-moon-derived-tags-provider-policy.md),
+    [ADR 0010](../../adr/0010-moon-workspace-layout-inference.md)); registry
+    roster pin; no silent retention.
+  - 1-D → this PR: the six-column per-provider contract table in
+    [BOUNDARIES.md](BOUNDARIES.md#provider-seam) — Acquisition,
+    Normalization, Bounded derivation, Failure/loudness, Canonical output,
+    Consumer — for Nx, native, Moon, and the LSP's private path; the
+    responsibility ladder (Acquisition → Normalization → Bounded derivation
+    → Canonical engine input → Evaluation) stated once and cited by
+    Phase 2-A; LSP divergence registered as "collapses in Phase 7" with its
+    Current/Target/Phase/Reason block. No `packages/` change; no new
+    abstraction (the Phase 7 coupling note records the three provider-object
+    shapes without proposing an interface).
+  - 1-E → PR #732 (`63ed90d`): both identity headers cross-referenced
+    (ADR-0008 + INV-6); headers-first chosen over a distinct type, review
+    upheld; identity suites green; manifest digests updated.
+  - 1-F → PR #733 (`3c8deb0`): all six riders closed; D6 re-measured
+    against the GitHub rulesets API at fix time; coordinator review caught
+    and fixed two defects before merge (a false custom-rule
+    `not_applicable` emission claim; a missing fourth emission site).
+- **Invariants touched**: INV-2/INV-4 gap (five fold sites now refuse
+  malformed inputs; twins pin the silent direction); INV-6 (1-E pins);
+  INV-9 adjudication half (1-C) and seam-table half (1-D); INV-18 digests
+  updated in 1-A, 1-E, 1-F. INV-2's gap column and INV-4's wording now
+  reflect the latch; INV-9's "policy adjudication" half closed.
+- **Canonical ownership changes**: none — no semantic moved, no rename, no
+  new canonical object. PD-8's classification verified from source; the
+  observed/normalized/derived/evaluated/decided ladder is documented as an
+  implementation boundary pending 2-A's ruling.
+- **Dependency-boundary changes**: none inside `packages/`; BOUNDARIES.md's
+  provider-seam section becomes the contract table the LSP collapse (Phase 7) and import-direction scan (Phase 3) cite.
+- **Contracts affected and compatibility classification**: 1-A —
+  Semantic change on the 0.x line (minor, behavior change named in the
+  changelog: what an unchanged-but-malformed workspace is told differs);
+  1-B–1-F — documentation/contract clarification, code pin-only.
+- **Differential evidence**: exit-matrix green (1-A, both CI legs);
+  identity suites 143 tests (1-E); Moon suite 177 tests (1-C);
+  `check-docs-claims-parity` green in CI for every landed PR; the docs
+  gates (`check-docs-links`, `format:check`) green locally for this PR.
+- **Provider seam status**: contract landed; both faces share
+  `requireSingleProjectModel`; Moon items 4–5 recorded as provider-owned
+  derived inputs with enforcement consequences (cited, not re-judged);
+  the LSP private path (:398–533) registers as temporary divergence.
+- **Unresolved questions**: OQ-15 (new, `workspaceLayoutSource` provenance
+  overclaim — owner Phase 2-A); OQ-4/5/6/7/9/10 unchanged (Phases 2/3,
+  GAP-A); OQ-8/11/14 maintainer-gated; OQ-12 closed by 1-F's D6 (dated
+  ruleset measurement). Divergence 1 and 4 closed;
+  divergences 2 (LSP) and 3 (MCP seam) remain, owned by Phase 7.
+- **Deferred findings**: none BLOCKER for Phase 2. The workspaceLayoutSource
+  vocabulary widening is a recorded cost (ADR 0010), not a blocker; the
+  LSP/MCP divergences pre-date Phase 1 and carry Phase 7 ownership.
+- **Rejected approaches**: fold unification through `verdictFor` (PD-6 —
+  semantics change, not conformance); routing `rules verify` through
+  `buildDecision`/`verdictFor` (PD-8); a distinct edge-identity type (1-E
+  demonstrated headers suffice); `IProvider`-style seam abstraction for
+  symmetry (1-D: contract clarity, no interface); "provider = observation
+  only" as the seam sentence (replaced by the four-stage ledger); widening
+  `workspaceLayoutSource` in this PR (its own compatibility-classified
+  change, owned by Phase 2-A); closing historical findings that current
+  main already invalidated.
+- **Debt budget**: before — five unhardened fold sites, an unadjudicated
+  Moon policy surface, six stale doc sentences, unpinned identity
+  spellings, an unverified PD-8 record, an undefined provider seam; closed
+  — all six; introduced — the recorded-not-fixed `workspaceLayoutSource`
+  provenance cost (now OQ-15; ADR-0010 names it) and the Phase-7 LSP/MCP
+  citations (pre-existing, now cited from the seam table, not new); net —
+  negative: uncertainty removed with no new gap.
+- **Validation evidence**: `check-docs-links` (0), `format:check` (0),
+  targeted suites as listed above, `moon run`-equivalent CI legs per PR.
+  Claims-parity green in CI. Semantic correctness is argued from the
+  per-PR reviewed evidence recorded above, not from gates alone.
+- **Next-phase entry criteria**: Phase 1 exit recorded (this PR merged) →
+  begin **Phase 2-A — Canonical semantic audit**, whose entry brief is
+  written into
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
+  No code; no package moves; no Finding canonicalization before 2-A's
+  recorded, maintainer-approved adjudication.
 
 ## Conventions maintained here
 

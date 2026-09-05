@@ -40,7 +40,7 @@ deterministic evaluation → verdict → projections/surfaces
   gaps for every graph-reading verb. Two documented bypasses: `adr` (own
   marker walk — reads no project model) and `rules` (synthetic native context —
   reads the catalog, no workspace). `evolution` walks its own root to enumerate
-  revisions (`cli.mjs:2222`) but analyzes every revision through the ordinary
+  revisions (`cli.mjs:2213`) but analyzes every revision through the ordinary
   pipeline (`evolution.mjs:234-236,262`) — a root walk, not a preamble bypass.
 
 ### 4. Canonical representation
@@ -83,7 +83,7 @@ deterministic evaluation → verdict → projections/surfaces
 
 ### 8. Verdict
 
-- `verdictFor` (`src/verdict.mjs:121-238`) → `buildDecision`
+- `verdictFor` (`src/verdict.mjs:201-333`) → `buildDecision`
   (`governance/verdict.mjs`) + the single `EXIT` table — this is `check`'s
   fold of the lane's output; the three sibling enforcement carriers
   (`delta --compare`, `change`, `fitness`) fold their own verdicts through
@@ -121,7 +121,7 @@ has created a loop — a [P-D](CONSTITUTION.md#process-articles) stop.
 
 1. Re-judging semantics: `delta`/`change` deliberately re-judge the BASE side
    under the current law while taking BASE structural facts from the stored
-   snapshot (`change.mjs:690-699`, `delta.mjs:98-101`). This is the documented
+   snapshot (`change.mjs:845-846`, `delta.mjs:669-670`). This is the documented
    contract; a "simpler" local comparison would be a second universe.
 2. The provider seam has three shapes (one-call, two-call, one-call+marker) —
    a new consumer that picks one shape per provider bakes in provider
