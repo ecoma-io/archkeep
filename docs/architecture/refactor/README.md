@@ -14,19 +14,22 @@ the binding principles are
 land in [`docs/adr/`](../../adr/) as numbered records. Every page here links
 to those instead of quoting them, and the refactor is bound by all of them.
 
-Bootstrap state — the pages below are being populated by the Phase 0
-architecture cartography (audit first, code later; nothing moves before the
-map exists and is accepted):
+Phase 0 (architecture cartography) is complete — the pages below are
+populated from six read-only audits, verified against the tree, and are the
+program's working map. Nothing in `packages/` has been touched yet; nothing
+moves before a phase's entry criteria hold (see
+[CONTEXT.md](CONTEXT.md) for state and the last checkpoint):
 
-| page (planned)         | owns                                                                    |
-| ---------------------- | ----------------------------------------------------------------------- |
-| `CONSTITUTION.md`      | The refactor's immutable rules — the trade this program refuses to make |
-| `INVARIANTS.md`        | The `INV-*` registry: every invariant, its existing owner, its test     |
-| `AUTHORITY-MAP.md`     | Who may decide what, where judgment lives, and where it is forbidden    |
-| `SEMANTIC-MODEL.md`    | Canonical vocabulary and the one owner of each semantic concept         |
-| `DATA-FLOW.md`         | The canonical semantic pipeline, input adapters to surfaces             |
-| `BOUNDARIES.md`        | Allowed dependency direction; forbidden dependencies, enforced or not   |
-| `MIGRATION-PLAN.md`    | Phases, PRs, exit criteria, rollback points                             |
-| `VALIDATION-MATRIX.md` | Invariant/contract/differential coverage; the test tier registry        |
-| `CONTEXT.md`           | The restart briefing: current state for any agent resuming the program  |
-| `OPEN-QUESTIONS.md`    | Semantic ambiguities under research — never silently decided            |
+| page                                         | owns                                                                    |
+| -------------------------------------------- | ----------------------------------------------------------------------- |
+| [CONSTITUTION.md](CONSTITUTION.md)           | The refactor's immutable rules — the trade this program refuses to make |
+| [INVARIANTS.md](INVARIANTS.md)               | The `INV-*` registry: every invariant, its witness, its honest gaps     |
+| [AUTHORITY-MAP.md](AUTHORITY-MAP.md)         | Who may decide what, where judgment lives, and where it is forbidden    |
+| [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md)       | Canonical vocabulary and the one owner of each semantic concept         |
+| [DATA-FLOW.md](DATA-FLOW.md)                 | The canonical semantic pipeline, input adapters to surfaces             |
+| [BOUNDARIES.md](BOUNDARIES.md)               | Allowed dependency direction; enforced versus declared-only             |
+| [MIGRATION-PLAN.md](MIGRATION-PLAN.md)       | Phases 1–9, entry/exit criteria, the maturity gate                      |
+| [VALIDATION-MATRIX.md](VALIDATION-MATRIX.md) | Invariant/contract/differential coverage; test tiers and gaps           |
+| [CONTEXT.md](CONTEXT.md)                     | The restart briefing: current state for any agent resuming the program  |
+| [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)       | Open questions and the doctrine-gap register — never silently decided   |
+| [DECISIONS.md](DECISIONS.md)                 | ADRs the refactor inherits; program decisions (`PD-*`)                  |
