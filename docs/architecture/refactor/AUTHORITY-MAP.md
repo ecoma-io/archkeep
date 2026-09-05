@@ -60,35 +60,36 @@ legitimate peers on the same law, not violations awaiting unification:
 ```
 violationOf (rules/index.mjs:428-442)      ┐
 judgeEdge (rules/edge-constraints.mjs:79)  ├─→ evaluateRun → evaluate ──→ verdictFor (check's fold)
-compareGoWork (go-work.mjs:313-394)        │    (rules/index.mjs)         (src/verdict.mjs:121-238)
+compareGoWork (go-work.mjs:313-394)        │    (rules/index.mjs)         (src/verdict.mjs:201-333)
 judgeTsconfigPaths (tsconfig-paths.mjs)    ┘
 ```
 
-- **Singular**: the `EXIT` table (`src/verdict.mjs:21-26` — the only place
+- **Singular**: the `EXIT` table (`src/verdict.mjs:22-27` — the only place
   the numbers live as a table), the status vocabulary
   (`ok/findings/no-verdict`), the one Decision constructor `buildDecision`
-  (`src/governance/verdict.mjs:204-310`), and the law being evaluated.
+  (`src/governance/verdict.mjs:212-318`), and the law being evaluated.
 - **Plural — four enforcement carriers, four architecture fold sites, plus
   the integrity fold beside them**: exactly five verbs can exit 1 (the
   exit-code roster, `docs/reference/exit-codes.md`), but they are not one
   family. The **enforcement carriers** fold the architecture law's verdict:
-  `check` through `verdictFor` (callers `cli.mjs:802` and
+  `check` through `verdictFor` (callers `cli.mjs:809` and
   `src/commands/check.mjs:1066`); `delta --compare` folds at
-  `cli.mjs:1060-1061` over a status computed at `src/commands/delta.mjs:751-781`
-  from `evaluateRun`'s re-judgment of both sides; `change` at
-  `cli.mjs:1377-1378` (`change.mjs:751-780`); `fitness` at `cli.mjs:1539-1542`
-  (`fitness.mjs:211-216`). Those four evaluate the same law through the same
+  `cli.mjs:1082` over a status computed by `deltaFold`
+  (`src/commands/delta.mjs:486`) from `evaluateRun`'s re-judgment of both
+  sides; `change` at `cli.mjs:1399` (`changeFold`, `change.mjs:498`);
+  `fitness` at `cli.mjs:1560-1563` (`fitnessFold`, `fitness.mjs:137`). Those
+  four evaluate the same law through the same
   engines (intent J), **not** because they share one fold function —
   `verdictFor` is `check`'s fold, and only `check`'s. The fifth verb,
-  `rules verify`, folds at `cli.mjs:2017-2019` (`rules.mjs:445-448`) over the
+  `rules verify`, folds at `cli.mjs:2040-2042` (`rules.mjs:445-448`) over the
   **artifact-integrity** law — the same status vocabulary, `EXIT` table, and
   envelope latch, a different law, no lane membership
   ([PD-8](DECISIONS.md#program-decisions)).
 - **What holds the folds honest**: `jsonEnvelope` refuses a status↔exitCode
-  disagreement (`src/report/json.mjs:88-96`; every carrier eagerly builds its
+  disagreement (`src/report/json.mjs:93`; every carrier eagerly builds its
   envelope), the exit-matrix suite pins per-verb sides, and
   `src/conformance/verdict-layering.test.mjs` scans for a second numeric
-  _table_ — branch/ternary literals at the carrier sites are invisible to
+  _table_ — the sibling folds' keyed-object lookup spellings are invisible to
   that scan (INV-2's gap names this honestly).
 
 The four construction sites are judgment sites **inside** the lane — they
@@ -113,22 +114,22 @@ cleanup — `delta`'s `findings` status folds classification counts
 | `report`/renderers (`src/report/`)  | presentation only                                                                                                                   | verdicts, filtering, suppression                                                           | compliant; no scan enforces it (gap [G-5](BOUNDARIES.md#declared-but-unscanned))                                     |
 | LSP server                          | diagnostics publication (exactly two empty-publish sites)                                                                           | verdicts; its own graph discovery (see divergences)                                        | invariant intact; one divergence                                                                                     |
 | MCP tools (archkeep-mcp)            | nothing — nine tools compose `./commands` in-process; `propose` returns `requiresApproval:true, authoritative:false, written:false` | any write                                                                                  | compliant; one seam widening                                                                                         |
-| Providers (nx/moon/native)          | acquisition + normalization                                                                                                         | policy, verdicts                                                                           | one policy pressure (below)                                                                                          |
+| Providers (nx/moon/native)          | acquisition + normalization + recorded bounded derivation                                                                           | policy, verdicts                                                                           | policy surface adjudicated (MOON-POLICY); seam contract in BOUNDARIES                                                |
 | VS Code client                      | nothing — holds no analysis                                                                                                         | everything semantic                                                                        | compliant by construction                                                                                            |
 
 ## Write doors (the complete census)
 
 Every path that writes state, all code-enforced:
 
-| Door                                   | Enforcement                                                                                                                       |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `--output <file>` (any verb)           | governance-target refusal (`cli.mjs:480-495`), containment, `wx` tmp + atomic rename                                              |
-| `check --evidence-out`                 | via the same writer; three loud nothing-writes                                                                                    |
-| `discover --propose --write-intent`    | the **only** intent write door: refuses existing file, requires `--propose`, prints "proposal, not the law" (`cli.mjs:2404-2425`) |
-| `delta --capture`                      | refuses positional args + `--event-out` combination; refuses unjudgeable head                                                     |
-| `history --capture`                    | `wx` tmp + rename; dedupe; incomplete-head refusal                                                                                |
-| `--event-out` (delta/change/evolution) | append-only store with identity-checked writes (`evolution-store.mjs`)                                                            |
-| `rules add --to`                       | copies wasm bytes under containment; never writes config                                                                          |
+| Door                                   | Enforcement                                                                                                                                  |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--output <file>` (any verb)           | governance-target refusal (`cli.mjs:480-495`), containment, `wx` tmp + atomic rename                                                         |
+| `check --evidence-out`                 | via the same writer; three loud nothing-writes                                                                                               |
+| `discover --propose --write-intent`    | the **only** intent write door: refuses existing file, requires `--propose`, prints "proposal, not the law" (`cli.mjs:2386-2387, 2426-2447`) |
+| `delta --capture`                      | refuses positional args + `--event-out` combination; refuses unjudgeable head                                                                |
+| `history --capture`                    | `wx` tmp + rename; dedupe; incomplete-head refusal                                                                                           |
+| `--event-out` (delta/change/evolution) | append-only store with identity-checked writes (`evolution-store.mjs`)                                                                       |
+| `rules add --to`                       | copies wasm bytes under containment; never writes config                                                                                     |
 
 Propose-never-decides is structural: proposal producers (`discover`,
 `reconcile`, `scenario`, change declarations) hold no write path except the one
@@ -137,28 +138,42 @@ Propose-never-decides is structural: proposal producers (`discover`,
 ## Known divergences and pressures
 
 Recorded, not judged, by Phase 0. Each is a candidate for a later phase and
-must not be "fixed" without its phase's differential:
+must not be "fixed" without its phase's differential — divergences 1 and 4
+are since closed by Phase 1, annotated in place:
 
-1. **Moon provider embeds discovery policy** — `transformMoonGraph`
-   (`moon.mjs:606-822`) filters "root"-scoped edges, maps Moon's `implicit`
-   onto Archkeep's inverse vocabulary (`moon.mjs:243-275`, the #262 fix),
-   collapses scopes to `static`, synthesizes `layer:`/`stack:` tags, and
-   infers workspace layout. Each is defensible normalization; together they
-   are a policy surface inside a provider
-   ([CON-10](CONSTITUTION.md#con-10--providers-observe-they-do-not-decide)).
-   Phase 1 decides per item: lift to an explicit normalization contract or
-   pin as documented provider policy via ADR.
+1. ~~**Moon provider embeds discovery policy**~~ — **CLOSED by Phase 1-C**
+   (PR #734): every one of the five embedded policies
+   (`transformMoonGraph`, `moon.mjs:606-822`) is adjudicated in
+   [MOON-POLICY.md](MOON-POLICY.md) — three contract-backed normalizations
+   (root-scoped edge exclusion as domain exclusion; the #262
+   Moon↔Archkeep vocabulary inversion; the #280 scope collapse to `static`)
+   and two recorded provider policies
+   ([ADR 0009](../../adr/0009-moon-derived-tags-provider-policy.md) derived
+   `layer:`/`stack:` tags; [ADR 0010](../../adr/0010-moon-workspace-layout-inference.md)
+   workspace-layout inference), each bounded to stating Moon's own facts and
+   deciding nothing. "Policy surface" resolved as recorded policy, not
+   silent behavior; the per-provider seam contract
+   ([BOUNDARIES.md](BOUNDARIES.md#provider-seam)) carries the verdicts. A
+   sixth embedded behavior the five missed — `moon:declared` targets
+   synthesis (`moon.mjs:725-737`) — was surfaced by the phase-close
+   hostile review; the seam table records it with its per-item verdict
+   owed to Phase 2-A, so the closure names five and the seam contract
+   carries six.
 2. **LSP holds a second Nx discovery** — `workspace-index.mjs:398-533`
    re-implements Nx project-graph discovery for the editor; package-based Nx
    workspaces yield zero editor nodes while the CLI sees them. Mitigated by
    `nxModelFailure` loudness; structurally a second implementation of a
-   provider seam (Phase 7).
+   provider seam (Phase 7). Registered against the seam contract's table as
+   a temporary divergence with its Current/Target/Phase/Reason block.
 3. **MCP imports past its seam** — `packages/archkeep-mcp/src/engine.mjs:71`
    imports `findWorkspaceRoot`/`listTrackedFiles` from the package root,
    widening the documented `./commands`-only seam (Phase 7 hygiene).
-4. **`verdictFor`'s counts input is an untyped 14-field tuple** — a misspelled
-   key silently defaults to 0 and flips exit 1 → exit 0. The loudest latent
-   defect class in the one authority lane; Phase 1 hardening candidate.
+4. ~~**`verdictFor`'s counts input is an untyped 14-field tuple**~~ —
+   **CLOSED by Phase 1-A** (PR #730): the counts input is validated by
+   roster — required and optional keys, per-key types, unknown-key refusal —
+   at every one of the five fold sites, each with red-by-construction twins;
+   a misspelled key now refuses loudly instead of defaulting to 0 and
+   flipping exit 1 → exit 0.
 
 ## What a refactor may not add — and may not remove
 

@@ -262,20 +262,29 @@ its implementation PR's acceptance evidence has been reviewed; a unit with
 no implementation PR yet is **DEFER**, never PASS — unwritten code proves
 nothing; **FAIL** is an implementation that landed without its evidence:
 
-| Unit | Item                          | Status | What its PR must prove                                                           |
-| ---- | ----------------------------- | ------ | -------------------------------------------------------------------------------- |
-| 1-A  | Verdict-fold hardening        | DEFER  | five red-by-construction twins; valid-input outputs unchanged; exit-matrix green |
-| 1-B  | `rules verify` classification | DEFER  | AUTHORITY-MAP true against source; docs gates green; no code touched             |
-| 1-C  | Moon policy adjudication      | DEFER  | per-item recorded verdicts; seam table consistent                                |
-| 1-D  | Provider seam definition      | DEFER  | BOUNDARIES table with per-provider contract                                      |
-| 1-E  | R7 edge-identity pin          | DEFER  | both headers pinned (or distinct type + identity suites green)                   |
-| 1-F  | Riders D1–D6                  | DEFER  | each D-n closed; docs gates green                                                |
+| Unit | Item                          | Status | What its PR must prove                                                           | Landed evidence                                                                                                                                                                               |
+| ---- | ----------------------------- | ------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1-A  | Verdict-fold hardening        | PASS   | five red-by-construction twins; valid-input outputs unchanged; exit-matrix green | PR #730 — latches at all five fold sites; twins planted, demonstrated red, restored; valid-input fixtures byte-identical; exit-matrix green                                                   |
+| 1-B  | `rules verify` classification | PASS   | AUTHORITY-MAP true against source; docs gates green; no code touched             | PR #731 — dated PD-8 verification extension, every line ref re-measured after 1-A; no `packages/` change                                                                                      |
+| 1-C  | Moon policy adjudication      | PASS   | per-item recorded verdicts; seam table consistent                                | PR #734 — MOON-POLICY.md + ADR 0009/0010 + registry pin; three contract-backed normalizations, two ADR policies, no silent retention; cited by 1-D's table                                    |
+| 1-D  | Provider seam definition      | PASS   | BOUNDARIES table with per-provider contract                                      | this PR — six-column contract table, source-verified, LSP divergence registered against it as Phase 7; the row's PASS holds at the moment this PR merges (the gate reads it DEFER until then) |
+| 1-E  | R7 edge-identity pin          | PASS   | both headers pinned (or distinct type + identity suites green)                   | PR #732 — both headers pinned cross-referencing ADR-0008/INV-6; identity suites green; manifest digests updated                                                                               |
+| 1-F  | Riders D1–D6                  | PASS   | each D-n closed; docs gates green                                                | PR #733 — D1–D6 closed; D6 re-measured against the ruleset API at fix time; coordinator review corrected a false emission-site claim and added the missing fourth emission site before merge  |
 
 Phase exit = every row PASS, or a row's DEFER explicitly accepted by the
 maintainer with the risk recorded in [CONTEXT.md](CONTEXT.md). The blanket
 phrase "no behavior change" is **withdrawn** for this phase: unit 1-A is
 correctness hardening by design and its changelog entry says so; units
 1-B–1-F are documentation/contract work whose code, if any, is pin-only.
+
+**PHASE 1 = COMPLETE on merge of this PR** — every row PASS with its
+evidence reviewed (coordinator adversarial review on each PR, an independent
+state-reconciliation audit, and a 10-vector hostile review at close,
+2026-09-06, whose findings are dispositioned in this same PR; 1-D's own row
+is this PR, so its PASS is the merge itself);
+[CONTEXT.md](CONTEXT.md#chk-1-close--phase-1-authority-hardening-2026-09-06)
+records the checkpoint. Deferred findings and their owning phases live
+there; none blocks Phase 2.
 
 **Parallelism**: the locks — `authority-boundary/verdict-folds` (1-A),
 `authority-boundary/rules-integrity` (1-B), `provider-seam` (1-C → 1-D,
@@ -294,24 +303,80 @@ One owner per concept, in fact and in name.
 
 **Work**:
 
-1. **2-A — Finding semantic audit (gates the rest of this phase).** Before
-   any canonicalization code, adjudicate what a Finding **is**:
+1. **2-A — Canonical semantic audit (gates the rest of this phase).** Before
+   any canonicalization code, adjudicate the semantic concepts the engine
+   already speaks — Finding first among them:
 
-   - enumerate every Finding-construction site with its precise semantics —
-     what it carries, what it references, when it fires;
-   - map the relations Finding ↔ Evidence ↔ Evaluation ↔ Violation ↔
+   - **The concept roster** — audit each of: Finding, Evidence, Observation,
+     Evaluation, Violation, Decision, Verdict, Policy, Intent, Snapshot,
+     Provenance. Per concept: current owner, meaning, inputs, outputs, what
+     it may own, what it must not own, construction sites, projection
+     sites, adapter representations — measured against source, not against
+     what the docs currently say.
+   - **Finding first**: enumerate every Finding-construction site with its
+     precise semantics — what it carries, what it references, when it
+     fires; map the relations Finding ↔ Evidence ↔ Evaluation ↔ Violation ↔
      Decision ↔ Verdict: for each pair, who owns, who references, who
      must-not-own;
-   - recommend one of exactly three outcomes — **(a)** a canonical Finding
-     domain object, **(b)** a shared construction contract with no new
-     object, or **(c) no canonical object at all** (the sites stay separate,
-     their relationships pinned). All three are legitimate; the deliverable
-     is the adjudicated decision, not an object.
+   - **The provider ladder as a question, not an answer**: Phase 1-D's
+     responsibility ladder
+     ([BOUNDARIES.md](BOUNDARIES.md#provider-seam)) is documented as an
+     implementation boundary. 2-A investigates whether
+     observed/normalized/derived/evaluated/decided should become an
+     architectural model (named types, enforced seams) or stays an
+     implementation boundary — deciding requires evidence that the
+     distinction is load-bearing in code, not merely legible in prose. A
+     legitimate outcome is **"no new canonical type is justified."**
+   - **Inputs the Phase 1 closing audit already measured** (recorded here so
+     2-A starts from evidence, not re-derivation). The strongest
+     silent-direction candidate is the **"violation" word collision**: the
+     typed rule finding (`rules/index.mjs:428-442`, exit 1) shares its name
+     with validation-message string arrays (`findNativeModelViolations`,
+     the config-law validators, `originViolations` — all exit 3); code
+     moving between the classes silently changes what "clean" means.
+     **Decision** carries two unrelated meanings (run envelope vs ADR
+     record, both live inside `commands/evaluation-primitives.mjs`);
+     **Evidence** has four spellings (custom-rule bundle, delta evidence
+     snapshot, `Violation.evidence` string, fitness/decision evidence
+     objects) beside the naming hazard `report/evidence.mjs` (which is the
+     `buildDecision` re-export, not evidence); the drift/fitness family
+     calls the provider graph "observed"
+     (`architecture-intent/model.mjs:11`, `report/drift-text.mjs`,
+     `governance/fitness-registry.mjs`), hiding its
+     normalization+derivation. Six bounded-derivation behaviors surfaced
+     by the Phase 1 close carry no per-item verdict of their own. Three
+     are marked verdict-pending in the seam table: `judgeCoverage`'s
+     provider-local coverage gate; `moon:declared` targets synthesis
+     (`moon.mjs:725-737`, the twin the native row records as bounded
+     derivation but MOON-POLICY's five missed — surfaced by the
+     close-time hostile review); and `nodeTypeFromLayer`'s unknown-layer
+     `lib` fallback (`moon.mjs:352-361`, analogy-recorded in
+     MOON-POLICY, explicitly "not a sixth verdict"). Three are named
+     only here: `buildDependencies`' root-target edge suppression and
+     `nodeTypeOf`'s `lib` fallback (primitives the LSP row records as
+     shared, not second copies), and `isDotnetGeneratedOutput`'s
+     generated-output exclusion (`native/discover.mjs:218`). Each needs
+     its per-item verdict, with 1-C's two ADRs as the precedent shape. For
+     the ladder question specifically, the same audit found no
+     demonstrated defect class that tests cannot pin, stages interleaved
+     inside single functions, and no second consumer of a stage's output —
+     evidence for "implementation boundary" — and named the graduation
+     triggers that would justify revisiting: a second consumer needing a
+     stage's output independently of evaluation, the LSP fourth path
+     regrowing after Phase 7's collapse, a seam defect tests demonstrably
+     cannot pin, or a stage word with drifting constructor sites.
+   - recommend one of exactly three outcomes **per audited concept** —
+     **(a)** a canonical domain object, **(b)** a shared construction
+     contract with no new object, or **(c) no canonical object at all** (the
+     sites stay separate, their relationships pinned). All three are
+     legitimate; the deliverable is the adjudicated decision, not an object.
 
    No Finding "god object": a Finding that grows judgment fields, lifecycle
    state, or surface-specific rendering is rejected at review
    ([CON-3](CONSTITUTION.md#con-3--generalize-computation-not-domain-vocabulary),
-   [CON-4](CONSTITUTION.md#con-4--canonical-semantic-models)). The chosen
+   [CON-4](CONSTITUTION.md#con-4--canonical-semantic-models)). No concept is
+   canonicalized because two implementations "look alike" — symmetry is not
+   evidence of a shared invariant. The chosen
    outcome is recorded ([DECISIONS.md](DECISIONS.md), or an ADR if it is an
    architecture decision) and maintainer-approved **before** item 2-B starts.
    Classification: DOCUMENTATION-CONTRACT CLARIFICATION; acceptance: the
