@@ -299,6 +299,14 @@ function useDirectory(usePath, workspaceRoot) {
  * - **`goWorkOutsideUse`** — a `use` entry above the workspace root. Whatever
  *   it builds, no run over this workspace can cover it.
  *
+ * One of the FOUR finding families — PD-13 (2026-09-06) outcome (c): no
+ * Finding supertype exists, and the relationship pin lives on
+ * `./rules/index.mjs`'s `violationOf` header. These findings stay this
+ * family's own shape and fold into the one verdict lane as count keys into
+ * `verdictFor` (`./verdict.mjs`). The canonical statement is the
+ * "Finding — the unowned concept" section of
+ * `../../../docs/architecture/refactor/SEMANTIC-MODEL.md`.
+ *
  * @param {{ uses: { path: string, line: number, column: number }[],
  *   workspaceRoot: string,
  *   projects: { name: string, root: string }[],

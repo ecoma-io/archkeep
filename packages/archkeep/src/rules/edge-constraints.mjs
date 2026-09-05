@@ -66,6 +66,15 @@ import {
  * table — it does NOT mean the edge is free of all boundary violations (see
  * this module's header for what is not checked).
  *
+ * One of the FOUR finding families — PD-13 (2026-09-06) outcome (c): no
+ * Finding supertype exists, and the relationship pin lives on `./index.mjs`'s
+ * `violationOf` header. These verdicts are NOT `Violation` records: the
+ * markdown-pairing fold in `../commands/check.mjs` reshapes each into the
+ * exact record `violationOf` builds, and the families fold into the one
+ * verdict lane as count keys into `verdictFor` (`../verdict.mjs`). The
+ * canonical statement is the "Finding — the unowned concept" section of
+ * `../../../../docs/architecture/refactor/SEMANTIC-MODEL.md`.
+ *
  * @param {{source: string, target: string}} edge The graph edge to judge.
  * @param {object} nodes The project graph's `nodes` map (carries `data.tags`).
  * @param {object} dependencies The project graph's `dependencies` map (for `notDependOnLibsWithTags` reachability).
