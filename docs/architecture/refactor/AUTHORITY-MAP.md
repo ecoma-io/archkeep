@@ -19,10 +19,36 @@ stated once in
 ("The boundary, stated once") — this page instantiates the Archkeep-internal
 half and does not restate the rest.
 
+## Vocabulary: authority, carrier, projection, adapter, surface
+
+Five words this control plane uses precisely. A module is classified by what
+it may **do**, never by what it holds:
+
+- **Authority** — a module with the right to make a semantic judgment or
+  decision. Archkeep has exactly one: the evaluation lane below. Holding,
+  passing, rendering, or storing a Verdict does not make a module an
+  authority; deciding does. The count is one and the refactor may not
+  increase it ([INV-25](INVARIANTS.md), maturity gate row 1).
+- **Carrier** — a command that reports a verdict on every reachable path and
+  can exit 1 through a fold over the shared vocabulary. Five today (the
+  roster below). Adding a sixth is a semantic change needing maintainer
+  classification — not a cleanup, and not forbidden forever; never created by
+  a refactor PR as a side effect.
+- **Projection** — a read-only derivation of canonical facts (graph, drift,
+  impact, history reads). Projects what the lane decided; never judges.
+- **Adapter** — a translation at a boundary (provider normalization, envelope
+  rendering, MCP tool shapes). May reshape representation, never meaning.
+- **Surface** — a product entry (CLI verb, LSP, MCP, VS Code). Composition
+  over the core; thin by
+  [CON-9](CONSTITUTION.md#con-9--surface--package).
+
 ## The one enforcement authority
 
 The authority is the **evaluation lane** — one law, one vocabulary, one
-Decision constructor — not one function call:
+Decision constructor — not one function call. `check` is the lane's
+**primary enforcement surface**, the front door consumers meet; it is not an
+exclusive semantic entry point, and the four sibling carriers below are
+legitimate peers on the same law, not violations awaiting unification:
 
 ```
 violationOf (rules/index.mjs:428-442)      ┐
@@ -123,11 +149,19 @@ must not be "fixed" without its phase's differential:
    key silently defaults to 0 and flips exit 1 → exit 0. The loudest latent
    defect class in the one authority lane; Phase 1 hardening candidate.
 
-## What a refactor may not add
+## What a refactor may not add — and may not remove
 
 No second engine, no `GovernService`, no surface-local verdict, no provider
-judgment, no new write door outside this census, no exit code computed outside
-the `EXIT` table. [CON-1](CONSTITUTION.md#con-1--one-enforcement-authority),
+judgment, no new write door outside this census, and no **new** exit
+computation bypassing the `EXIT` table — the five carriers' existing literal
+folds are the pinned baseline (INV-2's gap), not violations awaiting
+conformance. The mirror prohibitions: no mechanical unification of the
+five fold sites ([PD-6](DECISIONS.md#program-decisions) — routing sibling
+carriers through `verdictFor` changes semantics, it does not conform them),
+and no change that raises the semantic authority count above one — the count
+is one before this program and one after it
+([INV-25](INVARIANTS.md)).
+[CON-1](CONSTITUTION.md#con-1--one-enforcement-authority),
 [CON-7](CONSTITUTION.md#con-7--proposal-reconciliation-decision-waiver-change-explain-stay-distinct),
 and [P-D](CONSTITUTION.md#process-articles) make each of those a stop
 condition, not a review note.

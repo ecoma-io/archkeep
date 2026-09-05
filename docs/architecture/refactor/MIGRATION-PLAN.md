@@ -25,49 +25,194 @@ those pages at its own start ([P-A](CONSTITUTION.md#process-articles)).
 - Every phase PR classifies itself against the compatibility contract (root
   `AGENTS.md`) before implementation.
 
+## Work-item contract (binding on every unit, from Phase 1 on)
+
+A phase is not a cleanup bucket, and neither is a PR. A work item enters this
+plan only by carrying all eight fields below — in the plan's phase section
+and, at execution time, in its PR description:
+
+1. **Finding id** — the audit finding or register row that names the problem
+   (`INV-*` gap, `R-n`, `G-n`, `D-n`, or an AUTHORITY-MAP divergence number).
+2. **Invariants affected** — which `INV-*` rows the item protects or touches.
+3. **Phase justification** — why this phase: which later phase it blocks or
+   protects, or why deferring it would raise risk.
+4. **Classification** — one of:
+   - **SAFE HARDENING** — no observable behavior change on valid inputs;
+   - **CORRECTNESS HARDENING** — intentionally changes behavior on invalid,
+     impossible, or silent-error inputs, and must record: the compatibility
+     class per the contract, the old behavior, the new behavior, the reason,
+     the affected exit/error semantics, and the required tests;
+   - **DOCUMENTATION-CONTRACT CLARIFICATION** — changes documents only.
+
+   A phase containing a correctness-hardening item may **not** be described
+   blanket as "no behavior change" — classification is per item, and the
+   changelog names each. This adds classification discipline; it changes no
+   compatibility policy (the contract in root `AGENTS.md` decides classes,
+   as before).
+
+5. **Smallest safe intervention** — the minimal change that closes the
+   finding, stated before implementation.
+6. **Non-goals** — what the item explicitly refuses to touch; the line where
+   it stops being this item and becomes another phase's work.
+7. **Acceptance evidence** — the named suites, red twins, differentials, or
+   doc-gate runs that constitute done. "Tests pass" is not evidence.
+8. **Rollback strategy** — what a revert restores, and any state to clean.
+
+An item that cannot fill all eight moves to a later phase with its
+justification recorded — absence from a phase is then a decision, not an
+omission. The coordinator names each PR's ownership lock beside its item
+([P-F](CONSTITUTION.md#process-articles)).
+
 ## Phase 1 — Authority hardening
 
 Close the gaps around the one enforcement authority. No structure moves.
 
 **Entry**: Phase 0 accepted (this control plane merged).
 
-**Work**:
+**Work** — each item carries its work-item contract inline:
 
-1. **Harden the verdict folds — the class, not one site** — `verdictFor`'s
-   untyped 14-field counts tuple becomes a validated shape (a misspelled or
-   missing key refuses loudly instead of defaulting to 0), and the four
-   sibling fold sites (`delta.mjs:751-781`, `change.mjs:751-780`,
-   `fitness.mjs:211-216`, `rules.mjs:444-448`) get the same audit: any
-   silent-default input that could zero a count or flip an exit is refused
-   loudly (INV-4's gap; the loudest latent defect class found). Regression:
-   a silent-direction twin per site (a wrong key must turn the run red, not
-   green).
+1. **Harden the verdict folds — the class, not one site.** `verdictFor`'s
+   untyped 14-field counts tuple, and the four sibling fold sites
+   (`delta.mjs:751-781`, `change.mjs:751-780`, `fitness.mjs:211-216`,
+   `rules.mjs:444-448`).
+
+   - Finding: INV-4 gap; AUTHORITY-MAP divergence 4.
+   - Invariants: INV-4, INV-2, INV-1.
+   - Phase justification: every later phase reads these folds' exit codes as
+     ground truth for its differentials; a fold that can silently zero a
+     count can flip exit 1 → 0, and a corpus (GAP-A) recorded over such a
+     fold freezes wrong answers. Blocks Phase 4's gate; protects every
+     phase's evidence.
+   - Classification: **CORRECTNESS HARDENING**. Old behavior: a misspelled
+     or missing count key defaults to 0 — a failing run can report pass
+     (exit 1 → 0) with no error anywhere. New behavior: loud refusal —
+     no-verdict status, exit 3, naming the malformed input — on the
+     malformed-internal-input path only; every valid workspace's output is
+     unchanged. Compatibility: bug fix — the silent direction the root
+     invariant forbids; no valid input changes meaning. Affected semantics:
+     exit code 3 + no-verdict envelope on malformed internal counts, at all
+     five carrier sites. Required tests: a silent-direction twin per site (a
+     planted wrong key must turn the run red, not green).
+   - Smallest intervention: validate the counts shape at each fold's input
+     boundary; refuse unknown/missing keys.
+   - Non-goals: no routing of sibling carriers through `verdictFor`
+     ([PD-6](DECISIONS.md#program-decisions)); no shared fold framework; no
+     output change on valid inputs.
+   - Acceptance evidence: five twins red-by-construction (each demonstrated
+     by planting the defect and watching its twin fail); full
+     [Vitest suite](../../development/testing.md) green; envelope/exit
+     matrices green; `node packages/archkeep/cli.mjs check` green;
+     valid-fixture outputs unchanged.
+   - Rollback: revert the PR; folds return to today's silent defaults — the
+     pre-Phase-1 state; no state migration.
+
 2. **Adjudicate the Moon provider's policy surface** — item by item (edge
    filter, vocabulary inversion, scope collapse, tag synthesis, layout
-   inference): lift into an explicit, tested normalization contract at the
-   provider seam, or pin as documented provider policy via a new ADR. Either
-   outcome is acceptable; silent retention is not (INV-9).
-3. **Normalize the provider seam definition** — one documented seam shape (or
-   an explicit per-provider contract table) so Phase 7 can collapse the LSP's
-   private copy into it.
-4. **Edge-identity spelling** (register R7) — make the diff-internal key
-   structurally distinct from the stored/event spelling, or cross-reference
-   pin both headers.
-5. **Doc-truth riders** — the stale sentences Phase 0 measured, fixed in the
-   same phase because documentation precedes code: `governance/verdict.mjs`
-   header's `not_applicable` claim (D1), `docs/reference/evidence.md:25` cell
-   (D2), `src/canonical.mjs` stale path (D3), `json.mjs:3` "six commands"
-   (D4), Moon-on-LSP sentence in `docs/concepts/integrations.md` (D5),
-   `docs/development/repository.md` stale required-checks claim (D6 — fixed
-   by re-measuring the ruleset API, not by copying AGENTS.md's date).
+   inference).
 
-**Exit**: verdict lane input validated with a red-in-silent-direction test;
-Moon policy adjudicated with the decision recorded (ADR or contract);
-seam shape stated in [BOUNDARIES.md](BOUNDARIES.md); D1–D6 closed; full
-[Vitest suite](../../development/testing.md) green; envelope/exit matrices
-green; `node packages/archkeep/cli.mjs check` green; no behavior change
-unclassified (each rider is a fix or additive, per the compatibility
-contract).
+   - Finding: AUTHORITY-MAP divergence 1; INV-9 gap.
+   - Invariants: INV-9.
+   - Phase justification: Phase 3's G-1 scan cannot be written until each
+     transformation is adjudicated contract-or-violation; Phase 7's seam
+     collapse consumes the same decision.
+   - Classification: **DOCUMENTATION-CONTRACT CLARIFICATION** for each
+     decision (a tested normalization contract at the provider seam, or
+     documented provider policy via a new ADR — either outcome acceptable,
+     silent retention not); any test that pins an adjudicated behavior is
+     SAFE HARDENING (pins what already happens, changes nothing).
+   - Smallest intervention: the per-item decision record.
+   - Non-goals: **no provider rewrite, no restructuring of `moon.mjs`, no
+     new provider abstraction** — this is policy-contract adjudication;
+     provider architecture work is Phase 7's, differentially gated.
+   - Acceptance evidence: every named transformation carries a recorded
+     verdict citing its contract or ADR; the provider-seam table (item 3)
+     updated consistently; suites green.
+   - Rollback: revert the records and any pinning tests.
+
+3. **Normalize the provider seam definition** — one documented seam shape or
+   an explicit per-provider contract table.
+
+   - Finding: provider audit (three seam shapes; the LSP holds a fourth).
+   - Invariants: INV-9; protects Phase 7's entry.
+   - Phase justification: Phase 7 collapses the LSP's private Nx discovery
+     into this seam; a seam must be defined before it can be collapsed into,
+     and defining it now prevents Phase 7 from inventing one under pressure.
+   - Classification: **DOCUMENTATION-CONTRACT CLARIFICATION**.
+   - Smallest intervention: the contract table in
+     [BOUNDARIES.md](BOUNDARIES.md) (per provider: call shape, normalization
+     boundary, failure loudness).
+   - Non-goals: no code; no unification of implementations (Phase 7 work,
+     differentially gated).
+   - Acceptance evidence: the table exists; the LSP divergence is recorded
+     against it as "collapses in Phase 7".
+   - Rollback: doc revert.
+
+4. **Edge-identity spelling** (register R7) — cross-reference pin both
+   headers, or make the diff-internal key structurally distinct from the
+   stored/event spelling.
+
+   - Finding: R7 (`edgeIdentityKey` in-memory vs `edgeEvolutionIdentity`
+     stored).
+   - Invariants: INV-6.
+   - Phase justification: a structural phase (2–4) that moves or rewires
+     diff/event code with the two spellings looking interchangeable can
+     break event dedupe silently; the ambiguity is closed before code moves.
+   - Classification: **DOCUMENTATION-CONTRACT CLARIFICATION** for the pin;
+     SAFE HARDENING only if review shows a comment pin cannot hold (then a
+     structurally distinct type, outputs byte-identical). No intervention
+     beyond the ambiguity is in scope — the register row is about ambiguity,
+     not about the spellings themselves.
+   - Smallest intervention: the cross-reference headers.
+   - Non-goals: no unification of the two spellings — they serve different
+     media (in-memory set arithmetic vs escaped stored string); no change to
+     any stored event identity.
+   - Acceptance evidence: both headers carry the cross-reference (or the
+     distinct-type change with event-identity suites green and outputs
+     unchanged); docs gates green.
+   - Rollback: revert.
+
+5. **Doc-truth riders D1–D6** — the stale sentences Phase 0 measured:
+   `governance/verdict.mjs` header's `not_applicable` claim (D1),
+   `docs/reference/evidence.md:25` cell (D2), `src/canonical.mjs` stale path
+   (D3), `json.mjs:3` "six commands" (D4), Moon-on-LSP sentence in
+   `docs/concepts/integrations.md` (D5), `docs/development/repository.md`
+   stale required-checks claim (D6 — fixed by re-measuring the ruleset API
+   at fix time, not by copying AGENTS.md's date).
+
+   - Finding: D1–D6 (each measured stale by audit, re-verified by
+     adversarial review).
+   - Invariants: none directly; P-A (docs precede code).
+   - Phase justification: later phases cite these sentences as facts while
+     hardening the code beside them; a stale sentence beside a hardening
+     change is a lie the refactor itself introduced.
+   - Classification: **DOCUMENTATION-CONTRACT CLARIFICATION** — each rider
+     is its measured sentence and nothing around it. A rider that would grow
+     into a page rewrite is out of scope and moves out with justification.
+   - Smallest intervention: fix the named sentence.
+   - Non-goals: no page rewrites; no reformatting beyond the sentence.
+   - Acceptance evidence: each D-n closed with its corrected sentence; docs
+     gates (`check-docs-links`, `check-docs-claims-parity`) green; D6 cites
+     its measurement date.
+   - Rollback: revert.
+
+**Phase 1 exit gate** — a table, not prose. An item is **PASS** only when
+its implementation PR's acceptance evidence has been reviewed; an item with
+no implementation PR yet is **DEFER**, never PASS — unwritten code proves
+nothing; **FAIL** is an implementation that landed without its evidence:
+
+| #   | Item                     | Status | What its PR must prove                                                           |
+| --- | ------------------------ | ------ | -------------------------------------------------------------------------------- |
+| 1   | Verdict-fold hardening   | DEFER  | five red-by-construction twins; valid-input outputs unchanged; exit-matrix green |
+| 2   | Moon policy adjudication | DEFER  | per-item recorded verdicts; seam table consistent                                |
+| 3   | Provider seam definition | DEFER  | BOUNDARIES table with per-provider contract                                      |
+| 4   | R7 edge-identity pin     | DEFER  | both headers pinned (or distinct type + identity suites green)                   |
+| 5   | Riders D1–D6             | DEFER  | each D-n closed; docs gates green                                                |
+
+Phase exit = every row PASS, or a row's DEFER explicitly accepted by the
+maintainer with the risk recorded in [CONTEXT.md](CONTEXT.md). The blanket
+phrase "no behavior change" is **withdrawn** for this phase: item 1 is
+correctness hardening by design and its changelog entry says so; items 2–5
+are documentation/contract work whose code, if any, is pin-only.
 
 ## Phase 2 — Canonical model hardening
 
@@ -77,25 +222,53 @@ One owner per concept, in fact and in name.
 
 **Work**:
 
-1. **The finding concept** — one module owns "what a finding is" across the
-   four judgment sites ([SEMANTIC-MODEL.md](SEMANTIC-MODEL.md#finding--the-unowned-concept)).
-   The four sites construct through it; message wording stays in the
-   registries.
-2. **Message registries** — three registries with identical shape collapse to
-   one home with per-domain tables. Rendered bytes must not change (pinned
-   verbatim by `messages.test.mjs` + `upstream.integration.test.mjs`).
-3. **Naming hazards** — the two `verdict.mjs` modules and the three "intent"
-   nouns get either renames or pinned relationship headers, decided under
+1. **2-A — Finding semantic audit (gates the rest of this phase).** Before
+   any canonicalization code, adjudicate what a Finding **is**:
+
+   - enumerate every Finding-construction site with its precise semantics —
+     what it carries, what it references, when it fires;
+   - map the relations Finding ↔ Evidence ↔ Evaluation ↔ Violation ↔
+     Decision ↔ Verdict: for each pair, who owns, who references, who
+     must-not-own;
+   - recommend one of exactly three outcomes — **(a)** a canonical Finding
+     domain object, **(b)** a shared construction contract with no new
+     object, or **(c) no canonical object at all** (the sites stay separate,
+     their relationships pinned). All three are legitimate; the deliverable
+     is the adjudicated decision, not an object.
+
+   No Finding "god object": a Finding that grows judgment fields, lifecycle
+   state, or surface-specific rendering is rejected at review
+   ([CON-3](CONSTITUTION.md#con-3--generalize-computation-not-domain-vocabulary),
+   [CON-4](CONSTITUTION.md#con-4--canonical-semantic-models)). The chosen
+   outcome is recorded ([DECISIONS.md](DECISIONS.md), or an ADR if it is an
+   architecture decision) and maintainer-approved **before** item 2-B starts.
+   Classification: DOCUMENTATION-CONTRACT CLARIFICATION; acceptance: the
+   recorded, approved decision; rollback: revert the record.
+
+2. **2-B — The finding concept** — implement 2-A's approved outcome across
+   the four judgment sites
+   ([SEMANTIC-MODEL.md](SEMANTIC-MODEL.md#finding--the-unowned-concept)). If
+   2-A ruled outcome (c), this item is the relationship pins and closes as
+   documentation. Message wording stays in the registries.
+3. **2-C — Message registries** — three registries with identical shape
+   collapse to one home with per-domain tables. Rendered bytes must not
+   change (pinned verbatim by `messages.test.mjs` +
+   `upstream.integration.test.mjs`).
+4. **2-D — Naming hazards** — the two `verdict.mjs` modules and the three
+   "intent" nouns get either renames or pinned relationship headers, decided
+   under
    [CON-3](CONSTITUTION.md#con-3--generalize-computation-not-domain-vocabulary)
    (rename homonyms, never domain words). Public exports are API — renames
    follow the compatibility contract.
-4. **Vocabulary registers R1–R6** — the boundary sentences (R1), disposition
-   construction validation (R4), and cross-references land; registers that
-   need no code close as documentation.
+5. **2-E — Vocabulary registers R1–R6** — the boundary sentences (R1),
+   disposition construction validation (R4), and cross-references land;
+   registers that need no code close as documentation.
 
-**Exit**: [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md) ownership table true with
-zero "unowned/hazard" rows remaining or each remaining row carrying a recorded
-keep-reason; message bytes identical (differential row 1 + 12 of
+**Exit**: 2-A's decision recorded and maintainer-approved, and 2-B
+implementing exactly it; [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md) ownership
+table true with zero "unowned/hazard" rows remaining or each remaining row
+carrying a recorded keep-reason; message bytes identical (differential rows 1
+and 12 of
 [VALIDATION-MATRIX.md](VALIDATION-MATRIX.md#output-differentials-every-structural-phase-must-run));
 intent-manifest digests updated in the same PR for any evidence-named file
 moved (INV-18).
@@ -142,19 +315,30 @@ The Phase 0 cartography names no extraction as proven; candidates must argue
 from the pressure edges recorded in [BOUNDARIES.md](BOUNDARIES.md#measured-pressure-points-edges-that-exist-today),
 not from aesthetics.
 
+**"No proven extraction" is a successful Phase 4 outcome.** The phase's
+deliverable is the investigation with its evidence, not a moved module: if no
+candidate demonstrates a gain, the phase closes with a checkpoint recording
+"no proven extraction" and the investigations that established it — that is a
+green exit, recorded in [CONTEXT.md](CONTEXT.md), and Phase 5 enters on it.
+Package count, file count, directory aesthetics, and moved-module counts are
+**not progress metrics** anywhere in this program; a PR that argues from them
+trips stop item 8 under [P-D](CONSTITUTION.md#process-articles).
+
 **Exit**: for every moved module — corpus diff empty or row-by-row re-blessed
 with the reason; ESLint differential + native differential green; envelope
 roster unchanged; intent-manifest digests updated same-PR (INV-18); the
 extraction's stated gain re-verified against the actual post-state. An
 extraction that cannot demonstrate its gain is reverted
-([P-D](CONSTITUTION.md#process-articles)).
+([P-D](CONSTITUTION.md#process-articles)). If nothing moved: the no-proven-
+extraction checkpoint with its investigations recorded.
 
 ## Phase 5 — Capability facades
 
 Organize the command layer by capability — composition, not re-implementation.
 
 **Entry**: Phase 4 exit recorded (or Phase 4 closed with "no proven
-extractions", recorded).
+extractions", recorded); OQ-1's capability-vocabulary owner decided and
+OQ-3's maintainer ruling recorded ([OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)).
 
 **Work**:
 
@@ -170,10 +354,11 @@ extractions", recorded).
    `tracked.includes(INTENT_FILE)` + `loadIntent` gate) unifies behind one
    helper.
 
-**Exit**: every verb byte-identical over the corpus; exit matrix green;
-facade modules hold zero judgment (G-scans from Phase 3 extended to them if
-needed); capability map in [AUTHORITY-MAP.md](AUTHORITY-MAP.md) updated in
-the same PR.
+**Exit**: every verb identical over the corpus at validation levels 1–2
+(semantic + contract goldens; incidental-byte drift triaged, not gated); exit
+matrix green; facade modules hold zero judgment (G-scans from Phase 3
+extended to them if needed); capability map in
+[AUTHORITY-MAP.md](AUTHORITY-MAP.md) updated in the same PR.
 
 ## Phase 6 — CLI recomposition
 
@@ -254,30 +439,51 @@ scored and recorded in [CONTEXT.md](CONTEXT.md) with evidence links.
 Each phase's final PR scores itself; the program closes only when every row
 holds. Any NO is a [P-D](CONSTITUTION.md#process-articles) stop.
 
-| #   | Dimension                     | Evidence required                                                                                                                                              |
-| --- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | One enforcement authority     | AUTHORITY-MAP table true; verdict-layering scan green; no surface holds judgment                                                                               |
-| 2   | Semantic flow one-way         | DAG stated and scanned (Phase 3 output); no cycles; no re-derivation sites                                                                                     |
-| 3   | Canonical models single-owned | SEMANTIC-MODEL table with zero unresolved hazard rows                                                                                                          |
-| 4   | Providers observe only        | G-1 scan green; Moon policy adjudicated (Phase 1) and its contract tested                                                                                      |
-| 5   | Determinism                   | determinism suites + corpus byte-identity across all read-only verbs                                                                                           |
-| 6   | Differential safety           | every structural PR's differential recorded; corpus diff closed                                                                                                |
-| 7   | Empty-result invariant        | refusal-contract + coverage-loudness + LSP two-site green, with red twins                                                                                      |
-| 8   | Contract stability            | exit matrix, envelope roster, SARIF, LSP protocol, MCP surface, exports — green and unchanged (or re-classified via the compatibility contract with changelog) |
-| 9   | Docs precede and follow code  | every PR's doc updates landed same-PR; docs gates green                                                                                                        |
-| 10  | Review independence           | adversarial review recorded per architectural PR ([P-B](CONSTITUTION.md#process-articles))                                                                     |
+| #   | Dimension                     | Evidence required                                                                                                                                                                                 |
+| --- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | One enforcement authority     | **Semantic authority count is one, unchanged** ([INV-25](INVARIANTS.md)): AUTHORITY-MAP true, verdict-layering scan green, per-PR adversarial review named the count; no surface holds judgment   |
+| 2   | Semantic flow one-way         | DAG stated and scanned (Phase 3 output); no cycles; no re-derivation sites                                                                                                                        |
+| 3   | Canonical models single-owned | SEMANTIC-MODEL table with zero unresolved hazard rows; no concept with two constructors; every equivalent representation sits at an adapter/projection boundary with its conversion named         |
+| 4   | Providers observe only        | G-1 scan green; Moon policy adjudicated (Phase 1) and its contract tested                                                                                                                         |
+| 5   | Determinism                   | determinism suites + corpus comparison across all read-only verbs at the [validation levels](VALIDATION-MATRIX.md) — semantic and contract goldens gated; incidental bytes triaged, not gated     |
+| 6   | Differential safety           | every structural PR's differential recorded; corpus diff closed                                                                                                                                   |
+| 7   | Empty-result invariant        | refusal-contract + coverage-loudness + LSP two-site green, with red twins                                                                                                                         |
+| 8   | Contract stability            | exit matrix, envelope roster, SARIF, LSP protocol, MCP surface, exports — green and unchanged (or re-classified via the compatibility contract with changelog)                                    |
+| 9   | Docs precede and follow code  | every PR's doc updates landed same-PR; docs gates green; no doc claims protection a witness does not enforce (stop item 10)                                                                       |
+| 10  | Review independence           | adversarial review recorded per architectural PR ([P-B](CONSTITUTION.md#process-articles)); implementer never the final reviewer ([P-E](CONSTITUTION.md#process-articles))                        |
+| 11  | Extraction honesty            | every landed extraction demonstrates its gain against its post-state; "no proven extraction" recorded as an outcome where that is the result; package/file counts never used as progress evidence |
 
 ## Cross-cutting rules
 
 - **Serialization** — one phase at a time; within a phase, PRs may overlap
-  only across disjoint ownership locks. No two PRs edit one semantic boundary
-  concurrently.
+  only across disjoint ownership locks
+  ([P-F](CONSTITUTION.md#process-articles)): no two PRs change the same
+  canonical model, authority boundary, or provider seam, and disjointness is
+  proven by the dependency graph. The coordinator names each PR's lock in
+  its work-item contract.
 - **Subagents never merge** — workers return patches/findings/evidence; the
-  coordinator synthesizes and the maintainer merges.
+  coordinator synthesizes and the maintainer merges. Subagents may not amend
+  the constitution, invariant registry, or authority map
+  ([P-E](CONSTITUTION.md#process-articles)).
 - **INV-18 tripwire** — any PR moving an evidence-named file updates
   `src/intent/intent-manifest.json` digests in the same PR.
-- **Stop conditions** — [P-D](CONSTITUTION.md#process-articles); a stop is
-  reported as REWORK with the failing dimension, never silently absorbed.
+- **Stop conditions** — [P-D](CONSTITUTION.md#process-articles), enumerated
+  1–12; a stop is reported as REWORK with the failing item, never silently
+  absorbed.
+- **Evidence-first exits** — a phase-exit claim cites its evidence, not its
+  author: "boundary enforced" needs the scan demonstrated red on a planted
+  violation; "deterministic" needs the determinism suites; "no semantic
+  drift" needs the named differential rows; "one authority" needs the
+  AUTHORITY-MAP plus review evidence naming the count
+  ([INV-25](INVARIANTS.md)). A claim whose evidence is "it should hold" is
+  not a claim.
+- **Architectural debt budget** — every checkpoint reports: known gaps before
+  (ids), gaps closed, new gaps introduced (ids), and the net delta in one
+  sentence. Closing G-1 while opening G-9 is not net-zero unless the record
+  says why the new gap is smaller; a phase whose complexity moved but did
+  not shrink must name the architectural gain that justifies it (a dependency
+  made impossible, an isolation bought). A ledger, not a numerical KPI — no
+  scores, only the honest delta.
 - **Budget honesty** — a phase that investigates and finds nothing worth
   doing closes with that finding recorded; an empty phase is a legitimate
   outcome ([CON-0](CONSTITUTION.md#con-0--do-not-trade-semantic-maturity-for-structural-purity)).

@@ -78,17 +78,22 @@ deterministic evaluation → verdict → projections/surfaces
   shaping, documented).
 - One injected clock (`governance/clock.mjs`) threads `now` through
   delta/change judgments; the Contract-K source guard forbids any other
-  wall-clock read in shipped `src/`.
+  wall-clock read in shipped `src/` (the exempt-site roster beyond the clock
+  itself is unverified — INV-16's gap, OQ-6).
 
 ### 8. Verdict
 
 - `verdictFor` (`src/verdict.mjs:121-238`) → `buildDecision`
-  (`governance/verdict.mjs`) + the single `EXIT` table.
+  (`governance/verdict.mjs`) + the single `EXIT` table — this is `check`'s
+  fold of the lane's output; the four sibling carriers fold their own
+  verdicts through the same vocabulary and table, not through `verdictFor`
+  ([CON-1](CONSTITUTION.md#con-1--one-enforcement-authority)).
 
 ### 9. Projections / surfaces
 
 - JSON envelope (`src/report/json.mjs`, `schemaVersion: 2`), SARIF, text
-  renderers — render, decide nothing.
+  renderers — render, decide nothing (the import direction that would let
+  `report/` decide is unscanned — G-5, Phase 3).
 - LSP diagnostics (publication only), MCP tools (compose `./commands`),
   e2e consumers of the packed artifact.
 

@@ -234,6 +234,27 @@ estimator, or second authority.
   non-goals) forbid building them.
 - Gap: none.
 
+## INV-25 — Semantic authority count is one
+
+The evaluation lane is the one semantic enforcement authority
+([CON-1](CONSTITUTION.md#con-1--one-enforcement-authority)), and the count
+never increases across this program. A module becomes an authority only by
+gaining the right to make a semantic judgment — holding, passing, rendering,
+or storing a Verdict does not confer it (the five-role vocabulary is
+[AUTHORITY-MAP.md](AUTHORITY-MAP.md#vocabulary-authority-carrier-projection-adapter-surface)'s).
+The mirror holds with equal force: the five carriers' five fold sites are
+legitimate and must not be mechanically unified
+([PD-6](DECISIONS.md#program-decisions)) — this invariant caps the count in
+**both** directions.
+
+- Witness: this map's carrier roster; the `verdict-layering` scan (second
+  numeric table); the envelope latch; [P-B](CONSTITUTION.md#process-articles)
+  adversarial review per architectural PR, which must name the authority
+  count explicitly; maturity gate row 1 demands the map-and-review evidence.
+- Gap: authority count is review-asserted, not mechanically scanned — a scan
+  would need a mechanical definition of "judgment" that does not exist. The
+  honest witness is the review discipline plus this map staying true.
+
 ## Rows verified but not restated
 
 The Phase 0 doctrine audit inventoried 33 invariant rows with owners and

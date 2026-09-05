@@ -18,7 +18,33 @@ the authority, not conversation memory.
    owning issue and PR for the current phase.
 
 Do not rely on remembered facts about the codebase — the Phase 0 pages carry
-the verified map, and each phase re-verifies what it touches.
+the verified map, and each phase re-verifies what it touches. The lead agent
+works the same way: **conversation memory is never a source of truth**
+([P-A](CONSTITUTION.md#process-articles)); when this page and a conversation
+disagree, this page wins until a landed PR corrects it.
+
+## Handoff protocol (mandatory)
+
+After every architectural PR — before it is merged — the coordinator updates
+this page so that a fresh agent with **no conversation history** can continue
+the program from here alone. Each PR's handoff entry records:
+
+1. the current phase and its gate-table state;
+2. checkpoints completed (ids);
+3. invariant ids touched, and how;
+4. canonical ownership changes ([SEMANTIC-MODEL.md](SEMANTIC-MODEL.md) rows);
+5. dependency-boundary changes ([BOUNDARIES.md](BOUNDARIES.md) rows);
+6. contracts affected and their compatibility classification;
+7. differential evidence — which rows, which verdict, at which
+   [validation level](VALIDATION-MATRIX.md);
+8. the architectural debt budget: gaps before, gaps closed, gaps introduced,
+   net delta;
+9. unresolved questions and open decisions;
+10. rejected approaches — what was tried and why it lost;
+11. explicit forbidden next moves (the traps this PR discovered), and the
+    exact objective of the next PR.
+
+A missing field is a review defect, not a style preference.
 
 ## Program state
 
@@ -41,12 +67,15 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane).
 
 ### CHK-0 — Phase 0, architecture cartography (2026-09-05)
 
-- **ID**: CHK-0. **Phase**: 0. **Status**: complete, pending review.
+- **ID**: CHK-0. **Phase**: 0. **Status**: complete; maintainer steering
+  pass applied ([PD-7](DECISIONS.md#program-decisions)); pending merge.
 - **Goal**: map the architecture as it is — authority, semantic model, data
   flow, boundaries, tests — with every load-bearing claim verified against
   the tree, and lock the control plane before any code change.
 - **Invariants protected**: none changed (read-only phase). All 24 INV rows
-  were inventoried with witnesses and gaps ([INVARIANTS.md](INVARIANTS.md)).
+  the audits found were inventoried with witnesses and gaps
+  ([INVARIANTS.md](INVARIANTS.md)); INV-25 (semantic authority count) was
+  added by the steering pass in this same PR — the registry now holds 25.
 - **Architectural change**: none. Documents created:
   CONSTITUTION, AUTHORITY-MAP, SEMANTIC-MODEL, DATA-FLOW, BOUNDARIES,
   INVARIANTS, MIGRATION-PLAN, VALIDATION-MATRIX, CONTEXT (this page),
@@ -69,7 +98,24 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane).
   ("`verdictFor` is the only path to exit 1": in truth five verdict carriers
   fold at five sites, only `check` through `verdictFor`). AUTHORITY-MAP,
   INV-2/INV-4, and Phase 1's hardening scope were rewritten on that evidence;
-  the corrected claim is the one these pages now carry.
+  the corrected claim is the one these pages now carry. The maintainer then
+  reviewed PR #727, approved the direction, and issued a nineteen-directive
+  steering pass ([PD-7](DECISIONS.md#program-decisions)) — absorbed as
+  CON-1's lane/surface distinction, the work-item contract, Phase 1's
+  per-item classification and gate table, Phase 2-A, the validation levels,
+  the handoff protocol, P-E/P-F, the enumerated P-D stops, evidence-first
+  exits, the debt budget, and the document hierarchy — after which an
+  independent hostile-reader pass re-read all twelve pages trying to derive
+  the nine enumerated misreadings (check-only entry, fold unification,
+  Phase-1-as-cleanup-bucket, mandatory Finding object, byte-identity
+  everywhere, mandatory federation, verb-per-package, Clean-Architecture
+  layering, package-count-as-progress): all nine EXCLUDED, and the three
+  internal contradictions plus five residual traps it surfaced (byte-identity
+  rows vs the level taxonomy, GAP-A's stdout-vs-levels wording, the INV-row
+  count, two DATA-FLOW witness-claim caveats, the "exit code computed outside
+  the table" literalism, the Phase 2 exit row ambiguity, Phase 5's OQ
+  preconditions, the fixture-corpus name collision, T4's pinned-text
+  boundary) were fixed in the same pass.
 - **Tests**: none run against the engine (read-only phase); the control plane
   itself is checked by the repository's doc gates.
 - **Dependency-graph delta**: none (no code touched).
@@ -86,6 +132,11 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane).
 
 - Phase completions append a CHK-n block above, never edit an old one.
 - Status changes in the table land in the same PR that earns them.
+- Every CHK-n reports the architectural debt budget
+  ([MIGRATION-PLAN.md](MIGRATION-PLAN.md#cross-cutting-rules)): gaps before,
+  gaps closed, gaps introduced, net delta.
+- Every architectural PR's handoff fills all eleven fields of the
+  [handoff protocol](#handoff-protocol-mandatory) above.
 - The audit reports behind CHK-0 were session artifacts (`/tmp`); the control
   plane is the durable record — anything load-bearing from them is already
   in these pages with citations.

@@ -27,6 +27,20 @@ doctrine page is the statement and this page links it. The articles here are
 the ones doctrine does not already carry: they govern **how the architecture
 may change**, not what the architecture is.
 
+## Document hierarchy
+
+Stated once, binding, and the rule behind every "which page wins" question:
+
+- Accepted doctrine and ADRs govern what the repository's semantics **are**.
+- This constitution governs how the refactor may change them.
+- The [invariant registry](INVARIANTS.md) records the properties under
+  protection; the [migration plan](MIGRATION-PLAN.md) sequences the work;
+  [CONTEXT.md](CONTEXT.md) records execution state.
+
+No page competes with another for the same sentence. When two pages appear
+to contradict, the resolution is a new ADR or a
+[program decision](DECISIONS.md) — never a silent edit of the older page.
+
 ## CON-0 — Do not trade semantic maturity for structural purity
 
 Clean layering, package count, file size, and directory aesthetics are not
@@ -41,15 +55,31 @@ a split would.
 
 ## CON-1 — One enforcement authority
 
-Archkeep has exactly one semantic enforcement authority. `check` — the
-evaluation lane behind it — owns enforcement, evaluation, and verdict. CLI,
+Archkeep has exactly one semantic enforcement authority: the **evaluation
+lane** — one law, one verdict vocabulary, one `EXIT` table, one Decision
+constructor (instantiated in
+[AUTHORITY-MAP.md](AUTHORITY-MAP.md#the-one-enforcement-authority)). The
+`check` command is the **primary enforcement surface** on that authority —
+its front door — not an exclusive semantic entry point: four sibling verdict
+carriers (`fitness`, `delta --compare`, `change`, `rules verify`) report
+verdicts through their own fold sites, legitimately, because they evaluate
+the same law through the same engines. What no surface may do is judge: CLI,
 MCP, LSP, providers, renderers, reporters, and command facades hold no
-judgment of their own. No second engine ("CheckEngine", "MCPCheckEngine",
+judgment of their own, and no second engine ("CheckEngine", "MCPCheckEngine",
 "CLI evaluator", "Report evaluator", or semantic equivalent) may be created.
-What the one authority already states is
+
+The mirror rule holds with equal force: **the fold sites must not be
+mechanically unified either.** Routing the sibling carriers through
+`verdictFor` is not a conformance fix — `delta`'s findings status folds
+classification counts `verdictFor` has no inputs for — it is a semantic
+change wearing a cleanup's clothes
+([PD-6](DECISIONS.md#program-decisions)). One authority means one law and one
+vocabulary, not one function: the five carriers are legitimate exactly as
+they stand ([INV-25](INVARIANTS.md)). What the one authority already states
+is
 [`docs/doctrine/architecture-authority.md`](../../doctrine/architecture-authority.md)'s
-"The boundary, stated once"; this article extends it from _what neighbours may
-not decide_ to _what this repository may not build while refactoring_.
+"The boundary, stated once"; this article extends it from _what neighbours
+may not decide_ to _what this repository may not build while refactoring_.
 
 ## CON-2 — Semantic flow is one-way
 
@@ -160,9 +190,13 @@ Every substantial extraction or behavior-adjacent change validates
 differentially: old path vs. new path over the same semantic cases, comparing
 verdicts, violations, coverage semantics, evidence/provenance semantics, exit
 codes, and contract outputs where the contract demands them. A rewrite is
-never self-approved by the new implementation's own unit tests alone. Where
-semantic equivalence and incidental formatting diverge, semantic equivalence
-is compared first.
+never self-approved by the new implementation's own unit tests alone.
+Comparisons run at three ordered levels — semantic golden, contract golden,
+incidental bytes — defined in
+[VALIDATION-MATRIX.md](VALIDATION-MATRIX.md): the semantic result is compared
+before any byte, and byte identity is a gate only where a contract or
+invariant demands it. A golden test that freezes implementation detail no
+contract names is a stop condition (item 9 under P-D).
 
 ## Process articles
 
@@ -177,9 +211,50 @@ is compared first.
   [`docs/adr/`](../../adr/), continuing the existing numbering), checkpoints
   are `CHK-*`. Reviews, PRs, and tests reference these IDs, not prose
   paraphrases.
-- **P-D — Stop conditions.** A phase stops and reports REWORK on: a hidden
-  second authority, a new circular dependency, a duplicate canonical model,
-  semantic behavior drift, provider judgment, CLI/MCP semantic divergence,
-  nondeterminism regression, an unexplained contract regression, or a package
-  extraction that cannot demonstrate architectural gain. The full maturity
-  gate lives in [MIGRATION-PLAN.md](MIGRATION-PLAN.md).
+- **P-D — Stop conditions.** A phase stops and reports REWORK on any of
+  these, enumerated so that no reading of "roughly similar" is needed:
+
+  1. a second semantic authority, explicit or emergent;
+  2. a duplicate canonical model — two constructors of one concept, including
+     per-surface verdict spellings (`DomainVerdict`/`CheckVerdict`/
+     `MCPVerdict`/`ReportVerdict` or equivalents) created for package
+     separation;
+  3. semantic vocabulary ambiguity — two words for one meaning, or one word
+     for two meanings, left unadjudicated;
+  4. provider judgment, **analyzer** judgment, or **renderer** judgment — any
+     non-authority module deciding semantics;
+  5. a CLI/MCP semantic fork — the same question answered differently by two
+     surfaces;
+  6. nondeterministic evaluation, or a determinism regression;
+  7. an unexplained exit-code or output-contract change;
+  8. an extraction without measurable architectural gain — or package count,
+     file count, directory aesthetics, or moved-module count used as a
+     progress metric;
+  9. a golden test that freezes implementation detail no contract names;
+  10. documentation claiming an invariant is protected while the automated
+      witness does not actually enforce it;
+  11. a new circular dependency; or
+  12. any other unexplained semantic behavior drift.
+
+  A stop is reported with the failing item, never silently absorbed. The
+  full maturity gate lives in [MIGRATION-PLAN.md](MIGRATION-PLAN.md).
+
+- **P-E — The per-PR orchestration loop.** Every architectural PR runs
+  through: an architecture-audit subagent (reads the phase's territory cold)
+  → coordinator scope lock (the PR's work-item contracts, nothing beside
+  them) → implementation worker → test/contract worker (the named witnesses
+  and differentials) → independent adversarial reviewer (never the
+  implementer — [P-B](#process-articles)) → differential/regression reviewer
+  → documentation keeper (control-plane updates in the same PR) → coordinator
+  scoring against the maturity gate. Subagents propose; they may not amend
+  the constitution, the invariant registry, or the authority map — those
+  change only by coordinator decision recorded in
+  [DECISIONS.md](DECISIONS.md) or a new ADR, carried by the coordinator's PR
+  rather than a worker's. When two subagents return conflicting architectural
+  interpretations, implementation stops: the conflict becomes a decision
+  record first, and work resumes under the recorded answer.
+- **P-F — Ownership locks.** No two PRs may simultaneously change the same
+  canonical model, authority boundary, or provider seam. PRs overlap only
+  across disjoint locks, and disjointness is proven by the dependency graph,
+  not asserted: the coordinator names each PR's lock in its work-item
+  contract and refuses a second PR the same lock until the first merges.

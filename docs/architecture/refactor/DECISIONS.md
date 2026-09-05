@@ -72,3 +72,22 @@ Two registers live here, and neither duplicates `docs/adr/`:
   sibling carrier through `verdictFor`" as cleanup — `delta`'s findings fold
   classification counts `verdictFor` has no inputs for, so such a reroute is
   a semantic change, not a conformance fix.
+- **PD-7 (2026-09-05) — Maintainer steering pass on PR #727.** Before merge,
+  the maintainer approved the direction and issued nineteen directives
+  hardening the control plane against future-agent misreading. The
+  load-bearing ones are now articles and sections rather than this
+  paragraph: [CON-1](CONSTITUTION.md#con-1--one-enforcement-authority)'s
+  authority/surface distinction with the anti-unification mirror rule; the
+  [work-item contract](MIGRATION-PLAN.md#work-item-contract-binding-on-every-unit-from-phase-1-on)
+  with per-item classification (and no blanket "no behavior change" claim
+  for phases containing correctness hardening); "no proven extraction" as a
+  successful Phase 4 outcome, with package/file counts named as
+  anti-metrics; Phase 2-A's finding audit before any canonicalization; the
+  three [validation levels](VALIDATION-MATRIX.md#validation-levels-how-a-comparison-runs-in-this-order);
+  the mandatory [handoff protocol](CONTEXT.md#handoff-protocol-mandatory);
+  [P-E](CONSTITUTION.md#process-articles)'s orchestration loop and
+  [P-F](CONSTITUTION.md#process-articles)'s ownership locks; the enumerated
+  stop conditions; evidence-first exits; the architectural debt budget; the
+  [document hierarchy](CONSTITUTION.md#document-hierarchy); and Phase 1's
+  PASS/FAIL/DEFER gate table. Recorded here as program history — the
+  articles are the binding statement.

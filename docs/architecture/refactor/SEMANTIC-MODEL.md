@@ -51,7 +51,11 @@ Each site builds its own shape and its own message wording, then all four fold
 into the one verdict lane. The lane is singular (good,
 [CON-1](CONSTITUTION.md#con-1--one-enforcement-authority)); the finding concept
 feeding it is plural in spelling. This is the largest
-[CON-4](CONSTITUTION.md#con-4--canonical-semantic-models) gap Phase 2 owns.
+[CON-4](CONSTITUTION.md#con-4--canonical-semantic-models) gap Phase 2 owns —
+and Phase 2 **starts with the audit, not an object**: work item 2-A
+adjudicates what a Finding is before any canonicalization, and "no canonical
+Finding object" is one of its three legitimate outcomes
+([MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening)).
 
 ## Message-template registries — one shape, three homes
 
@@ -117,3 +121,11 @@ touches a row must: keep the owner the single constructor, keep consumer
 composition (no re-derivation), and re-run the row's pinning tests plus the
 differentials named in [VALIDATION-MATRIX.md](VALIDATION-MATRIX.md). A new
 concept entering the model gets a row here in the same PR that introduces it.
+
+Two spellings of one meaning are permitted only at adapter/projection
+boundaries, with the conversion named at the boundary — anywhere else they
+are a duplicate model and a stop ([P-D](CONSTITUTION.md#process-articles)
+item 2). Creating per-surface verdict types (`DomainVerdict`/`CheckVerdict`/
+`MCPVerdict`/`ReportVerdict` or equivalents) to keep packages separate is the
+named anti-pattern: a surface composes the canonical verdict; it never
+re-spells it.

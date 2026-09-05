@@ -16,7 +16,9 @@ they define Phase 4's entry gate and every phase's exit evidence.
 - **T3 behavior** — module semantics over injected data.
 - **T4 implementation detail** — wording/shape a refactor may change freely
   (renderers' pinned prose included — regenerating pinned text is a review
-  decision, not a gate breach).
+  decision, not a gate breach). **Excluded from T4**: rule-message templates
+  and envelope bytes — upstream-parity- and schema-pinned text is T2, and
+  regenerating it is a contract change, not a review decision.
 
 Representative T1 spine (full per-suite citations live in the test audit, and
 the suites themselves are the authority): `conformance/boundary`,
@@ -26,6 +28,9 @@ differential), `conformance/corpus.integration`, `rules/invariants`,
 `analysis/metamorphic`, `check-repeat-byte-identity.integration`,
 `deterministic-ordering.integration`, `refusal-contract.integration`,
 `entry-point.test`, `index.test`, plus the LSP empty-diagnostic suites.
+(`conformance/corpus.integration` is a labeled **fixture** corpus driven
+through `check` — not a golden-output corpus; GAP-A stays open until one is
+recorded.)
 
 ## Contract → pin map (external contracts a refactor must not move)
 
@@ -60,11 +65,34 @@ differential), `conformance/corpus.integration`, `rules/invariants`,
 8. Cross-command consistency (history/trajectory/classifier, gates, state).
 9. Coverage-real-trees weekly (exact counts both directions).
 
+## Validation levels (how a comparison runs, in this order)
+
+Every differential and golden comparison below runs at three levels, and the
+order is itself the rule — [CON-12](CONSTITUTION.md#con-12--differential-safety)
+states the discipline; this section owns the taxonomy:
+
+1. **Semantic golden** — the meaning: verdict, violations, evidence,
+   provenance, coverage — compared structurally over canonical fields,
+   before any byte is compared.
+2. **Contract golden** — the bytes a contract freezes: the JSON envelope
+   (`schemaVersion` + field roster), SARIF, `--help`, declared protocol
+   messages. Byte identity is a gate here and only here.
+3. **Incidental bytes** — formatting, key order, whitespace, path spellings
+   no contract names. Not a gate: a divergence at this level is re-blessable
+   by review with the reason recorded.
+
+A golden test that freezes level-3 detail as if it were level-2 — with no
+contract or invariant naming those bytes — is a stop condition (item 9 under
+[P-D](CONSTITUTION.md#process-articles)). GAP-A's corpus therefore commits
+full per-verb output but gates it only at levels 1 and 2; level-3 drift
+inside a corpus diff is the reviewer's triage, never an automatic red.
+
 ## Output differentials every structural phase must run
 
 For the verbs its diff touches, over pinned fixture trees, old path vs new:
 
-1. `check` verdict + JSON + SARIF, byte-for-byte.
+1. `check` verdict + JSON + SARIF — byte-identical at validation levels 1–2
+   (semantic + contract goldens); level-3 drift triaged, not gated.
 2. `delta --capture` then `--compare` classification stability.
 3. `change` reconciliation verdicts.
 4. `explain` per-site agreement with `check` findings.
@@ -77,7 +105,7 @@ For the verbs its diff touches, over pinned fixture trees, old path vs new:
     plus the suite's named extras; findings sides pinned for the five verdict
     carriers).
 11. `rules verify` tamper → exit 1.
-12. Envelope byte stability per verb.
+12. Envelope byte stability per verb — level 2; the envelope is contract.
 
 ## Differential gaps (what the harness cannot prove today)
 
@@ -86,7 +114,11 @@ For the verbs its diff touches, over pinned fixture trees, old path vs new:
   pins field paths, not values; byte-identity compares the same code to
   itself. **Phase 4 entry gate**: record the corpus before any structural
   move (regen procedure modeled on `ARCHKEEP_UPDATE_ENVELOPE_SHAPE`,
-  human-gated). Exit: post-refactor diff empty or re-blessed row by row.
+  human-gated). The corpus commits full per-verb stdout (text+json+sarif) but
+  gates it only at
+  [levels 1 and 2](#validation-levels-how-a-comparison-runs-in-this-order) —
+  semantic and contract goldens. Exit: post-refactor diff empty or re-blessed
+  row by row, with level-3 drift triaged rather than gated.
 - **GAP-B — byte-identity is single-command** (`check`); the comparator's own
   header anticipates composing it for every read-only verb.
 - **GAP-C — differential breadth**: governance/provenance/report _values_
@@ -116,6 +148,8 @@ remain conventions with recorded reasons unless a phase proves a scan's worth.
 ## Per-phase validation requirement
 
 Every phase PR carries, in its description: the INV ids touched, the T1/T2
-suites re-run by name, the output differentials run (rows above), and — for
+suites re-run by name, the output differentials run (rows above) with their
+verdicts at each [validation level](#validation-levels-how-a-comparison-runs-in-this-order)
+(semantic first, contract bytes second, incidental bytes last), and — for
 phases 4+ — the GAP-A corpus comparison verdict. "Tests pass" is not evidence;
 the named matrix is.

@@ -14,6 +14,14 @@ the binding principles are
 land in [`docs/adr/`](../../adr/) as numbered records. Every page here links
 to those instead of quoting them, and the refactor is bound by all of them.
 
+How these pages relate — doctrine and ADRs govern what the semantics are;
+the [constitution](CONSTITUTION.md#document-hierarchy) governs how the
+refactor may change them; the invariant registry records what is under
+protection; the migration plan sequences; [CONTEXT.md](CONTEXT.md) records
+execution state — is stated once in the
+[constitution's hierarchy section](CONSTITUTION.md#document-hierarchy), with
+the rule that a contradiction resolves by a new record, never a silent edit.
+
 Phase 0 (architecture cartography) is complete — the pages below are
 populated from six read-only audits, verified against the tree, and are the
 program's working map. Nothing in `packages/` has been touched yet; nothing
