@@ -23,9 +23,12 @@ execution state — is stated once in the
 the rule that a contradiction resolves by a new record, never a silent edit.
 
 Phase 0 (architecture cartography) and Phase 0.5 (decision closure and the
-Phase 1 execution baseline) are complete — the pages below are populated
-from six read-only audits, verified against the tree, and are the program's
-working map. Nothing in `packages/` has been touched yet; nothing moves
+Phase 1 execution baseline) are complete, and Phase 1's units have landed —
+the pages below are populated from six read-only audits, verified against the
+tree, and are the program's working map. Phase 1 touched `packages/archkeep`
+only inside its units' scopes (1-A's fold-input latches and twins, 1-E's
+identity pins and manifest digests, 1-F's header corrections, 1-C's test
+roster); nothing moves structurally
 before a phase's entry criteria hold (see
 [CONTEXT.md](CONTEXT.md) for state and the last checkpoint):
 

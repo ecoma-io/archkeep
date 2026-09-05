@@ -155,8 +155,9 @@ exists). A record never restates the constitution — a field whose answer is
     (Phase 1-B)_: the status fold is the three-state ternary at
     `src/commands/rules.mjs:445-446`, folded to the envelope `exitCode` from
     the shared `EXIT` table at `rules.mjs:448`, and to the process exit at
-    `cli.mjs:2040-2042` — the map's `cli.mjs:2039-2042` names the site, and
-    2039 is the comment naming all three codes. The envelope is built through
+    `cli.mjs:2040-2042` — the map's fold-roster bullet names the same site
+    (`cli.mjs:2040-2042`; 2039 is the comment naming all three codes). The
+    envelope is built through
     the shared `jsonEnvelope` at `rules.mjs:479-494` and held by the
     `EXIT_FOR_STATUS` refusal at `src/report/json.mjs:92` (comment `:88-91`,
     thrown message `:93-98`; the status-keyed view is derived from `EXIT` at

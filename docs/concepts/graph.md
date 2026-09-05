@@ -54,10 +54,12 @@ engine reads upstream, not facts about the consumer's architecture.
 ## Workspace layout
 
 The `appsDir`/`libsDir` the engine used when judging imports is included in the
-snapshot, with a `workspaceLayoutSource` that is `"declared"` (the workspace's
-own configuration named it) or `"default"` (neither did, so the engine fell back
-to `apps`/`libs`). The default is imported from where the rule engine defines
-it, never written a second time.
+snapshot, with a `workspaceLayoutSource` that is `"declared"` (the canonical
+graph carries a `workspaceLayout` key — the workspace's own configuration named
+it, or the Moon provider derived it per
+[ADR 0010](../adr/0010-moon-workspace-layout-inference.md)) or `"default"`
+(neither happened, so the engine fell back to `apps`/`libs`). The default is
+imported from where the rule engine defines it, never written a second time.
 
 A complete declaration is honored. A partial one — naming only `appsDir` or only
 `libsDir` — is refused loudly, with exit 3 and a message naming the missing key.

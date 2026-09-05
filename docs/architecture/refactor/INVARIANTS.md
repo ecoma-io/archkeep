@@ -27,14 +27,18 @@ The root invariant. An empty diagnostic list means "no violation", never
 
 - Witness: single `EXIT` table; `verdict-layering.test.mjs:131-186` scans for
   a second numeric _table_; the latch that actually holds the carrier sites is
-  `jsonEnvelope`'s status↔exitCode refusal (`src/report/json.mjs:88-96` —
+  `jsonEnvelope`'s status↔exitCode refusal (`src/report/json.mjs:93` —
   every carrier eagerly builds its envelope); `exit-matrix.integration.test.mjs`
   pins per-verb sides.
-- Gap: exit 1/3 also appear as branch/ternary literals at
-  `delta.mjs:757-779`, `change.mjs:762-778`, `fitness.mjs:211-216` — shapes
-  the object-literal scan cannot see; the envelope latch and exit-matrix pin
-  them behaviorally. "One table" is true of the spelling, not of every
-  literal.
+- Gap: exit 1/3 also appear at the four sibling folds as keyed-object
+  lookups (`{ ok: EXIT.ok, findings: EXIT.violations, "no-verdict":
+EXIT.error }[result.status] ?? EXIT.error` — `cli.mjs:1082/1399/1560`) and
+  the rules-verify if-chain (`cli.mjs:2040-2042`) — shapes the object-literal
+  scan cannot see; the envelope latch and exit-matrix pin them behaviorally.
+  "One table" is true of the spelling, not of every fold site. (Shape
+  re-measured after Phase 1-A replaced the branch/ternary folds;
+  [PD-6](DECISIONS.md#program-decisions) keeps these spellings as the pinned
+  baseline.)
 
 ## INV-3 — One envelope shape
 
@@ -49,23 +53,26 @@ The root invariant. An empty diagnostic list means "no violation", never
 Enforcement semantics are singular — one `EXIT` table, one status vocabulary,
 one `buildDecision` — and the verdict-bearing verbs fold status→exit over
 that shared vocabulary at **five fold sites**: `verdictFor` for `check`
-(`src/verdict.mjs:121-238`, callers `cli.mjs:802` + `check.mjs:1066`);
-`cli.mjs:1060-1061` (delta, over `delta.mjs:751-781`), `:1377-1378` (change,
-over `change.mjs:751-780`), `:1539-1542` (fitness, over
-`fitness.mjs:211-216`) — the three siblings evaluate the same architecture
-law (intent J) — and `:2017-2019` (rules verify, over `rules.mjs:445-448`),
+(`src/verdict.mjs:201-333`, callers `cli.mjs:809` + `check.mjs:1066`);
+`cli.mjs:1082` (delta, over `deltaFold` at `delta.mjs:486`), `:1399` (change,
+over `changeFold` at `change.mjs:498`), `:1560-1563` (fitness, over
+`fitnessFold` at `fitness.mjs:137`) — the three siblings evaluate the same
+architecture law (intent J) — and `:2040-2042` (rules verify, over
+`rules.mjs:445-448`),
 whose fold is the **artifact-integrity** contract's — the same vocabulary and
 table, a different law, outside the lane ([PD-8](DECISIONS.md#program-decisions)).
 The enforcement carriers agree because they evaluate the same law, not
 because they share one function.
 
 - Witness: fails-closed folds (`?? EXIT.error`); the envelope latch
-  (`json.mjs:88-96`); exit-matrix both directions; cross-command-gates
+  (`json.mjs:93`); exit-matrix both directions; cross-command-gates
   composition pins.
-- Gap: `verdictFor`'s counts input is an untyped 14-field tuple — a
-  misspelled key silently zeroes a count — and the sibling folds hand-roll
-  status/exitCode literals in branch shapes no scan sees. Phase 1
-  hardens the **class** across all five sites, not just `check`'s.
+- Gap: **closed by Phase 1-A** (PR #730): all five fold sites validate their
+  inputs by roster — required and optional keys, per-key types, unknown-key
+  refusal — each with red-by-construction twins; a misspelled key now refuses
+  loudly (no-verdict/exit 3) instead of silently zeroing a count. The
+  INV-2 shape note above remains: the sibling folds' exit spellings are
+  scan-invisible and stay pinned behaviorally.
 
 ## INV-5 — Snapshot identity per family (ADR 0008)
 
@@ -104,9 +111,11 @@ because they share one function.
 
 - Witness: intent A claims it; the ESLint differential + provider parity
   (intent L) hold the _behavior_.
-- Gap: **no scan enforces the import direction** (G-1), and the Moon provider
-  carries documented normalization policy (AUTHORITY-MAP divergence 1). Phase 1
-  (policy adjudication) and Phase 3 (scan).
+- Gap: **no scan enforces the import direction** (G-1), and the Moon
+  provider's policy surface is adjudicated — the policy half closed by
+  Phase 1-C ([MOON-POLICY.md](MOON-POLICY.md): three contract-backed
+  normalizations, two recorded provider policies in ADR 0009/0010). The G-1
+  import-direction scan remains Phase 3's.
 
 ## INV-10 — Analysis never judges
 
