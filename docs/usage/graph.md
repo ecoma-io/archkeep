@@ -25,11 +25,14 @@ snapshot of what is is never a finding.
   Edge identity is the full `(source, target, type)` triple: a `static` edge
   becoming `dynamic` is two different edges, not one that changed.
 - **Workspace layout**: the `appsDir`/`libsDir` the engine used when judging
-  imports, with a `workspaceLayoutSource` that is `"declared"` (the workspace's
-  own `nx.json` or `archkeep.json` named it) or `"default"` (neither did, so the
-  engine fell back to `apps`/`libs`). Two copies of a default is how a report
-  ends up describing a layout the engine did not use, so the default is imported
-  from where the rule engine defines it, never written a second time.
+  imports, with a `workspaceLayoutSource` that is `"declared"` (the canonical
+  graph carries a `workspaceLayout` key — the workspace's own `nx.json` or
+  `archkeep.json` named it, or the Moon provider derived it per
+  [ADR 0010](../adr/0010-moon-workspace-layout-inference.md)) or `"default"`
+  (neither happened, so the engine fell back to `apps`/`libs`). Two copies of a
+  default is how a report ends up describing a layout the engine did not use, so
+  the default is imported from where the rule engine defines it, never written a
+  second time.
 
 Internal fields the rule engine uses (`mfeRemote`, `entryPoints`,
 `declaredPackages`) are stripped from the snapshot. They are facts about how

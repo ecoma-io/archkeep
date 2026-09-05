@@ -191,7 +191,7 @@ exactly one of them decides:
 `fitness`, `delta`, `change` and `rules verify` are verdict-carriers on their
 own questions — a failing fitness function, a non-waived introduced violation,
 an unfulfilled change declaration, a rule artifact that fails integrity — and
-they answer under the same law and the same verdict vocabulary
+they answer under the same verdict vocabulary and exit table
 ([exit codes](docs/reference/exit-codes.md)). Every other command describes,
 evidences, and gets out of the way. The asymmetry is the design: **analysis is
 everywhere; authority is in one place.**
