@@ -46,6 +46,7 @@ import { computeDecisionFitness } from "../governance/decision-fitness.mjs";
 import { stripAdrPrefix, stripRuleFitnessPrefix } from "../governance/adr-registry.mjs";
 import { intentRows, configRows, rowLabel } from "./provenance-command.mjs";
 import { evaluateFitness, fitnessSnapshot } from "../governance/fitness-registry.mjs";
+import { driftForCheck } from "./drift.mjs";
 import { hasTag, isComboDepConstraint } from "../rules/tags.mjs";
 import { resolveMembers } from "../architecture-intent/selectors.mjs";
 import { evaluate } from "../rules/index.mjs";
@@ -119,12 +120,33 @@ function intentRowGoverns(intent, graph, row) {
  *
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {object} config The resolved boundary law.
- * @param {object|null} intent The normalized intent model, or null when the
- *   workspace declares none.
- * @returns {object[]} `[{name, verdict}, ...]`.
+ * @returns {Promise<object[]>} `[{name, verdict}, ...]`.
  */
-function fitnessVerdictsFor(commandContext, config, intent) {
+async function fitnessVerdictsFor(commandContext, config) {
   if (!Array.isArray(config?.fitness) || config.fitness.length === 0) return [];
+  // A `drift-free` gate judges the SAME verdict-shaped intent the `fitness`
+  // command feeds its registry — `driftForCheck`'s, not the raw normalized
+  // model the walk's intent rows are built from: that model carries no
+  // `.verdict`, and a gate dispatched on it read as a fail over a clean tree
+  // (#737). The construction mirrors `./fitness.mjs`'s `fitnessCommand` —
+  // the same `drift.intent === undefined` → `null` resolution — so the two
+  // faces derive identical rows from identical facts.
+  const drift = await driftForCheck(commandContext);
+  const intent =
+    drift.intent === undefined
+      ? null
+      : {
+          verdict:
+            drift.findings.length > 0
+              ? "findings"
+              : drift.unresolved.length > 0
+                ? "no-verdict"
+                : "ok",
+          boundaries: drift.boundaries,
+          findings: drift.findings,
+          unresolved: drift.unresolved,
+          notes: drift.notes,
+        };
   const snapshot = fitnessSnapshot(commandContext, {
     intent,
     suppressions: config.suppressions ?? [],
@@ -145,12 +167,14 @@ function fitnessVerdictsFor(commandContext, config, intent) {
  * @param {{intent?: object|null, fitnessVerdicts?: object[]}} [io]
  *   `intent` is the normalized intent model (or null); `fitnessVerdicts`
  *   overrides the run's own evaluation — a test supplies a fixed list.
- * @returns {{status: "ok"|"no-verdict", result: object, coverage: object,
- *   report: {text: string, json: string}}}
- * @throws {Error} on an unreadable registry, a malformed law, or a config
- *   declaring fitness that fails to evaluate — exit-3 class.
+ * @returns {Promise<{status: "ok"|"no-verdict", result: object, coverage: object,
+ *   report: {text: string, json: string}}>}
+ * @throws {Error} on an unreadable registry, a malformed law, a
+ *   `driftForCheck` refusal on the fitness leg's intent (an unreadable or
+ *   invalid `architecture-intent.json`, an unregistered-plugin graph), or a
+ *   config declaring fitness that fails to evaluate — exit-3 class.
  */
-export function decisionsCommand(decisionId, commandContext, config, io = {}) {
+export async function decisionsCommand(decisionId, commandContext, config, io = {}) {
   const intent = io.intent ?? null;
 
   // The registry read — throws on an unreadable `docs/adr/`, which the caller
@@ -225,7 +249,7 @@ export function decisionsCommand(decisionId, commandContext, config, io = {}) {
   // the `{name, verdict}` list from the declared fitness gates above (or the
   // caller's override). `computeDecisionFitness`'s second argument carries
   // verdicts but is unused; the lookup is the single door, so it is null.
-  const verdicts = io.fitnessVerdicts ?? fitnessVerdictsFor(commandContext, config, intent);
+  const verdicts = io.fitnessVerdicts ?? (await fitnessVerdictsFor(commandContext, config));
   const verdictByName = new Map(verdicts.map((v) => [v.name, v]));
   const fitnessLookup = (bindingId) => verdictByName.get(stripRuleFitnessPrefix(bindingId));
   const fitnessById = new Map(
