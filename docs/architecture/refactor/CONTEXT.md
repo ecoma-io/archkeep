@@ -271,6 +271,17 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
     against the GitHub rulesets API at fix time; coordinator review caught
     and fixed two defects before merge (a false custom-rule
     `not_applicable` emission claim; a missing fourth emission site).
+- **Close-time hostile review** (2026-09-06, constitution article P-B): a
+  ten-vector adversarial pass over this PR's seam contract and the
+  reconciled control plane, findings dispositioned in this same PR — two
+  blocking (the Moon row omitted the `moon:declared` targets synthesis the
+  native row's twin already recorded; the LSP row's failure cell claimed
+  "nothing escapes the index build as a throw" while one throw class does)
+  plus the minor set (empty-graph guards are presence-guards; annotation
+  is caller-side on all paths, not LSP-only; `buildGraph`'s site; the
+  test-count roster above), each fixed or roster-defined here. The VS Code
+  two-marker gap the review surfaced is filed as #735 rather than ridden
+  onto a docs PR.
 - **Invariants touched**: INV-2/INV-4 gap (five fold sites now refuse
   malformed inputs; twins pin the silent direction); INV-6 (1-E pins);
   INV-9 adjudication half (1-C) and seam-table half (1-D); INV-18 digests
@@ -287,7 +298,9 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
   changelog: what an unchanged-but-malformed workspace is told differs);
   1-B–1-F — documentation/contract clarification, code pin-only.
 - **Differential evidence**: exit-matrix green (1-A, both CI legs);
-  identity suites 143 tests (1-E); Moon suite 177 tests (1-C);
+  identity suites 143 tests (1-E — the `diff`, `trajectory`, and
+  `evolution-event` suites composed); Moon suite 177 tests (1-C — the
+  `moon` and `adr-registry` suites composed);
   `check-docs-claims-parity` green in CI for every landed PR; the docs
   gates (`check-docs-links`, `format:check`) green locally for this PR.
 - **Provider seam status**: contract landed; both faces share

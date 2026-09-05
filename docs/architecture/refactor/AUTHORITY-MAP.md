@@ -153,7 +153,12 @@ are since closed by Phase 1, annotated in place:
    workspace-layout inference), each bounded to stating Moon's own facts and
    deciding nothing. "Policy surface" resolved as recorded policy, not
    silent behavior; the per-provider seam contract
-   ([BOUNDARIES.md](BOUNDARIES.md#provider-seam)) carries the verdicts.
+   ([BOUNDARIES.md](BOUNDARIES.md#provider-seam)) carries the verdicts. A
+   sixth embedded behavior the five missed — `moon:declared` targets
+   synthesis (`moon.mjs:725-737`) — was surfaced by the phase-close
+   hostile review; the seam table records it with its per-item verdict
+   owed to Phase 2-A, so the closure names five and the seam contract
+   carries six.
 2. **LSP holds a second Nx discovery** — `workspace-index.mjs:398-533`
    re-implements Nx project-graph discovery for the editor; package-based Nx
    workspaces yield zero editor nodes while the CLI sees them. Mitigated by
