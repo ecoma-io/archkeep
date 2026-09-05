@@ -110,6 +110,7 @@ import { eventSnapshotSide } from "./history.mjs";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { compareSnapshotMetadata, dirtyBaselineNote, dirtyHeadNote } from "./snapshot-meta.mjs";
+import { describe } from "../values.mjs";
 
 const require = createRequire(import.meta.url);
 /** @type {{name: string, version: string}} */
@@ -403,6 +404,148 @@ export function deltaDisposition({ status }) {
   return "accepted";
 }
 
+/**
+ * The input latch for `deltaFold`: names the first counted bucket that is not
+ * an array, or `null` when every one is. A returned problem becomes the
+ * fold's refusal — never a throw, because the refusal is a fact about the run
+ * the command reports in-band, the same lane an `unknown` classification
+ * takes.
+ *
+ * Every bucket the COMMAND counts is validated, not only the ones the fold
+ * reads first: the custom-rule notes loop, the §1 mapping, `result.summary`
+ * and both report faces count the same buckets downstream of the fold, so a
+ * bucket that would crash or silently empty one of them is refused while
+ * there is still a verdict to withhold.
+ *
+ * @param {object} classification From `classifyDelta`.
+ * @param {{judged: object[], skipped: object[], removed: string[],
+ *   findings: {introduced: object[], resolved: object[], unchanged: object[],
+ *   unknown: object[]}}|null} custom
+ * @returns {string|null}
+ */
+function deltaFoldInputProblem(classification, custom) {
+  const counted = [
+    ["classification.violations.introduced", classification?.violations?.introduced],
+    ["classification.violations.resolved", classification?.violations?.resolved],
+    ["classification.violations.unchanged", classification?.violations?.unchanged],
+    ["classification.violations.unknown", classification?.violations?.unknown],
+    ["classification.unresolvable.introduced", classification?.unresolvable?.introduced],
+    ["classification.unresolvable.resolved", classification?.unresolvable?.resolved],
+    ["classification.unresolvable.unchanged", classification?.unresolvable?.unchanged],
+    ["classification.unresolvable.unknown", classification?.unresolvable?.unknown],
+    ...(custom === null
+      ? []
+      : [
+          ["custom.judged", custom?.judged],
+          ["custom.skipped", custom?.skipped],
+          ["custom.removed", custom?.removed],
+          ["custom.findings.introduced", custom?.findings?.introduced],
+          ["custom.findings.resolved", custom?.findings?.resolved],
+          ["custom.findings.unchanged", custom?.findings?.unchanged],
+          ["custom.findings.unknown", custom?.findings?.unknown],
+        ]),
+  ];
+  for (const [name, value] of counted) {
+    if (!Array.isArray(value)) {
+      return `the delta fold counts "${name}", which is ${describe(value)} — a bucket that is not an array counts as empty in every lane, and an empty delta reads "no change". This is a bug in archkeep, not a fact about the workspace.`;
+    }
+  }
+  return null;
+}
+
+/**
+ * The `delta` exit fold, lifted out of `deltaCommand` as a pure function so
+ * the mapping from classification buckets to the verdict is a fact a test can
+ * pin (`./change.mjs`'s `reconcileDisposition` is the arrangement's
+ * precedent). The lane order is the one `deltaCommand`'s header states:
+ * introduced-and-not-waived (violations and custom findings alike) →
+ * `findings`/1; else any unknown item → `no-verdict`/3; else `ok`/0.
+ *
+ * The input latch runs first: a bucket the fold cannot read is refused as a
+ * no-verdict whose single reason names it (`refused`), never folded past as a
+ * silently-empty count. The literals stay hand-rolled per site by decision —
+ * the carrier folds are the pinned baseline INV-2 names, not a table to be
+ * converged (`docs/architecture/refactor/AUTHORITY-MAP.md`).
+ *
+ * Pure and exported for the fold's own tests; `deltaCommand` is its only
+ * production caller.
+ *
+ * @param {object} classification From `classifyDelta`.
+ * @param {{judged: object[], skipped: object[], removed: string[],
+ *   findings: {introduced: object[], resolved: object[], unchanged: object[],
+ *   unknown: object[]}}|null} custom
+ * @returns {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3,
+ *   decision: object, introducedWaived: number, refused?: undefined}|
+ *   {status: "no-verdict", exitCode: 3, decision: object, introducedWaived?: undefined,
+ *   refused: string}}
+ *   `introducedWaived` rides every judged lane because `result.summary`
+ *   reports it whichever lane fired; a refusal carries `refused` and no
+ *   counts, and is the one return whose `decision.reason` names a malformed
+ *   input rather than a fact about the trees.
+ */
+export function deltaFold(classification, custom) {
+  const problem = deltaFoldInputProblem(classification, custom);
+  if (problem !== null) {
+    return {
+      status: "no-verdict",
+      exitCode: 3,
+      decision: buildDecision({
+        status: "no-verdict",
+        coverageComplete: true,
+        findings: 0,
+        reason: problem,
+      }),
+      refused: problem,
+    };
+  }
+  const { violations, unresolvable } = classification;
+  const introducedWaived = violations.introduced.filter((entry) => entry.waived === true).length;
+  const introducedNotWaived = violations.introduced.length - introducedWaived;
+  // Custom findings have no waiver lane (`./delta-classify.mjs`'s
+  // `classifyCustomFindings` argues the by-construction absence), so every
+  // introduced one gates.
+  const customIntroduced = custom === null ? 0 : custom.findings.introduced.length;
+  const customUnknown = custom === null ? 0 : custom.findings.unknown.length;
+  const unknownCount = violations.unknown.length + unresolvable.unknown.length + customUnknown;
+
+  if (introducedNotWaived + customIntroduced > 0) {
+    return {
+      status: "findings",
+      exitCode: 1,
+      decision: buildDecision({
+        status: "findings",
+        coverageComplete: true,
+        findings: introducedNotWaived + customIntroduced,
+      }),
+      introducedWaived,
+    };
+  }
+  if (unknownCount > 0) {
+    return {
+      status: "no-verdict",
+      exitCode: 3,
+      decision: buildDecision({
+        status: "no-verdict",
+        coverageComplete: true,
+        findings: 0,
+        reason:
+          `${unknownCount} delta item${unknownCount === 1 ? "" : "s"} could not be classified — ` +
+          (customUnknown > 0
+            ? `${customUnknown} of them custom-rule item${customUnknown === 1 ? "" : "s"} — `
+            : "") +
+          `an item whose identity cannot be stated is never guessed into a bucket`,
+      }),
+      introducedWaived,
+    };
+  }
+  return {
+    status: "ok",
+    exitCode: 0,
+    decision: buildDecision({ status: "ok", coverageComplete: true, findings: 0 }),
+    introducedWaived,
+  };
+}
+
 /** First eight hex characters of a fingerprint, for prose that names one. */
 const short = (fingerprint) =>
   typeof fingerprint === "string" ? fingerprint.slice(0, 8) : String(fingerprint);
@@ -691,6 +834,47 @@ export async function deltaCommand(
       findings: { introduced: [], resolved: [], unchanged: [], unknown: [] },
     };
   }
+  // The exit fold, taken the moment both of its inputs are final: everything
+  // below — the custom-rule notes loop, the §1 mapping, `result.summary`, both
+  // report faces — counts the same buckets, and a malformed one must be
+  // refused HERE, in-band (no-verdict, exit 3, the bucket named), never
+  // counted past as a silently-empty bucket. The refusal withholds `delta`
+  // and the event exactly the coverage refusal does (#608): a comparison
+  // whose counts could not be read has no result to report.
+  const fold = deltaFold(classification, custom);
+  if (fold.refused !== undefined) {
+    const refusalCoverage = {
+      complete: true,
+      projects: Object.keys(graph.nodes).length,
+      analyzedFiles: analysis.analyzed,
+      imports: analysis.imports.length,
+      notAnalyzed: [],
+      blindSpots: blindSpotRows(analysis.failures),
+      notes: [fold.refused],
+    };
+    return {
+      status: fold.status,
+      coverage: refusalCoverage,
+      report: {
+        text: `delta: no verdict — ${fold.refused}\n`,
+        json: renderJson(
+          jsonEnvelope({
+            command: "delta",
+            context: { root, provider, marker, provenance: headProvenance },
+            status: fold.status,
+            exitCode: fold.exitCode,
+            coverage: refusalCoverage,
+            // The refusal-withheld payload, stated the way `coverageRefusal`
+            // states it: `jsonEnvelope` requires the key, the refusal has no
+            // result to report.
+            result: undefined,
+            decision: fold.decision,
+          }),
+        ),
+      },
+    };
+  }
+
   if (custom !== null) {
     for (const skipped of custom.skipped) {
       notes.push(`custom rule "${skipped.name}" was not classified — ${skipped.reason}`);
@@ -737,48 +921,10 @@ export async function deltaCommand(
     codeDrift,
   });
 
+  // The verdict, from the one fold — `deltaFold` above owns the lane order
+  // and the input latch; this destructure is the command's only hand in it.
   const { violations, unresolvable } = classification;
-  const introducedWaived = violations.introduced.filter((entry) => entry.waived === true).length;
-  const introducedNotWaived = violations.introduced.length - introducedWaived;
-  // Custom findings have no waiver lane (`./delta-classify.mjs`'s
-  // `classifyCustomFindings` argues the by-construction absence), so every
-  // introduced one gates.
-  const customIntroduced = custom === null ? 0 : custom.findings.introduced.length;
-  const customUnknown = custom === null ? 0 : custom.findings.unknown.length;
-  const unknownCount = violations.unknown.length + unresolvable.unknown.length + customUnknown;
-
-  /** @type {"ok"|"findings"|"no-verdict"} */
-  let status;
-  /** @type {0|1|3} */
-  let exitCode;
-  let decision;
-  if (introducedNotWaived + customIntroduced > 0) {
-    status = "findings";
-    exitCode = 1;
-    decision = buildDecision({
-      status,
-      coverageComplete: true,
-      findings: introducedNotWaived + customIntroduced,
-    });
-  } else if (unknownCount > 0) {
-    status = "no-verdict";
-    exitCode = 3;
-    decision = buildDecision({
-      status,
-      coverageComplete: true,
-      findings: 0,
-      reason:
-        `${unknownCount} delta item${unknownCount === 1 ? "" : "s"} could not be classified — ` +
-        (customUnknown > 0
-          ? `${customUnknown} of them custom-rule item${customUnknown === 1 ? "" : "s"} — `
-          : "") +
-        `an item whose identity cannot be stated is never guessed into a bucket`,
-    });
-  } else {
-    status = "ok";
-    exitCode = 0;
-    decision = buildDecision({ status, coverageComplete: true, findings: 0 });
-  }
+  const { status, exitCode, decision, introducedWaived } = fold;
 
   const coverage = {
     complete: true,

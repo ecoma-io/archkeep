@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { buildRuleModule } from "../custom-rules/wasm-fixture.mjs";
-import { captureDelta, deltaCommand, evidenceGraphToProjectGraph } from "./delta.mjs";
+import { captureDelta, deltaCommand, deltaFold, evidenceGraphToProjectGraph } from "./delta.mjs";
 import { parseEvidenceSnapshot, serializeEvidenceSnapshot } from "./delta-snapshot.mjs";
 import { computePolicyFingerprint } from "./graph.mjs";
 
@@ -687,5 +687,134 @@ describe("deltaCommand with custom rules", () => {
     expect(result.report.json).not.toContain("customRules");
     expect(result.report.json).not.toContain("customFindings");
     expect(result.report.text).not.toContain("custom rules");
+  });
+});
+
+describe("deltaFold input latch", () => {
+  // The `delta` exit fold's input latch (INV-4's gap, Phase 1-A): the fold
+  // hand-rolled its status/exit literals over classification buckets no
+  // shape-check rejected, so a misspelled bucket name reached the fold as a
+  // missing array — a TypeError crash at best, a silently-empty bucket at
+  // worst, and never a verdict the envelope could carry. Every case here
+  // plants that defect class and requires the in-band refusal instead:
+  // no-verdict, exit 3, the malformed bucket named. The controls beside
+  // them prove the buckets are readable when spelled right.
+
+  /** A `classifyDelta`-shape classification with empty buckets. */
+  function emptyClassification() {
+    return {
+      violations: { introduced: [], resolved: [], unchanged: [], unknown: [] },
+      unresolvable: { introduced: [], resolved: [], unchanged: [], unknown: [] },
+    };
+  }
+
+  /** One introduced, non-waived violation entry. */
+  const INTRODUCED = [{ messageId: "tagConstraintViolation", waived: false }];
+
+  it("keeps the findings lane for a readable bucket (control)", () => {
+    const fold = deltaFold(
+      {
+        ...emptyClassification(),
+        violations: { introduced: INTRODUCED, resolved: [], unchanged: [], unknown: [] },
+      },
+      null,
+    );
+    expect(fold.status).toBe("findings");
+    expect(fold.exitCode).toBe(1);
+    expect(fold.decision.verdict).toBe("fail");
+  });
+
+  it("keeps the no-verdict lane for an unknown item (control)", () => {
+    const fold = deltaFold(
+      {
+        ...emptyClassification(),
+        violations: { introduced: [], resolved: [], unchanged: [], unknown: [{}] },
+      },
+      null,
+    );
+    expect(fold.status).toBe("no-verdict");
+    expect(fold.exitCode).toBe(3);
+  });
+
+  it("keeps the ok lane for an empty delta (control)", () => {
+    const fold = deltaFold(emptyClassification(), null);
+    expect(fold.status).toBe("ok");
+    expect(fold.exitCode).toBe(0);
+  });
+
+  it("refuses a misspelled introduced bucket instead of crashing or reading it empty", () => {
+    // The planted defect: `intorduced`, not `introduced`. The violation the
+    // run meant to report rides the misspelled key, and the fold's count
+    // reads a missing array — pre-latch that was a TypeError, never a
+    // refusal the envelope could carry.
+    const fold = deltaFold(
+      {
+        ...emptyClassification(),
+        violations: { intorduced: INTRODUCED, resolved: [], unchanged: [], unknown: [] },
+      },
+      null,
+    );
+    expect(fold.status).toBe("no-verdict");
+    expect(fold.exitCode).toBe(3);
+    expect(fold.refused).toContain('"classification.violations.introduced"');
+  });
+
+  it("refuses a misspelled unresolvable group instead of crashing on it", () => {
+    // `unresolvables`, not `unresolvable` — the rename, so the real key is
+    // absent: the unknown items the run could not classify ride the
+    // misspelled key, and the fold's unknown count reads a missing array.
+    const fold = deltaFold(
+      {
+        violations: emptyClassification().violations,
+        unresolvables: { introduced: [], resolved: [], unchanged: [], unknown: [{}] },
+      },
+      null,
+    );
+    expect(fold.status).toBe("no-verdict");
+    expect(fold.exitCode).toBe(3);
+    expect(fold.refused).toContain('"classification.unresolvable.introduced"');
+  });
+
+  it("refuses a misspelled custom-findings bucket instead of reading it empty", () => {
+    // The custom side's `findings` misspelled away: every introduced custom
+    // finding vanishes from the fold — the silent direction exactly, an
+    // empty custom delta over rules that reported findings.
+    const fold = deltaFold(
+      emptyClassification(),
+      /** @type {any} */
+      ({
+        judged: [],
+        skipped: [],
+        removed: [],
+        findingz: {
+          introduced: [{ rule: "invented-rule" }],
+          resolved: [],
+          unchanged: [],
+          unknown: [],
+        },
+      }),
+    );
+    expect(fold.status).toBe("no-verdict");
+    expect(fold.exitCode).toBe(3);
+    expect(fold.refused).toContain('"custom.findings.introduced"');
+  });
+
+  it("refuses custom findings that are not an object of buckets", () => {
+    const fold = deltaFold(emptyClassification(), {
+      judged: [],
+      skipped: [],
+      removed: [],
+      findings: null,
+    });
+    expect(fold.status).toBe("no-verdict");
+    expect(fold.exitCode).toBe(3);
+    expect(fold.refused).toContain('"custom.findings.introduced"');
+  });
+
+  it("refuses a classification that is missing entirely", () => {
+    const fold = deltaFold(undefined, null);
+    expect(fold.status).toBe("no-verdict");
+    expect(fold.exitCode).toBe(3);
+    expect(fold.refused).toContain('"classification.violations.introduced"');
   });
 });

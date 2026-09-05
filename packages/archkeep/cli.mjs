@@ -799,7 +799,29 @@ async function runCheck(options, { cwd, env }) {
     env.out(result.report);
   }
 
-  return verdictFor(result).exitCode;
+  // The counts literal, not `check`'s whole return: `verdictFor`'s input latch
+  // refuses any key outside its 14-count roster, so a misspelled count key
+  // here is a no-verdict exit rather than a silently-defaulted zero — and
+  // `check`'s return carries non-count fields (`report`, `waived`, the custom-
+  // rule evidence) the fold must not be handed. The same 14 fields `check`'s
+  // own envelope fold spells (`./src/commands/check.mjs`): one counts
+  // vocabulary, two call sites, both validated.
+  return verdictFor({
+    violations: result.violations,
+    declaredEdgeFindings: result.declaredEdgeFindings,
+    goWorkDrift: result.goWorkDrift,
+    tsconfigPathsDead: result.tsconfigPathsDead,
+    intentFindings: result.intentFindings,
+    intentUnresolved: result.intentUnresolved,
+    intentUnresolvedDecisionRefs: result.intentUnresolvedDecisionRefs,
+    unchecked: result.unchecked,
+    analyzed: result.analyzed,
+    blindSpots: result.blindSpots,
+    fitnessFail: result.fitnessFail,
+    fitnessUnknown: result.fitnessUnknown,
+    customRuleFail: result.customRuleFail,
+    customRuleUnknown: result.customRuleUnknown,
+  }).exitCode;
 }
 
 /**

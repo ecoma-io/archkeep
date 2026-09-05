@@ -56,6 +56,9 @@ import {
   fitnessSnapshot,
   fitnessVerdictFor,
 } from "../governance/fitness-registry.mjs";
+import { VERDICTS, isVerdict } from "../governance/verdict.mjs";
+import { buildDecision } from "../report/evidence.mjs";
+import { describe } from "../values.mjs";
 
 /**
  * The `fitness` command's own text report: the same verdict table `check`'s
@@ -102,6 +105,55 @@ export function fitnessForCheck(commandContext, { rows, intent, suppressions, sc
  */
 export function declaresFitness(config) {
   return config !== null && config !== undefined && config.fitness !== undefined;
+}
+
+/**
+ * The `fitness` exit fold, lifted out of `fitnessCommand` as a pure function
+ * so the mapping from the overall verdict to the status is a fact a test can
+ * pin (`./change.mjs`'s `reconcileDisposition` is the arrangement's
+ * precedent). D-09, as below: `fail` → `findings`/1, `unknown` →
+ * `no-verdict`/3, `pass` and an all-`not_applicable` run alike → `ok`/0.
+ *
+ * The input latch runs first: `overall.verdict` is the handshake with
+ * `fitnessVerdictFor`, and a value the fold does not recognize matches
+ * neither the `fail` nor the `unknown` arm — it would fall to `ok`, a clean
+ * exit over a run the fold could not read. A verdict outside the four states
+ * is refused as a no-verdict whose single reason names it (`refused`), never
+ * folded past. The literals stay hand-rolled per site by decision — the
+ * carrier folds are the pinned baseline INV-2 names, not a table to be
+ * converged (`docs/architecture/refactor/AUTHORITY-MAP.md`).
+ *
+ * `overall.decisions` is validated for the same reason the delta fold
+ * validates buckets the fold itself does not count first: `result.functions`
+ * and the text table render them downstream of this fold, so a malformed one
+ * is refused while there is still a verdict to withhold.
+ *
+ * @param {{verdict: string, decisions: object[]}} overall From
+ *   `fitnessVerdictFor`.
+ * @returns {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3,
+ *   refused?: undefined}|
+ *   {status: "no-verdict", exitCode: 3, refused: string}}
+ */
+export function fitnessFold(overall) {
+  if (!isVerdict(overall?.verdict)) {
+    return {
+      status: "no-verdict",
+      exitCode: 3,
+      refused: `the fitness fold maps "overall.verdict", which is ${describe(overall?.verdict)} — a verdict outside ${VERDICTS.join(", ")} matches neither the fail nor the unknown lane, and reads "ok". This is a bug in archkeep, not a fact about the workspace.`,
+    };
+  }
+  if (!Array.isArray(overall?.decisions)) {
+    return {
+      status: "no-verdict",
+      exitCode: 3,
+      refused: `the fitness fold reads "overall.decisions", which is ${describe(overall?.decisions)} — the verdict table the run reports is built from it below, and a list that is not an array renders as an empty table. This is a bug in archkeep, not a fact about the workspace.`,
+    };
+  }
+  return overall.verdict === "fail"
+    ? { status: "findings", exitCode: 1 }
+    : overall.verdict === "unknown"
+      ? { status: "no-verdict", exitCode: 3 }
+      : { status: "ok", exitCode: 0 };
 }
 
 /**
@@ -207,13 +259,39 @@ export async function fitnessCommand(commandContext, io = {}) {
   // every function is `not_applicable` are both `ok`: nothing failed and
   // nothing stayed undetermined. The status↔exitCode pair is asserted by
   // `jsonEnvelope` (3-on-no-verdict), so a wrong mapping here cannot ship.
-  /** @type {{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3}} */
-  const { status, exitCode } =
-    overall.verdict === "fail"
-      ? { status: "findings", exitCode: 1 }
-      : overall.verdict === "unknown"
-        ? { status: "no-verdict", exitCode: 3 }
-        : { status: "ok", exitCode: 0 };
+  // `fitnessFold` above owns the mapping and its input latch; a refusal
+  // withholds the verdict table exactly the coverage refusal does, and the
+  // decision it carries names the input the fold could not read.
+  const fold = fitnessFold(overall);
+  if (fold.refused !== undefined) {
+    return {
+      status: fold.status,
+      coverage: { ...coverage, notes: [...coverage.notes, fold.refused] },
+      report: {
+        text: `fitness: no verdict — ${fold.refused}\n`,
+        json: renderJson(
+          jsonEnvelope({
+            command: "fitness",
+            context,
+            status: fold.status,
+            exitCode: fold.exitCode,
+            coverage: { ...coverage, notes: [...coverage.notes, fold.refused] },
+            // The refusal-withheld payload, stated the way `coverageRefusal`
+            // states it: `jsonEnvelope` requires the key, the refusal has no
+            // result to report.
+            result: undefined,
+            decision: buildDecision({
+              status: fold.status,
+              coverageComplete: true,
+              findings: 0,
+              reason: fold.refused,
+            }),
+          }),
+        ),
+      },
+    };
+  }
+  const { status, exitCode } = fold;
   const result = { verdict: overall.verdict, functions: decisions };
 
   const report = {

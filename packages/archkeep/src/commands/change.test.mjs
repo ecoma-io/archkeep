@@ -10,7 +10,7 @@ import { parseChangeIntent } from "./change-intent.mjs";
 import { parseEvidenceSnapshot, serializeEvidenceSnapshot } from "./delta-snapshot.mjs";
 import { captureDelta } from "./delta.mjs";
 import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../../spawn-budget.mjs";
-import { changeCommand, violationFindingId } from "./change.mjs";
+import { changeCommand, changeFold, violationFindingId } from "./change.mjs";
 
 /**
  * What the `change` command guarantees: the reconciliation answers exactly
@@ -876,5 +876,100 @@ describe("violationFindingId — hostile fields cannot collide (#628)", () => {
     expect(violationFindingId({ messageId: "m", sourceProject: "-", target: "libs/x" })).toBe(
       "m:\\-:libs/x",
     );
+  });
+});
+
+describe("changeFold input latch", () => {
+  // The `change` exit fold's input latch (INV-4's gap, Phase 1-A): the fold
+  // hand-rolled its status/exit literals over the reconciliation lists, the
+  // judged constraint rows, and the unproven reasons — inputs no shape-check
+  // rejected. The loudest planted defect is a constraint row whose verdict
+  // is misspelled: it matches neither the fail nor the unknown arm, so the
+  // row counts as consent and a broken promise reads ok/exit 0. Every case
+  // here plants that defect class and requires the in-band refusal instead:
+  // no-verdict, exit 3, the malformed input named. The controls beside them
+  // prove the inputs are readable when spelled right.
+
+  /** A matched reconciliation — all three lists valid and empty. */
+  function matched() {
+    return { matched: [], unexpected: [], missingExpected: [] };
+  }
+
+  it("keeps the findings lane for an unexpected fact (control)", () => {
+    const fold = changeFold(
+      { ...matched(), unexpected: [{ kind: "edge-added", from: "a", to: "b" }] },
+      [],
+      [],
+    );
+    expect(fold.status).toBe("findings");
+    expect(fold.exitCode).toBe(1);
+  });
+
+  it("keeps the findings lane for a failed constraint (control)", () => {
+    const fold = changeFold(matched(), [{ verdict: "fail" }], []);
+    expect(fold.status).toBe("findings");
+    expect(fold.exitCode).toBe(1);
+  });
+
+  it("keeps the no-verdict lane for an unknown constraint (control)", () => {
+    const fold = changeFold(matched(), [{ verdict: "unknown" }], []);
+    expect(fold.status).toBe("no-verdict");
+    expect(fold.exitCode).toBe(3);
+  });
+
+  it("keeps the ok lane for a matched change with passing constraints (control)", () => {
+    const fold = changeFold(matched(), [{ verdict: "pass" }], []);
+    expect(fold.status).toBe("ok");
+    expect(fold.exitCode).toBe(0);
+  });
+
+  it("refuses a misspelled constraint verdict instead of reading it as consent", () => {
+    // The planted defect: `fial`, not `fail`. Pre-latch, the row matched
+    // neither the fail count nor the unknown count — zero failed, zero
+    // undetermined — so a constraint the run never judged read as passing
+    // and the change read ok/exit 0.
+    const fold = changeFold(matched(), [{ verdict: "fial" }], []);
+    expect(fold.status).toBe("no-verdict");
+    expect(fold.exitCode).toBe(3);
+    expect(fold.refused).toContain("constraint row 0");
+    expect(fold.refused).toContain("fial");
+  });
+
+  it("refuses a misspelled reconciliation bucket instead of crashing on it", () => {
+    // `missingExpcted`, not `missingExpected` — the rename, so the real key
+    // is absent: the unfulfilled facts ride the misspelled key and the
+    // fold's findings count reads a missing array.
+    const fold = changeFold(
+      /** @type {any} */
+      ({
+        matched: [],
+        unexpected: [],
+        missingExpcted: [{ kind: "edge-added", from: "a", to: "b" }],
+      }),
+      [],
+      [],
+    );
+    expect(fold.status).toBe("no-verdict");
+    expect(fold.exitCode).toBe(3);
+    expect(fold.refused).toContain('"reconciliation.missingExpected"');
+  });
+
+  it("refuses constraints that are not a list instead of reading them as none", () => {
+    // A constraints value that is not an array counts as empty in every
+    // lane — and empty reads "every declared constraint passing".
+    const fold = changeFold(matched(), undefined, []);
+    expect(fold.status).toBe("no-verdict");
+    expect(fold.exitCode).toBe(3);
+    expect(fold.refused).toContain('"constraints"');
+  });
+
+  it("refuses unproven reasons that are not a string array instead of reading them as none", () => {
+    // A non-list `unprovenReasons` has no `.length > 0`, so an unproven
+    // base identity read "matched" — the withheld verdict the run should
+    // have carried folded into ok/exit 0.
+    const fold = changeFold(matched(), [], /** @type {any} */ (42));
+    expect(fold.status).toBe("no-verdict");
+    expect(fold.exitCode).toBe(3);
+    expect(fold.refused).toContain('"unprovenReasons"');
   });
 });
