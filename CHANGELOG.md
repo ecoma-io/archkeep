@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.25.0](https://github.com/ecoma-io/archkeep/compare/v0.24.1...v0.25.0) (2026-09-05)
+
+
+### Features
+
+* **archkeep:** name event sides by state, never by storage path ([#721](https://github.com/ecoma-io/archkeep/issues/721)) ([2335773](https://github.com/ecoma-io/archkeep/commit/2335773c6d3c533ee99811cf2486869da5b8c9fd))
+
+
+### Bug Fixes
+
+* **archkeep:** enforce the canonical verdict contract at its constructors ([#717](https://github.com/ecoma-io/archkeep/issues/717)) ([5e7c6c4](https://github.com/ecoma-io/archkeep/commit/5e7c6c464d793655c655a78977346ef60a33259e))
+* **archkeep:** refuse a dirty bit that is not a boolean at the snapshot's one door ([#723](https://github.com/ecoma-io/archkeep/issues/723)) ([af9a5bc](https://github.com/ecoma-io/archkeep/commit/af9a5bcb023e8d2877b0217a88ea7e30925f7101))
+* **archkeep:** refuse strangers at the verdict fold and the disposition map ([#719](https://github.com/ecoma-io/archkeep/issues/719)) ([334e767](https://github.com/ecoma-io/archkeep/commit/334e767763c038d67a400b27f35831189b6cd58f))
+
 ## [0.24.1](https://github.com/ecoma-io/archkeep/compare/v0.24.0...v0.24.1) (2026-09-04)
 
 
