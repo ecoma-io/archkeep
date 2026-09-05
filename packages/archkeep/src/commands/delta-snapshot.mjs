@@ -332,7 +332,11 @@ export function readEvidenceSnapshot(path, io = {}) {
  * What is deliberately NOT a refusal: dirty base provenance. A baseline from
  * an uncommitted tree is weaker evidence, not unreadable evidence — the parsed
  * snapshot exposes `provenance.dirty` so the renderer can say so loudly, and
- * classification itself proceeds.
+ * classification itself proceeds. A dirty BIT that is not a boolean is a
+ * different thing — malformed, not weaker: the gates read `dirty === true`
+ * while the renderers interpolate truthiness, so any other type would read
+ * clean to some consumers and dirty to others. The provenance block below
+ * refuses it by name.
  *
  * @param {string} text The file contents.
  * @param {string} path The path the text came from, for error messages.
@@ -394,8 +398,23 @@ export function parseEvidenceSnapshot(text, path) {
 
   if (parsed.provenance !== null && !isPlainObject(parsed.provenance)) {
     problems.push("provenance: must be an object ({commit, remote, dirty}) or null");
-  } else if (isPlainObject(parsed.provenance) && typeof parsed.provenance.commit !== "string") {
-    problems.push("provenance.commit: must be a string when provenance is present");
+  } else if (isPlainObject(parsed.provenance)) {
+    if (typeof parsed.provenance.commit !== "string") {
+      problems.push("provenance.commit: must be a string when provenance is present");
+    }
+    if (parsed.provenance.remote !== null && typeof parsed.provenance.remote !== "string") {
+      problems.push("provenance.remote: must be a string or null when provenance is present");
+    }
+    if (typeof parsed.provenance.dirty !== "boolean") {
+      // Malformed, not weaker: the gates read `dirty === true` while the
+      // renderers interpolate truthiness, so a value of any other type reads
+      // clean to some consumers and dirty to others — the one disagreement
+      // this record must never carry.
+      problems.push(
+        "provenance.dirty: must be a boolean when provenance is present — the gates decide " +
+          "between committed and uncommitted evidence on this bit",
+      );
+    }
   }
 
   if (typeof parsed.policyFingerprint !== "string" || parsed.policyFingerprint === "") {
