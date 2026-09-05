@@ -678,6 +678,28 @@ export async function changeCommand(
     dependencies: buildDependencies(graph.dependencies),
   };
   const structural = computeDiff(baseGraphForDiff, headGraphForDiff);
+  // The event's identity sides are frozen HERE — at the same instant the diff
+  // above was computed from these same graph objects — so the identity always
+  // describes the graph the diff actually compared. Everything between this
+  // line and the event assembly (constraint re-judgement, custom rules,
+  // classification, debt) reads the graphs too; the engine's purity is what
+  // keeps them honest today, but the WS-I adversarial audit named the seam:
+  // identity and diff agreeing must not rest on purity conventions alone when
+  // one structural line closes it.
+  const baseCommit = baseline.provenance?.commit;
+  const headCommit = headProvenance?.commit;
+  const eventBase = eventSnapshotSide({
+    revision: baseCommit,
+    projects: baseGraphForDiff.projects,
+    dependencies: baseGraphForDiff.dependencies,
+    policyFingerprint: baseline.policyFingerprint,
+  });
+  const eventHead = eventSnapshotSide({
+    revision: headCommit,
+    projects: headGraphForDiff.projects,
+    dependencies: headGraphForDiff.dependencies,
+    policyFingerprint: headFingerprint,
+  });
   const reconciliation = reconcileMaterialDelta(intent, structural);
 
   // Constraints and the law axis are computed over both sides re-judged under
@@ -879,30 +901,18 @@ export async function changeCommand(
     }
   }
 
-  const baseCommit = baseline.provenance?.commit;
-  const headCommit = headProvenance?.commit;
   /** @type {object} */
   const event = {
     schemaVersion: EVOLUTION_EVENT_SCHEMA_VERSION,
     kind: "reconcile",
     source: "change",
-    // Both sides are built through the ONE identity spelling
-    // (`eventSnapshotSide`, ./history.mjs): a revision when one is known,
-    // plus the snapshot identity of the graph the side was judged over —
-    // never the baseline's storage path, which is machine-local and must
-    // not make the identity a per-machine property.
-    base: eventSnapshotSide({
-      revision: baseCommit,
-      projects: baseGraphForDiff.projects,
-      dependencies: baseGraphForDiff.dependencies,
-      policyFingerprint: baseline.policyFingerprint,
-    }),
-    head: eventSnapshotSide({
-      revision: headCommit,
-      projects: headGraphForDiff.projects,
-      dependencies: headGraphForDiff.dependencies,
-      policyFingerprint: headFingerprint,
-    }),
+    // Both sides were frozen through the ONE identity spelling
+    // (`eventSnapshotSide`, ./history.mjs) at the diff site above: a revision
+    // when one is known, plus the snapshot identity of the graph the diff
+    // compared — never the baseline's storage path, which is machine-local
+    // and must not make the identity a per-machine property.
+    base: eventBase,
+    head: eventHead,
     // The caller's own evidence ref — the baseline file this run consumed,
     // spelled as the run received it (the same convention `declaration.file`
     // uses for the intent path). Disclosed OUTSIDE the identity: the tuple

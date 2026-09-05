@@ -614,6 +614,25 @@ export async function deltaCommand(
   // same", and a policy change is disclosed, not folded into drift.
   const baseCommit = baseline.provenance?.commit;
   const headCommit = headProvenance?.commit;
+  // The event's identity sides are frozen HERE — at the same instant the diff
+  // above was computed from these same graph objects — so the identity always
+  // describes the graph the diff actually compared. Everything below this line
+  // (custom rules, classification, intent, debt) reads the graphs too; the
+  // engine's purity is what keeps them honest today, but the WS-I adversarial
+  // audit named the seam: identity and diff agreeing must not rest on purity
+  // conventions alone when one structural line closes it.
+  const eventBase = eventSnapshotSide({
+    revision: baseCommit,
+    projects: baseline.graph.projects,
+    dependencies: baseline.graph.dependencies,
+    policyFingerprint: baseline.policyFingerprint,
+  });
+  const eventHead = eventSnapshotSide({
+    revision: headCommit,
+    projects: headGraph.projects,
+    dependencies: headGraph.dependencies,
+    policyFingerprint: headFingerprint,
+  });
   const provenanceAdvanced =
     typeof baseCommit === "string" &&
     typeof headCommit === "string" &&
@@ -874,23 +893,13 @@ export async function deltaCommand(
       schemaVersion: EVOLUTION_EVENT_SCHEMA_VERSION,
       kind: "transition",
       source: "delta",
-      // Both sides are built through the ONE identity spelling
-      // (`eventSnapshotSide`, ./history.mjs): a revision when one is known,
-      // plus the snapshot identity of the graph the side was judged over —
-      // never the baseline's storage path, which is machine-local and must
-      // not make the identity a per-machine property.
-      base: eventSnapshotSide({
-        revision: baseCommit,
-        projects: baseline.graph.projects,
-        dependencies: baseline.graph.dependencies,
-        policyFingerprint: baseline.policyFingerprint,
-      }),
-      head: eventSnapshotSide({
-        revision: headCommit,
-        projects: headGraph.projects,
-        dependencies: headGraph.dependencies,
-        policyFingerprint: headFingerprint,
-      }),
+      // Both sides were frozen through the ONE identity spelling
+      // (`eventSnapshotSide`, ./history.mjs) at the diff site above: a
+      // revision when one is known, plus the snapshot identity of the graph
+      // the diff compared — never the baseline's storage path, which is
+      // machine-local and must not make the identity a per-machine property.
+      base: eventBase,
+      head: eventHead,
       // The evidence ref is the baseline file this run actually compared
       // against — a pointer into the evidence, never a graph, and disclosed
       // OUTSIDE the identity: the tuple above names the state itself, so a
