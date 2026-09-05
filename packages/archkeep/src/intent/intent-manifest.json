@@ -25,7 +25,7 @@
         {
           "type": "source-evidence",
           "path": "src/commands/context.mjs",
-          "assertion": "Only commands/context.mjs imports providers — the designated orchestration layer",
+          "assertion": "commands/context.mjs imports providers — the designated orchestration path",
           "sha256": "b505e3a7476c64af4b2daeb106e2f9cb05be82e314604229d508dda04b629a98"
         }
       ],
@@ -66,13 +66,13 @@
           "type": "behavioral-test",
           "path": "src/intent/intent.test.mjs",
           "assertion": "analysis output conforms to the frozen contract schema (no extra verdict/policy fields); analysis output is invariant under project tag changes (three workspaces differing only in project tag fields compared byte-for-byte)",
-          "sha256": "adb25388f17c97577e97e6b65bd3dacc5811710fe3bb60a409a51ff4abcd945e"
+          "sha256": "85b98de1f9268c94020b8b728a3ebbf1e8b50f8c70731c5460c788ea00be3198"
         },
         {
           "type": "architecture-test",
           "path": "src/intent/intent.test.mjs",
           "assertion": "the gate walks every production analysis module and fails when judging vocabulary (judge/forbid/permit/allow/ban) appears in code",
-          "sha256": "adb25388f17c97577e97e6b65bd3dacc5811710fe3bb60a409a51ff4abcd945e"
+          "sha256": "85b98de1f9268c94020b8b728a3ebbf1e8b50f8c70731c5460c788ea00be3198"
         },
         {
           "type": "source-evidence",
@@ -103,8 +103,14 @@
         {
           "type": "source-evidence",
           "path": "src/commands/graph.mjs",
-          "assertion": "Plain string comparison, never localeCompare; INTERNAL_DATA_FIELDS stripped; SCHEMA_VERSION = 2",
+          "assertion": "Plain string comparison, never localeCompare; INTERNAL_DATA_FIELDS stripped",
           "sha256": "436902ab3ca994c233318437a896630f969a2c8a22b0f93e598d309faed39d49"
+        },
+        {
+          "type": "source-evidence",
+          "path": "src/report/json.mjs",
+          "assertion": "SCHEMA_VERSION = 2 — the envelope's schemaVersion constant",
+          "sha256": "090418f6f60dec51638976dff658c55f8a932012bfc7c8bc59952b0f03543340"
         },
         {
           "type": "source-evidence",
@@ -130,7 +136,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "parseBaseline validates schemaVersion; refuses unknown versions",
-          "sha256": "85e6400006a7e93c66e64547162c854320fa69d833a11cec42773703f522a163"
+          "sha256": "e28620e288b58e35916e8cd41de446b999bdc2c4e5fcb5f3a617ab0ee449b0fd"
         }
       ],
       "status": "proven"
@@ -150,7 +156,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "computeDiff returns structural diff; policyMismatch detected via fingerprint; computeRuleImpact for depConstraints-only context",
-          "sha256": "85e6400006a7e93c66e64547162c854320fa69d833a11cec42773703f522a163"
+          "sha256": "e28620e288b58e35916e8cd41de446b999bdc2c4e5fcb5f3a617ab0ee449b0fd"
         }
       ],
       "status": "proven"
@@ -230,7 +236,7 @@
           "type": "behavioral-test",
           "path": "src/intent/intent.test.mjs",
           "assertion": "depConstraints verdicts from judgeEdge agree with evaluate in both directions (violating edge found by both, legal edge reported by neither); explain includes the same violations as evaluate at a given site",
-          "sha256": "adb25388f17c97577e97e6b65bd3dacc5811710fe3bb60a409a51ff4abcd945e"
+          "sha256": "85b98de1f9268c94020b8b728a3ebbf1e8b50f8c70731c5460c788ea00be3198"
         },
         {
           "type": "behavioral-test",
@@ -260,7 +266,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "coverage.notes warns when ruleImpact is computed (depConstraints only, 3 of 15)",
-          "sha256": "85e6400006a7e93c66e64547162c854320fa69d833a11cec42773703f522a163"
+          "sha256": "e28620e288b58e35916e8cd41de446b999bdc2c4e5fcb5f3a617ab0ee449b0fd"
         },
         {
           "type": "documentation",

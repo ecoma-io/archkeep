@@ -46,7 +46,7 @@ import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { SCHEMA_VERSION } from "../report/json.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatDiffReport } from "../report/diff-text.mjs";
-import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
+import { compareSnapshotMetadata, dirtyBaselineNote, dirtyHeadNote } from "./snapshot-meta.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 
 /**
@@ -475,16 +475,10 @@ export function diffCommand(
   }
 
   if (meta.dirtyBaseline) {
-    coverage.notes.push(
-      "the baseline was captured from a dirty working tree — its evidence is not a reproducible " +
-        "claim about the commit it names",
-    );
+    coverage.notes.push(dirtyBaselineNote(false));
   }
   if (meta.dirtyHead) {
-    coverage.notes.push(
-      "this run's working tree is dirty — the head side describes uncommitted state, not the " +
-        "commit HEAD names",
-    );
+    coverage.notes.push(dirtyHeadNote());
   }
 
   if (meta.policyChanged === true) {

@@ -143,6 +143,34 @@ export function snapshotIdentity({ projects, dependencies, policy }) {
 }
 
 /**
+ * An evolution event's identity side: the reference to ONE state — a revision
+ * when one is known, plus the snapshot identity of the graph that side was
+ * judged over. `delta` and `change` build every side through this one
+ * function so the identity spelling cannot drift between them, and a storage
+ * path can never re-enter the tuple a committed event store dedupes on
+ * (`docs/concepts/evolution.md`'s "Nor does a storage path"). `history` and
+ * `evolution` spell the same `{revision, snapshot}` shape directly, from a
+ * snapshot whose identity is already computed.
+ *
+ * @param {{revision?: string|null, projects: object[], dependencies: object[],
+ *   policyFingerprint?: string|null}} side
+ * @returns {{revision?: string, snapshot: string}} The identity side.
+ */
+export function eventSnapshotSide({ revision, projects, dependencies, policyFingerprint }) {
+  return {
+    ...(typeof revision === "string" ? { revision } : {}),
+    snapshot: snapshotIdentity({
+      projects,
+      dependencies,
+      policy:
+        policyFingerprint === undefined || policyFingerprint === null
+          ? null
+          : { fingerprint: policyFingerprint },
+    }),
+  };
+}
+
+/**
  * Reads and validates every snapshot in the history directory.
  *
  * The directory is the sole source of truth, so this refuses loudly on any
