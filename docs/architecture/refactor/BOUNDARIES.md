@@ -85,7 +85,9 @@ Evaluation.**
 Bounded derivation is permitted only when all four hold: the source fact is
 externally stated, the transformation is deterministic, the transformation is
 recorded (ADR or contract), and the provider never evaluates policy, never
-creates a verdict, never creates a governance decision. Evaluation belongs to
+creates a verdict, never creates a governance decision — the refinement of
+[CON-10](CONSTITUTION.md#con-10--providers-observe-they-do-not-decide) whose
+per-item test is [MOON-POLICY.md](MOON-POLICY.md)'s. Evaluation belongs to
 the evaluation authority alone. The Canonical output column below is the
 ladder's fourth rung — what each path hands `evaluate()`. Per-path contract,
 measured against source (Phase 1-D, 2026-09-06):

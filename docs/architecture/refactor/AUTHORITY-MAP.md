@@ -121,15 +121,15 @@ cleanup — `delta`'s `findings` status folds classification counts
 
 Every path that writes state, all code-enforced:
 
-| Door                                   | Enforcement                                                                                                                       |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `--output <file>` (any verb)           | governance-target refusal (`cli.mjs:480-495`), containment, `wx` tmp + atomic rename                                              |
-| `check --evidence-out`                 | via the same writer; three loud nothing-writes                                                                                    |
-| `discover --propose --write-intent`    | the **only** intent write door: refuses existing file, requires `--propose`, prints "proposal, not the law" (`cli.mjs:2426-2444`) |
-| `delta --capture`                      | refuses positional args + `--event-out` combination; refuses unjudgeable head                                                     |
-| `history --capture`                    | `wx` tmp + rename; dedupe; incomplete-head refusal                                                                                |
-| `--event-out` (delta/change/evolution) | append-only store with identity-checked writes (`evolution-store.mjs`)                                                            |
-| `rules add --to`                       | copies wasm bytes under containment; never writes config                                                                          |
+| Door                                   | Enforcement                                                                                                                                  |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--output <file>` (any verb)           | governance-target refusal (`cli.mjs:480-495`), containment, `wx` tmp + atomic rename                                                         |
+| `check --evidence-out`                 | via the same writer; three loud nothing-writes                                                                                               |
+| `discover --propose --write-intent`    | the **only** intent write door: refuses existing file, requires `--propose`, prints "proposal, not the law" (`cli.mjs:2386-2387, 2426-2447`) |
+| `delta --capture`                      | refuses positional args + `--event-out` combination; refuses unjudgeable head                                                                |
+| `history --capture`                    | `wx` tmp + rename; dedupe; incomplete-head refusal                                                                                           |
+| `--event-out` (delta/change/evolution) | append-only store with identity-checked writes (`evolution-store.mjs`)                                                                       |
+| `rules add --to`                       | copies wasm bytes under containment; never writes config                                                                                     |
 
 Propose-never-decides is structural: proposal producers (`discover`,
 `reconcile`, `scenario`, change declarations) hold no write path except the one

@@ -262,14 +262,14 @@ its implementation PR's acceptance evidence has been reviewed; a unit with
 no implementation PR yet is **DEFER**, never PASS — unwritten code proves
 nothing; **FAIL** is an implementation that landed without its evidence:
 
-| Unit | Item                          | Status | What its PR must prove                                                           | Landed evidence                                                                                                                                                                                                      |
-| ---- | ----------------------------- | ------ | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1-A  | Verdict-fold hardening        | PASS   | five red-by-construction twins; valid-input outputs unchanged; exit-matrix green | PR #730 — latches at all five fold sites; twins planted, demonstrated red, restored; valid-input fixtures byte-identical; exit-matrix green                                                                          |
-| 1-B  | `rules verify` classification | PASS   | AUTHORITY-MAP true against source; docs gates green; no code touched             | PR #731 — dated PD-8 verification extension, every line ref re-measured after 1-A; no `packages/` change                                                                                                             |
-| 1-C  | Moon policy adjudication      | PASS   | per-item recorded verdicts; seam table consistent                                | PR #734 — MOON-POLICY.md + ADR 0009/0010 + registry pin; three contract-backed normalizations, two ADR policies, no silent retention; cited by 1-D's table                                                           |
-| 1-D  | Provider seam definition      | PASS   | BOUNDARIES table with per-provider contract                                      | this PR — six-column contract table, source-verified, LSP divergence registered against it as Phase 7; the row's PASS holds at the moment this PR merges (the gate's DEFER rule reads it DEFER at any earlier point) |
-| 1-E  | R7 edge-identity pin          | PASS   | both headers pinned (or distinct type + identity suites green)                   | PR #732 — both headers pinned cross-referencing ADR-0008/INV-6; identity suites green; manifest digests updated                                                                                                      |
-| 1-F  | Riders D1–D6                  | PASS   | each D-n closed; docs gates green                                                | PR #733 — D1–D6 closed; D6 re-measured against the ruleset API at fix time; coordinator review corrected a false emission-site claim and added the missing fourth emission site before merge                         |
+| Unit | Item                          | Status | What its PR must prove                                                           | Landed evidence                                                                                                                                                                               |
+| ---- | ----------------------------- | ------ | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1-A  | Verdict-fold hardening        | PASS   | five red-by-construction twins; valid-input outputs unchanged; exit-matrix green | PR #730 — latches at all five fold sites; twins planted, demonstrated red, restored; valid-input fixtures byte-identical; exit-matrix green                                                   |
+| 1-B  | `rules verify` classification | PASS   | AUTHORITY-MAP true against source; docs gates green; no code touched             | PR #731 — dated PD-8 verification extension, every line ref re-measured after 1-A; no `packages/` change                                                                                      |
+| 1-C  | Moon policy adjudication      | PASS   | per-item recorded verdicts; seam table consistent                                | PR #734 — MOON-POLICY.md + ADR 0009/0010 + registry pin; three contract-backed normalizations, two ADR policies, no silent retention; cited by 1-D's table                                    |
+| 1-D  | Provider seam definition      | PASS   | BOUNDARIES table with per-provider contract                                      | this PR — six-column contract table, source-verified, LSP divergence registered against it as Phase 7; the row's PASS holds at the moment this PR merges (the gate reads it DEFER until then) |
+| 1-E  | R7 edge-identity pin          | PASS   | both headers pinned (or distinct type + identity suites green)                   | PR #732 — both headers pinned cross-referencing ADR-0008/INV-6; identity suites green; manifest digests updated                                                                               |
+| 1-F  | Riders D1–D6                  | PASS   | each D-n closed; docs gates green                                                | PR #733 — D1–D6 closed; D6 re-measured against the ruleset API at fix time; coordinator review corrected a false emission-site claim and added the missing fourth emission site before merge  |
 
 Phase exit = every row PASS, or a row's DEFER explicitly accepted by the
 maintainer with the risk recorded in [CONTEXT.md](CONTEXT.md). The blanket
@@ -343,17 +343,19 @@ One owner per concept, in fact and in name.
      calls the provider graph "observed"
      (`architecture-intent/model.mjs:11`, `report/drift-text.mjs`,
      `governance/fitness-registry.mjs`), hiding its
-     normalization+derivation. Six bounded-derivation behaviors are
-     named in the seam contract but carry no per-item verdict of their
-     own — `buildDependencies`' root-target edge suppression,
-     `nodeTypeOf`'s `lib` fallback, `judgeCoverage`'s provider-local
-     coverage gate, `isDotnetGeneratedOutput`'s generated-output
-     exclusion, `moon:declared` targets synthesis (`moon.mjs:725-737`,
-     the twin the native row records as bounded derivation but
-     MOON-POLICY's five missed — surfaced by the close-time hostile
-     review), and `nodeTypeFromLayer`'s unknown-layer `lib` fallback
-     (`moon.mjs:352-361`, analogy-recorded in MOON-POLICY, explicitly
-     "not a sixth verdict") — each needs
+     normalization+derivation. Six bounded-derivation behaviors surfaced
+     by the Phase 1 close carry no per-item verdict of their own. Three
+     are marked verdict-pending in the seam table: `judgeCoverage`'s
+     provider-local coverage gate; `moon:declared` targets synthesis
+     (`moon.mjs:725-737`, the twin the native row records as bounded
+     derivation but MOON-POLICY's five missed — surfaced by the
+     close-time hostile review); and `nodeTypeFromLayer`'s unknown-layer
+     `lib` fallback (`moon.mjs:352-361`, analogy-recorded in
+     MOON-POLICY, explicitly "not a sixth verdict"). Three are named
+     only here: `buildDependencies`' root-target edge suppression and
+     `nodeTypeOf`'s `lib` fallback (primitives the LSP row records as
+     shared, not second copies), and `isDotnetGeneratedOutput`'s
+     generated-output exclusion (`native/discover.mjs:218`). Each needs
      its per-item verdict, with 1-C's two ADRs as the precedent shape. For
      the ladder question specifically, the same audit found no
      demonstrated defect class that tests cannot pin, stages interleaved
