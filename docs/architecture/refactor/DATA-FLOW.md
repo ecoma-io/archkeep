@@ -40,7 +40,7 @@ deterministic evaluation → verdict → projections/surfaces
   gaps for every graph-reading verb. Two documented bypasses: `adr` (own
   marker walk — reads no project model) and `rules` (synthetic native context —
   reads the catalog, no workspace). `evolution` walks its own root to enumerate
-  revisions (`cli.mjs:2213`) but analyzes every revision through the ordinary
+  revisions (`cli.mjs:2244`) but analyzes every revision through the ordinary
   pipeline (`evolution.mjs:234-236,262`) — a root walk, not a preamble bypass.
 
 ### 4. Canonical representation
