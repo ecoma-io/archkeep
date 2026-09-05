@@ -13,15 +13,26 @@
  * no workspace marker, and report nothing — for a directory whose files really
  * are under boundary rules.
  *
- * Two markers are recognised: `nx.json` (an Nx workspace) and `archkeep.json`
- * (a native Archkeep workspace). Both activate the server; which provider it uses
- * is the server's own decision, not the client's.
+ * Three marker kinds are recognised: `nx.json` (an Nx workspace), `archkeep.json`
+ * (a native Archkeep workspace), and Moon's `workspace.yml` — inside `.moon/` or
+ * `.config/moon/`, the file rather than the directory alone, because `~/.moon`
+ * is moonrepo's user-level state and directory presence is what once walked a
+ * home directory into a "workspace" (#339). All three activate the server; which
+ * provider it uses is the server's own decision, not the client's. The list is
+ * the server-side walk's (`src/commands/context.mjs` in `packages/archkeep`)
+ * entry for entry, so a client and a CLI on the same tree cannot disagree about
+ * where the workspace begins.
  */
 
 import { dirname, join, resolve } from "node:path";
 
 /** The files whose presence defines a workspace root. */
-export const WORKSPACE_MARKERS = Object.freeze(["nx.json", "archkeep.json"]);
+export const WORKSPACE_MARKERS = Object.freeze([
+  "nx.json",
+  "archkeep.json",
+  ".moon/workspace.yml",
+  ".config/moon/workspace.yml",
+]);
 
 /**
  * Walk up from a directory to the nearest workspace root.
