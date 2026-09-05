@@ -42,3 +42,4 @@ before a phase's entry criteria hold (see
 | [CONTEXT.md](CONTEXT.md)                     | The restart briefing: current state for any agent resuming the program                                    |
 | [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)       | The decision register — CLOSED / VERIFICATION REQUIRED / MAINTAINER GATED, plus the doctrine-gap register |
 | [DECISIONS.md](DECISIONS.md)                 | ADRs the refactor inherits; program decisions (`PD-*`)                                                    |
+| [MOON-POLICY.md](MOON-POLICY.md)             | The Phase 1-C adjudication: each Moon provider transformation's verdict and record                        |
