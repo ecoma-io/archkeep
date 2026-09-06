@@ -79,20 +79,6 @@
 import { posix } from "node:path";
 import { stripTrailingSlashes } from "./path-util.mjs";
 
-/**
- * What a hygiene finding means — one entry per `messageId`, the arrangement
- * `../report/sarif.mjs` derives its rule descriptors from, the same as
- * `./go-work.mjs`, so the id cannot be nameless in a code-scanning upload.
- */
-export const TSCONFIG_PATHS_MESSAGES = Object.freeze({
-  tsconfigDeadPathAlias:
-    "A tsconfig paths alias maps only to targets whose directories do not exist: no import of it " +
-    "can resolve through the alias table, so the build breaks — or silently resolves to an " +
-    "installed package of the same name instead of the workspace source the alias promised.",
-});
-
-export const TSCONFIG_PATHS_MESSAGE_IDS = Object.freeze(Object.keys(TSCONFIG_PATHS_MESSAGES));
-
 /** A workspace-relative directory for display, `""` being the root. */
 const displayDir = (dir) => (dir === "" ? "the workspace root" : `${dir}/`);
 

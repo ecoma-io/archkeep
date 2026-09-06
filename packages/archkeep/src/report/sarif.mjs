@@ -55,9 +55,14 @@
  * as a side effect of a comment being corrected.
  */
 import { INTENT_MESSAGE_IDS, INTENT_MESSAGES } from "../architecture-intent/judge.mjs";
-import { GO_WORK_MESSAGE_IDS, GO_WORK_MESSAGES } from "../go-work.mjs";
-import { MESSAGE_IDS, MESSAGES } from "../rules/messages.mjs";
-import { TSCONFIG_PATHS_MESSAGE_IDS, TSCONFIG_PATHS_MESSAGES } from "../tsconfig-paths.mjs";
+import {
+  GO_WORK_MESSAGE_IDS,
+  GO_WORK_MESSAGES,
+  MESSAGE_IDS,
+  MESSAGES,
+  TSCONFIG_PATHS_MESSAGE_IDS,
+  TSCONFIG_PATHS_MESSAGES,
+} from "../rules/messages.mjs";
 
 import { formatConstraint } from "./text.mjs";
 

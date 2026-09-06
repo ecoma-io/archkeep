@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { judgeTsconfigPaths, TSCONFIG_PATHS_MESSAGE_IDS } from "./tsconfig-paths.mjs";
+import { TSCONFIG_PATHS_MESSAGE_IDS } from "./rules/messages.mjs";
+import { judgeTsconfigPaths } from "./tsconfig-paths.mjs";
 
 /**
  * A judgement over an in-memory tree: `existing` lists the workspace-relative
