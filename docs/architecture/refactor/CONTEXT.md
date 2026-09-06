@@ -782,6 +782,56 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
 - **Forbidden next moves / next**: none carried. Next: 2-D per
   [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
 
+### CHK-2-D — Phase 2, 2-D: the naming hazards become readable pins (2026-09-06)
+
+- **ID**: CHK-2-D. **Phase**: 2 (unit 2-D). **Status**: complete —
+  pending merge of PR #754.
+- **Goal**: close the naming-hazards rows by pinning, not renaming — the
+  two `verdict.mjs` layers state each other's role and the one-direction
+  layering rule (the check lane composes governance's `buildDecision`;
+  governance imports nothing of the check lane) and name both
+  near-collision pairs with their routing rule (`verdictFor` vs
+  `verdictForStatus`; `EXIT_FOR_STATUS`, derived from `EXIT`, vs
+  `VERDICT_FOR_STATUS`, an independent frozen map); the four "intent"
+  surfaces (the manifest registry, the workspace-declared law, the
+  declared-change grammar, and the fileless envelope `result.intent`)
+  each name the other three at their entry module, recording PD-13
+  outcome (c); `docs/reference/evidence.md` carries the same routing for
+  docs readers.
+- **Invariants touched**: none — comment-only; INV-18 untouched (no file
+  moved, no digest changed).
+- **Canonical ownership changes**: none.
+- **Dependency-boundary changes**: none.
+- **Contracts affected and compatibility classification**: none —
+  performance/internal by construction: the TypeScript parser's token
+  streams for all five touched `.mjs` files are byte-identical to base,
+  and ESM-importing both versions side by side yields identical export
+  keys and values (frozen maps included); zero wire bytes.
+- **Differential evidence**: independent adversarial review (P-B, second
+  worktree) verified comment-only by token-stream and import-identity,
+  resolved every citation (PD-13 at DECISIONS.md:299-341; all relative
+  module refs exist), confirmed the layering is one-directional (zero
+  `../verdict.mjs` imports in `src/governance/`), cross-checked every
+  factual assertion in the pins against the code, and ran the
+  repository's own boundary check (exit 0; 2524 imports / 597 files /
+  9 projects). lefthook format/lint/packages/commitlint green at both
+  commits, signed (`%G?` = G).
+- **Debt budget**: before — the naming-hazards rows: two same-basename
+  modules, two near-collision pairs, and three intent nouns whose
+  relationships lived only in review heads; closed — all, as readable
+  header pins at the points of use; introduced — none; net — negative.
+- **Unresolved questions**: none new. The pins' compression "four
+  surfaces, never one type" is SEMANTIC-MODEL's wording of PD-13 (c);
+  the cited DECISIONS.md section holds the ruling itself.
+- **Rejected approaches**: renaming either `verdict.mjs` (11+ import
+  sites, zero wire benefit, and the names are distinct spellings, not
+  homonyms — CON-3's "concrete benefit" bar absent); moving `src/intent/`
+  (drags INV-18 digests and the readiness roster for a path no consumer
+  mistyped); renaming `architecture-intent.json` (public API — SARIF
+  artifact URIs and envelope `intent.file` pin it; breaking).
+- **Forbidden next moves / next**: none carried. Next: 2-E per
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
+
 ## Conventions maintained here
 
 - Phase completions append a CHK-n block above, never edit an old one.

@@ -2,6 +2,22 @@
  * The process's exit-code contract, and the one function that turns a run's
  * counts into the verdict every format agrees on.
  *
+ * Layer: the check lane — the process's exit codes, the coverage clauses a
+ * run that could not look needs, and `verdictFor`, the per-lint verdict the
+ * `check` command words its envelope and its exit from. Its counterpart,
+ * `./governance/verdict.mjs`, owns the verdict vocabulary and decision
+ * construction (`VERDICTS`, `isVerdict`, `verdictForStatus`, `fitnessVerdict`,
+ * `buildDecision`); the `buildDecision` import below is that layering made
+ * one-directional — the check lane calls governance, and governance never
+ * imports this file. Two near-collision pairs sit across that boundary, and
+ * the name decides which file a reader wants: `verdictFor` here folds a
+ * run's counts into status + exitCode, while governance's `verdictForStatus`
+ * looks one status up in its frozen map; `EXIT_FOR_STATUS` here is derived
+ * from this module's `EXIT`, while governance's `VERDICT_FOR_STATUS` is an
+ * independently frozen map. Exit-code, coverage and check-lane concerns live
+ * here; verdict vocabulary and decision construction live in
+ * `./governance/verdict.mjs`.
+ *
  * Both sit here rather than in `../cli.mjs` because two callers need them and
  * only one of the two is the CLI shell: `./commands/check.mjs` words its own
  * `--format json` envelope's `status` and `exitCode` from `verdictFor`, and

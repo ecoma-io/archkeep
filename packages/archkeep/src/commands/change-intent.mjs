@@ -9,6 +9,17 @@
  * architectural delta (`./change.mjs`), and then belongs to the pull request
  * as the reviewable answer to "what did this change do to the architecture?".
  *
+ * Which "intent" this is: one of four unrelated surfaces sharing the word —
+ * PD-13 outcome (c), four surfaces, never one type
+ * (`../../../../docs/architecture/refactor/DECISIONS.md`). This module is
+ * the declared-change grammar: one change's expected architectural
+ * consequences, verified by the `change` command against the actual delta.
+ * The other three: the workspace-declared law (`../architecture-intent/` —
+ * the `architecture-intent.json` file this module deliberately does not
+ * extend, per the paragraph below), the v1.0 evidence-manifest registry
+ * (`../intent/`), and the fileless run-envelope intent shape
+ * (`result.intent` in a `--format json` envelope).
+ *
  * This file mirrors `../architecture-intent/model.mjs`'s split — a pure
  * `(raw) -> string[]` validator, a thin loader that reads, parses, validates
  * and throws one Error naming every violation at once — and deliberately does

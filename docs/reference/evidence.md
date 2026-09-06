@@ -128,3 +128,11 @@ attaches a `decision` for the commands declaring `decision: true` (the same
 two); `check` reaches `buildDecision` through `verdictFor` (`src/verdict.mjs`),
 which imports the governance module directly. Every envelope `decision` is
 `pass` / `fail` / `unknown`.
+
+The split is one-directional — the check lane imports the governance module,
+never the reverse — and it leaves two near-collisions a reader routes by
+name: governance's `verdictForStatus` is one status looked up in the frozen
+`VERDICT_FOR_STATUS`, while the check lane's `verdictFor` (in
+`src/verdict.mjs`) folds a run's counts into a status and an exit code; and
+`EXIT_FOR_STATUS` is derived from `src/verdict.mjs`'s own `EXIT`, a
+different map from `VERDICT_FOR_STATUS`.
