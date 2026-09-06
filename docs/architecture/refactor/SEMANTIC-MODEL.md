@@ -87,10 +87,14 @@ Sibling vocabularies that share words with the canonical 4-state set. Each is
 single-owned today; the risk is conflation at consumer edges, not double
 construction. Registers, not defects:
 
-- **R1** — evaluation statuses `EVALUATION_STATUS` (`completeness.mjs:34-46`)
+- **R1** — evaluation statuses `EVALUATION_STATUS` (`completeness.mjs:47-53`)
   vs the refusal contract `coverageVerdict`. Two models of "did we see
-  everything", owned by different waves. Phase 2: one sentence each way
-  stating the boundary (doc fix).
+  everything", owned by different waves. Boundary pinned, one sentence each
+  way: the coverage side opens `coverage-verdict.mjs` ("the ONE
+  incomplete-coverage refusal contract", lines 2-3), the status side sits at
+  the end of `completeness.mjs`'s own header ("Not the coverage refusal
+  (register R1)") — neither vocabulary is derived from the other; registers
+  stay separate.
 - **R2** — decision-fitness levels (`decision-fitness.mjs:63-70`) reuse
   `not_applicable` with their own meaning ("no authority").
 - **R3** — reconciliation verdicts `matched/undeclared/unfulfilled/unproven`
