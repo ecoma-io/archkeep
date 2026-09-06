@@ -231,8 +231,9 @@ characters of the event id.
   exit 3): "could not read the store" never reads as "no events recorded". A
   missing directory is `[]` — an absent _optional_ store is not an error, and
   the caller states "no events recorded" itself when that matters.
-- **Validated writes.** The write path enforces the same two laws the reads
-  do, before anything is persisted. Identity: an event whose `id` or
+- **Validated writes.** The write path enforces two laws before anything is
+  persisted — identity and vocabulary; the read path enforces the vocabulary
+  alone, against the stored bytes. Identity: an event whose `id` or
   `dedupeKey` does not match the canonical tuple is refused — a record that
   lies about its identity would dedupe against the wrong key on rerun and
   manufacture duplicates, the failure shape the store exists to rule out.
