@@ -24,6 +24,18 @@
  * `overallComplete` implies ALL gates pass. Any failed gate MUST prevent
  * `overallComplete = true`.
  *
+ * ## Not the coverage refusal (register R1)
+ *
+ * These statuses grade the composed evaluation — how completely the
+ * Evidence-Complete gates were satisfied for the statement being made. A
+ * different question is whether the run saw enough input to make any claim
+ * at all, and that one is answered only by the graph family's shared
+ * refusal contract (`./coverage-verdict.mjs`): `coverageVerdict` refuses
+ * `no-verdict` (exit 3), and no status here is derived from it or folds
+ * into it. Two models of "did we see everything", owned by different
+ * waves — register R1 in `docs/architecture/refactor/SEMANTIC-MODEL.md`
+ * keeps them separate.
+ *
  * @module
  */
 
