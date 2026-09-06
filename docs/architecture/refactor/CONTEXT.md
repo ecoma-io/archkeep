@@ -559,6 +559,46 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
   merges — P-F holds one disposition law per PR; PD-15 (the fold ruling)
   records on WI-2's own PR.
 
+### CHK-2-735 — Phase 2, correctness fix: vscode client workspace-marker copy (#735 → PR #742) (2026-09-06)
+
+- **ID**: CHK-2-735. **Phase**: 2 correctness-hardening unit. **Status**:
+  complete — pending merge of PR #742.
+- **Goal**: close #735 — the vscode client's `WORKSPACE_MARKERS` in
+  `workspace-root.mjs` had drifted from the server's marker list in
+  `commands/context.mjs`: a folder the server accepts as a workspace root the
+  client could refuse. Fix: the client list re-pinned to the server's
+  eight markers, the copy bound by tests in both directions.
+- **Invariants touched**: CON-1 adjacent — one workspace-root law, two
+  faces; the pins make the copy's drift loud instead of silent. Removal
+  detection is explicit: the primary markers are pinned by literal name
+  (review Finding A, folded), so deleting any entry turns the suite red.
+- **Canonical ownership changes**: none — the server's `commands/context.mjs`
+  list stays the law; the client restates it at its own seam (PD-13's
+  restatement precedent), with the walk-bounds divergence documented in
+  the header (Finding B, folded): the server stops at the enclosing git
+  top level; the client walk climbs to the filesystem root as a pure
+  function over an editor-supplied folder and spawns no git.
+- **Dependency-boundary changes**: none.
+- **Contracts affected and compatibility classification**: none — the
+  client's activation behavior converges to the server's; vscode-package
+  only, no engine surface touched.
+- **Differential evidence**: an independent adversarial review APPROVED
+  with its findings folded in-branch; the full package suite 50/50 and
+  the walk file 12/12; CI `ci-gate` + `analysis-gate` green; the marker
+  list compared entry-by-entry against `src/commands/context.mjs` in review.
+- **Debt budget**: before — a silent copy that could gate activation on
+  the wrong roots (the drift #735); closed — pinned copy plus a
+  documented divergence; introduced — the copy's maintenance duty, bound
+  by its pins; net — negative.
+- **Unresolved questions**: none new. Review Findings C (vscode-facing
+  prose still Nx-centric; `.cs` missing from a documented route list)
+  and D are recorded follow-ups for the 2-E docs PR.
+- **Rejected approaches**: importing the server's list at runtime (the
+  vscode package is a pure-function client and must not bundle the
+  engine); a shared constants package (a new surface for one list).
+- **Forbidden next moves / next**: none carried. Next: 2-E folds
+  Finding C.
+
 ## Conventions maintained here
 
 - Phase completions append a CHK-n block above, never edit an old one.
