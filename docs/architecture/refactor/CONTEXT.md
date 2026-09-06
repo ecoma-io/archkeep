@@ -885,6 +885,9 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
 
 ### CHK-2-R1 — R1's boundary sentence pair lands (2-E tail) (2026-09-06)
 
+- **ID**: CHK-2-R1. **Phase**: 2 (unit 2-E, tail). **Status**: in progress —
+  pending merge of PR #757.
+
 - **Goal**: complete the last code-facing 2-E tail — R1's "one sentence each
   way" pair (#755, PR #757). The coverage side already existed
   (`coverage-verdict.mjs:2-3`); this unit writes the status side into
