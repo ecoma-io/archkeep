@@ -22,6 +22,11 @@
  * the server-side walk's (`src/commands/context.mjs` in `packages/archkeep`)
  * entry for entry, so a client and a CLI on the same tree cannot disagree about
  * where the workspace begins.
+ * One divergence is known: the server-side walk bounds itself by the enclosing
+ * git repository (`src/workspace.mjs` — a marker above `git rev-parse
+ * --show-toplevel`'s top level is tooling state, not the workspace's root),
+ * while this client walk climbs to the filesystem root, being a pure function
+ * of an editor-supplied folder that spawns no git to find a bound.
  */
 
 import { dirname, join, resolve } from "node:path";

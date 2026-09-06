@@ -10,11 +10,13 @@ function tree(...paths) {
 
 describe("findNxRoot", () => {
   it("finds nx.json in the folder itself", () => {
-    expect(findNxRoot("/repo", tree(`/repo/${WORKSPACE_MARKERS[0]}`))).toBe("/repo");
+    // Literal names, not WORKSPACE_MARKERS[i], as with the Moon cases below:
+    // an index stays green if the entry itself is deleted from the list.
+    expect(findNxRoot("/repo", tree("/repo/nx.json"))).toBe("/repo");
   });
 
   it("finds archkeep.json in the folder itself", () => {
-    expect(findNxRoot("/repo", tree(`/repo/${WORKSPACE_MARKERS[1]}`))).toBe("/repo");
+    expect(findNxRoot("/repo", tree("/repo/archkeep.json"))).toBe("/repo");
   });
 
   it("finds it above a folder opened deep inside the workspace", () => {
