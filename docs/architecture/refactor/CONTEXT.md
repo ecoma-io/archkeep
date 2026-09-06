@@ -741,6 +741,47 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
   this PR (closed file set). Next: WI-5 (comment-only), then 2-D per
   [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
 
+### CHK-2-WI5 — Phase 2 work item, WI-5: the ladder's own prose counts provenance (2026-09-06)
+
+- **ID**: CHK-2-WI5. **Phase**: 2 (work item WI-5). **Status**: complete —
+  pending merge of PR #749.
+- **Goal**: retire the two documentation claims WI-2's fold made stale —
+  `commands/policy.mjs`'s preamble (the "eleven sites"/"eleven callers"
+  count and the command enumeration gain `provenance`, with its
+  private-walk history named) and `cli.mjs`'s `runProvenance` JSDoc
+  (the ladder's refusal named among the exit-3 sources). Comment-only —
+  no executable line changed.
+- **Invariants touched**: none — prose only. The count the preamble
+  states is itself the structural-impossibility claim, so a stale count
+  is the drift this unit exists to prevent.
+- **Canonical ownership changes**: none.
+- **Dependency-boundary changes**: none.
+- **Contracts affected and compatibility classification**: none —
+  performance/internal by construction: comments cannot move a byte of
+  rendered output; no exported API touched.
+- **Differential evidence**: the factual claims verified before writing —
+  the preamble's eleven named pre-ladder commands counted against its own
+  enumeration; `provenance`'s `resolvePolicy` import confirmed at
+  `commands/provenance-command.mjs:76`, the fold call in place of the
+  removed private walk; the omitted
+  exit-3 source confirmed in `runProvenance`'s JSDoc (malformed
+  intent/config only). lefthook format, lint (eslint over both touched
+  files), packages and commitlint hooks green at the commit; the push
+  battery runs on the branch as a whole.
+- **Debt budget**: before — one stale count on the exact sentence whose
+  job is preventing drift, one JSDoc under-attributing exit 3; closed —
+  both; introduced — none; net — negative.
+- **Unresolved questions**: the PD decision record for WI-2's named
+  behavior deltas (CHK-2-WI2's item 1) stays maintainer-gated and is not
+  decided here.
+- **Rejected approaches**: riding the fixes on #748 (its file set was
+  closed — the preamble and `cli.mjs` sit outside it); filing without an
+  issue (#750 filed first under the feature template, duplicate search
+  run); widening the preamble rewrite (the "other ten" hand-copy claim
+  stays historically true — only the site count and the join are new).
+- **Forbidden next moves / next**: none carried. Next: 2-D per
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
+
 ## Conventions maintained here
 
 - Phase completions append a CHK-n block above, never edit an old one.
