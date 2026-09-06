@@ -85,18 +85,19 @@ with CI about the same import, and both would report confidently.
 
 ## Extension routing
 
-The extension activates for four file extensions, matched by filename pattern
+The extension activates for eight file extensions, matched by filename pattern
 rather than by language id — a `.go` file is routed on a machine with no Go
 extension installed:
 
-| extension    | language |
-| ------------ | -------- |
-| `.go`        | Go       |
-| `.rs`        | Rust     |
-| `.py`        | Python   |
-| `.vue`       | Vue      |
-| `.java`      | Java     |
-| `.kt` `.kts` | Kotlin   |
+| extension    | language  |
+| ------------ | --------- |
+| `.go`        | Go        |
+| `.rs`        | Rust      |
+| `.py`        | Python    |
+| `.vue`       | Vue       |
+| `.java`      | Java      |
+| `.kt` `.kts` | Kotlin    |
+| `.cs`        | C# / .NET |
 
 TypeScript and JavaScript are not on that list. An editor gives one language
 server per file extension — the first registered wins — so claiming `.ts`
