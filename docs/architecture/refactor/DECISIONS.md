@@ -407,3 +407,23 @@ exists). A record never restates the constitution — a field whose answer is
     in [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md); the contract sentence is in
     the seam section of the same PR.
   - _Supersedes_: nothing.
+- **PD-17 (2026-09-06) — Refactor-unit issue routing.**
+  - _Question_: does the cross-repo gate (issue → branch → draft PR per
+    unit) require a dedicated issue for every refactor work item?
+  - _Evidence_: seven landed refactor PRs (#730–#736, #740) link umbrella
+    #725 and no unit carried its own issue; the template roster
+    (bug_report, feature_request, missed_violation) has no refactor form —
+    feature_request is capability-shaped and would fabricate fields for a
+    deletion; defects always filed their own templated issues (#735,
+    #737, #738, #739).
+  - _Decision_ (maintainer, this session): refactor program units track
+    via umbrella #725 plus their finding id named in the PR body; defects
+    continue to route through their own templated issues.
+  - _Scope_: Phases 2–9 work items. _Alternatives rejected_: per-unit
+    issues (form mismatch; ceremony without a receiver); a new issue
+    template (a program-process concern, not a repo defect class).
+  - _Consequences_: the PR body plus the finding id are the unit's gate
+    trail; the WI-6 PR (#746) complies as opened.
+  - _Compatibility impact_: none. _Owner_: the maintainer.
+  - _Verification/acceptance evidence_: this record; PR bodies naming
+    their finding ids. _Supersedes_: nothing.

@@ -521,6 +521,15 @@ export async function check(
   // from the MARKER (the line a reader edits is the document's), project and
   // constraint from the edge — so suppression, waiver annotation, sorting and
   // the SARIF face all treat it as the ordinary violation it is.
+  //
+  // PD-13 (2026-09-06) pins THIS fold as the documented normalization seam
+  // (`../../../../docs/architecture/refactor/DECISIONS.md`): the one place
+  // `judgeEdge`'s markdown-pairing verdicts are reshaped into the exact
+  // `Violation` record `violationOf` (`../rules/index.mjs`) builds — the
+  // families then fold into the one verdict lane as count keys into
+  // `verdictFor` (`../verdict.mjs`). The canonical statement is the
+  // "Finding — the unowned concept" section of
+  // `../../../../docs/architecture/refactor/SEMANTIC-MODEL.md`.
   /** @type {object[]} */
   const markdownRaw = [];
   if (config !== null && markdownTrack !== null && config.depConstraints.length > 0) {
