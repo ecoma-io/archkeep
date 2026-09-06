@@ -48,24 +48,24 @@ A missing field is a review defect, not a style preference.
 
 ## Program state
 
-| Phase                                               | Status                                  | Record                      |
-| --------------------------------------------------- | --------------------------------------- | --------------------------- |
-| 0 — Architecture cartography                        | **complete** (PR #727 merged)           | CHK-0 below                 |
-| 0.5 — Decision closure & Phase 1 execution baseline | **complete** (PR #729 merged)           | CHK-1-PREP below            |
-| 1 — Authority hardening                             | **complete** (PRs #730–#734 + #736)     | CHK-1-CLOSE below           |
-| 2 — Canonical model hardening                       | in progress — 2-A adjudicated (PR #740) | CHK-2-A below               |
-| 3 — Boundary enforcement                            | not started                             | blocked by 2                |
-| 4 — Internal extraction                             | not started                             | **blocked by GAP-A** (PD-4) |
-| 5 — Capability facades                              | not started                             | blocked by 4                |
-| 6 — CLI recomposition                               | not started                             | blocked by 5                |
-| 7 — Additional surfaces                             | not started                             | blocked by 6                |
-| 8 — Federation readiness                            | not started                             | maintainer-gated            |
-| 9 — Final hardening                                 | not started                             | blocked by 8 (or waiver)    |
+| Phase                                               | Status                              | Record                      |
+| --------------------------------------------------- | ----------------------------------- | --------------------------- |
+| 0 — Architecture cartography                        | **complete** (PR #727 merged)       | CHK-0 below                 |
+| 0.5 — Decision closure & Phase 1 execution baseline | **complete** (PR #729 merged)       | CHK-1-PREP below            |
+| 1 — Authority hardening                             | **complete** (PRs #730–#734 + #736) | CHK-1-CLOSE below           |
+| 2 — Canonical model hardening                       | in progress — 2-B pinned (PR #745)  | CHK-2-A, CHK-2-B below      |
+| 3 — Boundary enforcement                            | not started                         | blocked by 2                |
+| 4 — Internal extraction                             | not started                         | **blocked by GAP-A** (PD-4) |
+| 5 — Capability facades                              | not started                         | blocked by 4                |
+| 6 — CLI recomposition                               | not started                         | blocked by 5                |
+| 7 — Additional surfaces                             | not started                         | blocked by 6                |
+| 8 — Federation readiness                            | not started                         | maintainer-gated            |
+| 9 — Final hardening                                 | not started                         | blocked by 8 (or waiver)    |
 
 Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
 #729 (Phase 0.5), PRs #730–#734 (Phase 1 units A, B, E, F, C), PR #736
-(the Phase 1 close), and this PR (#740 — the 2-A adjudication record,
-branch `johnitvn/refactor-2a-adjudication`).
+(the Phase 1 close), PR #740 (the 2-A adjudication record), and this PR
+(#745 — the 2-B relationship pins, branch `refactor-2b-relationship-pins`).
 
 ## Checkpoints
 
@@ -439,6 +439,49 @@ branch `johnitvn/refactor-2a-adjudication`).
   widening the manifest schema (no consumer asked).
 - **Forbidden next moves / next**: none carried. Next: #742's closeout,
   then 2-C after #745 merges.
+
+### CHK-2-B — Phase 2, 2-B relationship pins (2026-09-06)
+
+- **ID**: CHK-2-B. **Phase**: 2 (item 2-B). **Status**: complete —
+  pending merge of PR #745.
+- **Goal**: implement 2-A's outcome (c) for Finding — the four judgment
+  sites and the `check.mjs` normalization seam carry the relationship
+  pins in their own headers, where a refactor actually edits.
+- **Invariants touched**: none behaviorally — comment/header-only change;
+  [CON-1](CONSTITUTION.md#con-1--one-enforcement-authority) and INV-25
+  restated, not moved. INV-18's tripwire ran green: the manifest holds no
+  evidence entries for the five touched files, so no digest update was
+  owed.
+- **Canonical ownership changes**: none — no owner moved, no rename, no
+  new type; the pins bind the already-adjudicated relationships.
+- **Dependency-boundary changes**: none.
+- **Contracts affected and compatibility classification**: none — zero
+  executable, test, registry, or manifest bytes changed; outputs
+  byte-identical.
+- **Differential evidence**: comment-only diff proven two-directionally
+  (`+50/−1`; the −1 is the replaced one-line JSDoc above `violationOf`);
+  targeted suites green (rules/index, edge-constraints, go-work,
+  tsconfig-paths); CI `ci-gate` + `analysis-gate` green; an independent
+  adversarial review APPROVED — the comment-only claim re-proven, pins
+  re-verified against [AUTHORITY-MAP.md](AUTHORITY-MAP.md) and
+  [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md), suites regenerated.
+- **Debt budget**: before — the families' relationships lived only in
+  this control plane, invisible at the sites a refactor edits; closed —
+  the pins sit at the sites; introduced — none; net — negative.
+- **Unresolved questions**: none new. Phase 2 remaining: 2-C, 2-D
+  (+WI-3/4/5), 2-E, the correctness fixes (#737 → #743, #738 → #744,
+  #739 → #741), WI-6 (#746); WI-2 ruled (fold into `policy.mjs`'s
+  ladder, maintainer 2026-09-06) and dispatches after #741 merges.
+  [PD-17](DECISIONS.md#program-decisions) records the refactor-unit
+  issue routing.
+- **Rejected approaches**: a shared Finding module
+  ([PD-13](DECISIONS.md#program-decisions) ruled (c)); line-number
+  citations in headers (drift); control-plane-only pins (the sites are
+  what a refactor edits).
+- **Forbidden next moves / next**: 2-C (message registries) must not
+  start before this PR merges — its files (`go-work.mjs`,
+  `tsconfig-paths.mjs`) overlap this PR's files. Next: 2-C per
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
 
 ## Conventions maintained here
 
