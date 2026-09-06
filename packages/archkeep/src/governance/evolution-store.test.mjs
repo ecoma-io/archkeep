@@ -119,6 +119,35 @@ describe("writeEvent", () => {
     expect(eventFiles(eventsDir)).toHaveLength(0);
   });
 
+  it("refuses an event whose disposition is outside the vocabulary", () => {
+    // The write path must run the same vocabulary validation readEvents runs:
+    // a malformed disposition persisted here would brick every later read.
+    const event = { ...makeEvent("a"), disposition: "accpeted" };
+    expect(() => writeEvent(eventsDir, event, { root })).toThrow(/disposition/);
+    expect(eventFiles(eventsDir)).toHaveLength(0);
+  });
+
+  it("refuses an event whose schemaVersion is not the store's", () => {
+    const event = { ...makeEvent("a"), schemaVersion: 2 };
+    expect(() => writeEvent(eventsDir, event, { root })).toThrow(/schemaVersion/);
+    expect(eventFiles(eventsDir)).toHaveLength(0);
+  });
+
+  it("refuses an event whose classifications fall outside the vocabulary", () => {
+    const event = { ...makeEvent("a"), classifications: ["MAGIC"] };
+    expect(() => writeEvent(eventsDir, event, { root })).toThrow(/classifications/);
+    expect(eventFiles(eventsDir)).toHaveLength(0);
+  });
+
+  it("keeps the store fully readable after a refused write", () => {
+    const a = makeEvent("a");
+    writeEvent(eventsDir, a, { root });
+    expect(() =>
+      writeEvent(eventsDir, { ...makeEvent("b"), disposition: "accpeted" }, { root }),
+    ).toThrow(/disposition/);
+    expect(readEvents(eventsDir)).toEqual([a]);
+  });
+
   it("requires io.root so a write can be proven contained", () => {
     expect(() => writeEvent(eventsDir, makeEvent("a"), {})).toThrow(/io\.root/);
   });

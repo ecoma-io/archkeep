@@ -101,8 +101,14 @@ function shortId(id) {
  * silently manufacture duplicates — the failure shape this store exists to
  * rule out.
  *
+ * It then runs the same vocabulary rules the read path enforces (see
+ * `eventVocabularyViolation`): a record outside the event vocabulary — a
+ * wrong `schemaVersion`, a classification or disposition outside its
+ * vocabulary — is refused BEFORE it can be persisted, so `writeEvent` never
+ * writes a record `readEvents` would refuse and brick the store on (#738).
+ *
  * @param {object} event The event to write.
- * @throws {Error} naming the mismatch.
+ * @throws {Error} naming the mismatch or the violated vocabulary rule.
  */
 function validateEventForWrite(event) {
   if (typeof event !== "object" || event === null || Array.isArray(event)) {
@@ -130,12 +136,50 @@ function validateEventForWrite(event) {
         "tuple {base, head, declarationDigest}",
     );
   }
+  const violation = eventVocabularyViolation(event);
+  if (violation !== null) {
+    throw new Error(`archkeep: refusing to write the evolution event: ${violation}`);
+  }
 }
 
 /**
- * The three validations every stored event must pass: the schema version, the
- * classification subset, and the disposition. Any other shape is a malformed
- * store — thrown, never read as an event.
+ * The three vocabulary rules every stored event must pass — the schema
+ * version, the classification subset, and the disposition — as ONE copy both
+ * sides of the store run: `validateEventForWrite` refuses a write outside
+ * them, `validateEventRecord` refuses a read of one, so a record `writeEvent`
+ * persists is exactly a record `readEvents` accepts and a refused write can
+ * never brick a later read (#738).
+ *
+ * @param {object} event The record to check.
+ * @returns {string|null} The violated rule, or `null` when the record is
+ *   within the vocabulary.
+ */
+function eventVocabularyViolation(event) {
+  if (event.schemaVersion !== EVOLUTION_EVENT_SCHEMA_VERSION) {
+    return `schemaVersion ${JSON.stringify(
+      event.schemaVersion,
+    )} is not ${EVOLUTION_EVENT_SCHEMA_VERSION}`;
+  }
+  if (
+    !Array.isArray(event.classifications) ||
+    event.classifications.some((entry) => !EVENT_CLASSIFICATIONS.includes(entry))
+  ) {
+    return `classifications must be a subset of [${EVENT_CLASSIFICATIONS.join(", ")}]`;
+  }
+  if (!EVENT_DISPOSITIONS.includes(event.disposition)) {
+    return `disposition ${JSON.stringify(
+      event.disposition,
+    )} is not one of [${EVENT_DISPOSITIONS.join(", ")}]`;
+  }
+  return null;
+}
+
+/**
+ * The three vocabulary rules every stored event must pass — the schema
+ * version, the classification subset, and the disposition — the ONE copy
+ * `eventVocabularyViolation` owns, shared with the write path so a record
+ * `writeEvent` accepts is exactly a record `readEvents` accepts. Any other
+ * shape is a malformed store — thrown, never read as an event.
  *
  * @param {object} parsed The parsed record.
  * @param {string} path The file it came from, for the error message.
@@ -147,28 +191,9 @@ function validateEventRecord(parsed, path) {
       `archkeep: malformed evolution event '${path}': the record is not a JSON object`,
     );
   }
-  if (parsed.schemaVersion !== EVOLUTION_EVENT_SCHEMA_VERSION) {
-    throw new Error(
-      `archkeep: malformed evolution event '${path}': schemaVersion ${JSON.stringify(
-        parsed.schemaVersion,
-      )} is not ${EVOLUTION_EVENT_SCHEMA_VERSION}`,
-    );
-  }
-  if (
-    !Array.isArray(parsed.classifications) ||
-    parsed.classifications.some((entry) => !EVENT_CLASSIFICATIONS.includes(entry))
-  ) {
-    throw new Error(
-      `archkeep: malformed evolution event '${path}': classifications must be a subset of ` +
-        `[${EVENT_CLASSIFICATIONS.join(", ")}]`,
-    );
-  }
-  if (!EVENT_DISPOSITIONS.includes(parsed.disposition)) {
-    throw new Error(
-      `archkeep: malformed evolution event '${path}': disposition ${JSON.stringify(
-        parsed.disposition,
-      )} is not one of [${EVENT_DISPOSITIONS.join(", ")}]`,
-    );
+  const violation = eventVocabularyViolation(parsed);
+  if (violation !== null) {
+    throw new Error(`archkeep: malformed evolution event '${path}': ${violation}`);
   }
 }
 
@@ -182,9 +207,11 @@ function validateEventRecord(parsed, path) {
  * against `io.root`. A missing directory is an empty store: it is created
  * before the scan, so the first event in a fresh store lands at `0000`.
  *
- * The event's `id`/`dedupeKey` must match the canonical tuple (see
- * `validateEventForWrite`) — a caller cannot persist a record whose identity
- * lies about its content.
+ * The event's `id`/`dedupeKey` must match the canonical tuple and the record
+ * must sit within the event vocabulary (see `validateEventForWrite`) — a
+ * caller cannot persist a record whose identity lies about its content, or
+ * whose vocabulary `readEvents` would refuse: the store never gains a file
+ * that would brick its own reads.
  *
  * @param {string} dir Absolute or relative path to the event store directory.
  * @param {object} event The EvolutionEvent to append.
@@ -200,8 +227,9 @@ function validateEventRecord(parsed, path) {
  *   against and is REQUIRED for a write.
  * @returns {{id: string, duplicate: boolean}} The event id, and whether this
  *   call wrote nothing because the event already existed.
- * @throws {Error} on a mismatched event identity, an unreadable or malformed
- *   store, a containment violation, or a `wx` refusal.
+ * @throws {Error} on an event that fails validation (identity or vocabulary),
+ *   an unreadable or malformed store, a containment violation, or a `wx`
+ *   refusal.
  */
 export function writeEvent(dir, event, io = {}) {
   validateEventForWrite(event);
