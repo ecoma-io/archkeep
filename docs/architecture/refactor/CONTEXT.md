@@ -565,9 +565,11 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
   complete — pending merge of PR #742.
 - **Goal**: close #735 — the vscode client's `WORKSPACE_MARKERS` in
   `workspace-root.mjs` had drifted from the server's marker list in
-  `commands/context.mjs`: a folder the server accepts as a workspace root the
-  client could refuse. Fix: the client list re-pinned to the server's
-  eight markers, the copy bound by tests in both directions.
+  `commands/context.mjs`: a folder the server accepts as a workspace
+  root the client could refuse. Fix: the client list re-pinned to the
+  server's four markers (`nx.json`, `archkeep.json`,
+  `.moon/workspace.yml`, `.config/moon/workspace.yml`), the copy bound
+  by tests in both directions.
 - **Invariants touched**: CON-1 adjacent — one workspace-root law, two
   faces; the pins make the copy's drift loud instead of silent. Removal
   detection is explicit: the primary markers are pinned by literal name
