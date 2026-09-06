@@ -44,7 +44,7 @@ export function planSession({ folderPath, configuredServerPath = "", findRoot, l
     // that *is* ours and is going unchecked.
     return {
       state: "idle",
-      reason: `No workspace marker (archkeep.json or nx.json) in ${folderPath} or any directory above it, so this folder is not part of a workspace Archkeep can check.`,
+      reason: `No workspace marker (nx.json, archkeep.json, or Moon's workspace.yml) in ${folderPath} or any directory above it, so this folder is not part of a workspace Archkeep can check.`,
     };
   }
 

@@ -18,8 +18,8 @@ root is, and shows you whether it is running.
   load at all.
 - **`@ecoma-io/archkeep` installed in the workspace you are editing.**
   Not bundled here — see below.
-- **A workspace marker** (`archkeep.json` or `nx.json`) at or above the folder
-  you opened.
+- **A workspace marker** (`archkeep.json`, `nx.json`, or Moon's `workspace.yml` —
+  inside `.moon/` or `.config/moon/`) at or above the folder you opened.
 
 ```bash
 pnpm add -D @ecoma-io/archkeep
@@ -45,11 +45,11 @@ extension will not quietly run a different server than the one you named.
 The whole interface is one language status item, visible in the status bar's
 language popover when a routed file is open:
 
-| what it says               | what it means                                                                                                                                                                                                    |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Archkeep**               | The server is running against the named workspace root. An empty Problems panel here means no violations                                                                                                         |
-| **Archkeep: not checking** | Shown as an error. The workspace is an Nx workspace and the server is not running — it could not be located, failed to start, or stopped after starting. The log says which, and lists every path that was tried |
-| **Archkeep: no workspace** | There is no workspace marker (`archkeep.json` or `nx.json`) at or above this folder, so there is nothing here to check                                                                                           |
+| what it says               | what it means                                                                                                                                                                                         |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Archkeep**               | The server is running against the named workspace root. An empty Problems panel here means no violations                                                                                              |
+| **Archkeep: not checking** | Shown as an error. A workspace was found and the server is not running — it could not be located, failed to start, or stopped after starting. The log says which, and lists every path that was tried |
+| **Archkeep: no workspace** | There is no workspace marker (`archkeep.json`, `nx.json`, or Moon's `workspace.yml`) at or above this folder, so there is nothing here to check                                                       |
 
 The middle row is the reason the item exists at all. In a terminal, a run that
 could not look exits with a distinct code; in an editor there is nowhere to print

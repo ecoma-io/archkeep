@@ -10,11 +10,13 @@ function tree(...paths) {
 
 describe("findNxRoot", () => {
   it("finds nx.json in the folder itself", () => {
-    expect(findNxRoot("/repo", tree(`/repo/${WORKSPACE_MARKERS[0]}`))).toBe("/repo");
+    // Literal names, not WORKSPACE_MARKERS[i], as with the Moon cases below:
+    // an index stays green if the entry itself is deleted from the list.
+    expect(findNxRoot("/repo", tree("/repo/nx.json"))).toBe("/repo");
   });
 
   it("finds archkeep.json in the folder itself", () => {
-    expect(findNxRoot("/repo", tree(`/repo/${WORKSPACE_MARKERS[1]}`))).toBe("/repo");
+    expect(findNxRoot("/repo", tree("/repo/archkeep.json"))).toBe("/repo");
   });
 
   it("finds it above a folder opened deep inside the workspace", () => {
@@ -47,7 +49,7 @@ describe("findNxRoot", () => {
     };
 
     expect(findNxRoot("/", counted)).toBeNull();
-    // Two markers checked at the root, then done — no loop.
+    // Every marker checked at the root, then done — no loop.
     expect(checks).toBe(WORKSPACE_MARKERS.length);
   });
 
@@ -65,5 +67,29 @@ describe("findNxRoot", () => {
     expect(
       findNxRoot("/repo", tree(`/repo/${WORKSPACE_MARKERS[0]}`, `/repo/${WORKSPACE_MARKERS[1]}`)),
     ).toBe("/repo");
+  });
+
+  it("finds a Moon-only workspace through the workspace.yml in .moon", () => {
+    // The marker spellings are written out here rather than taken from
+    // WORKSPACE_MARKERS: the contract under test is that these exact names —
+    // the ones the server-side walk honours — activate the extension.
+    expect(findNxRoot("/repo", tree("/repo/.moon/workspace.yml"))).toBe("/repo");
+  });
+
+  it("finds a Moon workspace carrying the v2 .config/moon spelling", () => {
+    expect(findNxRoot("/repo/apps/api", tree("/repo/.config/moon/workspace.yml"))).toBe("/repo");
+  });
+
+  it("does not mistake a bare .moon directory for a workspace", () => {
+    // `~/.moon` is moonrepo's user-level state and exists on every machine
+    // moonrepo has ever run on (#339): only the workspace.yml inside the
+    // directory marks a workspace, so directory presence alone must not.
+    expect(findNxRoot("/repo", tree("/repo/.moon", "/repo/.config/moon"))).toBeNull();
+  });
+
+  it("prefers nx.json over a Moon marker at the same level", () => {
+    // Order parity with the server-side walk, which lists nx.json first too:
+    // a client and a CLI on the same tree must pick the same root.
+    expect(findNxRoot("/repo", tree("/repo/nx.json", "/repo/.moon/workspace.yml"))).toBe("/repo");
   });
 });
