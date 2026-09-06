@@ -2,10 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { clockViolations } from "./clock.mjs";
 import {
-  DECISION_LIFECYCLE_KINDS,
   ORIGIN_KEYS,
   originViolations,
-  recordDecisionLifecycle,
   recordOrigin,
   validateOrigin,
 } from "./provenance-record.mjs";
@@ -255,163 +253,6 @@ describe("clockViolations", () => {
   });
 });
 
-describe("recordDecisionLifecycle — the decision-lifecycle write surface", () => {
-  /**
-   * A valid lifecycle event for the record surface, attributed by the shared
-   * test clock. Overrides spread over the defaults; the assertion pins the
-   * kind to the record surface's own union so a call site stays type-checked
-   * against `recordDecisionLifecycle`'s parameter shape.
-   *
-   * @param {object} overrides
-   * @returns {Parameters<typeof recordDecisionLifecycle>[0]}
-   */
-  const event = (overrides = {}) =>
-    /** @type {Parameters<typeof recordDecisionLifecycle>[0]} */ ({
-      kind: "status-transition",
-      decisionId: "0003-one-contract-four-spellings",
-      from: "proposed",
-      to: "accepted",
-      origin: { by: "jane@example.com", tool: "archkeep:v1" },
-      clock: clock(),
-      ...overrides,
-    });
-
-  it("records a status transition with origin and `on` from the injected clock", () => {
-    const record = recordDecisionLifecycle(event());
-    expect(record).toEqual({
-      kind: "status-transition",
-      decisionId: "0003-one-contract-four-spellings",
-      from: "proposed",
-      to: "accepted",
-      origin: { by: "jane@example.com", tool: "archkeep:v1", on: "2026-08-16T00:00:00.000Z" },
-    });
-    expect(Object.keys(record)).toEqual(["kind", "decisionId", "from", "to", "origin"]);
-  });
-
-  it("records a creation — a transition from nothing to proposed", () => {
-    const record = recordDecisionLifecycle(event({ from: null, to: "proposed" }));
-    expect(record.from).toBeNull();
-    expect(record.to).toBe("proposed");
-  });
-
-  it("records a supersession — which decision replaced which, attributed", () => {
-    const record = recordDecisionLifecycle(
-      event({
-        kind: "supersession",
-        decisionId: "0004-lattice-renamed",
-        superseded: ["0003-one-contract-four-spellings"],
-      }),
-    );
-    expect(record).toEqual({
-      kind: "supersession",
-      decisionId: "0004-lattice-renamed",
-      superseded: ["0003-one-contract-four-spellings"],
-      origin: { by: "jane@example.com", tool: "archkeep:v1", on: "2026-08-16T00:00:00.000Z" },
-    });
-    expect(Object.keys(record)).toEqual(["kind", "decisionId", "superseded", "origin"]);
-  });
-
-  it("records a bindings change — added and removed constraints", () => {
-    const record = recordDecisionLifecycle(
-      event({
-        kind: "bindings-change",
-        decisionId: "0001-boundary-levels",
-        added: ["rule:z"],
-        removed: ["rule:x"],
-      }),
-    );
-    expect(record).toEqual({
-      kind: "bindings-change",
-      decisionId: "0001-boundary-levels",
-      added: ["rule:z"],
-      removed: ["rule:x"],
-      origin: { by: "jane@example.com", tool: "archkeep:v1", on: "2026-08-16T00:00:00.000Z" },
-    });
-    expect(Object.keys(record)).toEqual(["kind", "decisionId", "added", "removed", "origin"]);
-  });
-
-  it("non-bindings kinds never carry added/removed — the record carries only the kind's keys", () => {
-    const transition = recordDecisionLifecycle(event());
-    expect(Object.keys(transition)).toEqual(["kind", "decisionId", "from", "to", "origin"]);
-    const supersession = recordDecisionLifecycle(
-      event({ kind: "supersession", superseded: ["x"] }),
-    );
-    expect(Object.keys(supersession)).toEqual(["kind", "decisionId", "superseded", "origin"]);
-  });
-
-  it("is byte-identical across calls with the same clock — determinism's write half", () => {
-    const first = JSON.stringify(recordDecisionLifecycle(event()));
-    const second = JSON.stringify(recordDecisionLifecycle(event()));
-    expect(first).toBe(second);
-  });
-
-  it("differs across calls with a different clock — the clock is the single door", () => {
-    const first = JSON.stringify(recordDecisionLifecycle(event()));
-    const second = JSON.stringify(
-      recordDecisionLifecycle(event({ clock: { now: () => "2026-08-17" } })),
-    );
-    expect(first).not.toBe(second);
-  });
-
-  it("refuses to run without a clock, loudly — inherited from recordOrigin", () => {
-    const { clock: _ignored, ...withoutClock } = event();
-    expect(() => recordDecisionLifecycle(/** @type {any} */ (withoutClock))).toThrow(/clock/);
-  });
-
-  it("refuses to run without an origin author, loudly", () => {
-    expect(() =>
-      recordDecisionLifecycle(event({ origin: { by: "", tool: "archkeep:v1" } })),
-    ).toThrow(/origin.by/);
-  });
-
-  it("refuses a status outside the registry's ADR_STATUSES", () => {
-    expect(() => recordDecisionLifecycle(event({ from: "bogus" }))).toThrow(/from: must be/);
-    expect(() => recordDecisionLifecycle(event({ to: "bogus" }))).toThrow(/to: must be/);
-  });
-
-  it("refuses a status transition that changes nothing", () => {
-    expect(() => recordDecisionLifecycle(event({ from: "accepted", to: "accepted" }))).toThrow(
-      /changes nothing/,
-    );
-  });
-
-  it("refuses a supersession that names no replaced decision", () => {
-    expect(() => recordDecisionLifecycle(event({ kind: "supersession", superseded: [] }))).toThrow(
-      /superseded/,
-    );
-    expect(() =>
-      recordDecisionLifecycle(event({ kind: "supersession", superseded: [""] })),
-    ).toThrow(/superseded/);
-  });
-
-  it("refuses a bindings change that adds and removes nothing", () => {
-    expect(() =>
-      recordDecisionLifecycle(event({ kind: "bindings-change", added: [], removed: [] })),
-    ).toThrow(/adds nothing/);
-  });
-
-  it("refuses a non-array added/removed rather than silently dropping it", () => {
-    expect(() =>
-      recordDecisionLifecycle(event({ kind: "bindings-change", added: "rule:z", removed: [] })),
-    ).toThrow(/added: must be an array/);
-  });
-
-  it("refuses an unknown kind and a missing decisionId, each loudly", () => {
-    expect(() => recordDecisionLifecycle(event({ kind: "renamed" }))).toThrow(/kind: must be/);
-    expect(() => recordDecisionLifecycle(event({ decisionId: "  " }))).toThrow(
-      /decisionId: must be/,
-    );
-  });
-
-  it("does not admit kinds outside DECISION_LIFECYCLE_KINDS — the roster is the single list", () => {
-    expect(DECISION_LIFECYCLE_KINDS).toEqual([
-      "status-transition",
-      "supersession",
-      "bindings-change",
-    ]);
-  });
-});
-
 describe("recordOrigin — 10-run determinism", () => {
   it("produces byte-identical output across 10 consecutive calls with the same inputs", () => {
     const args = { by: "jane@example.com", tool: "archkeep:v1", clock: clock() };
@@ -426,32 +267,6 @@ describe("recordOrigin — 10-run determinism", () => {
     const make = () =>
       recordOrigin({ by: "jane@example.com", tool: "archkeep:v1", clock: clock() });
     const results = Array.from({ length: 10 }, make);
-    const firstKeys = Object.keys(results[0]);
-    const lastKeys = Object.keys(results[results.length - 1]);
-    expect(firstKeys).toEqual(lastKeys);
-  });
-});
-
-describe("recordDecisionLifecycle — 10-run determinism", () => {
-  const event = () => ({
-    kind: /** @type {const} */ ("status-transition"),
-    decisionId: "0003-one-contract-four-spellings",
-    from: /** @type {const} */ ("proposed"),
-    to: /** @type {const} */ ("accepted"),
-    origin: { by: "jane@example.com", tool: "archkeep:v1" },
-    clock: clock(),
-  });
-
-  it("produces byte-identical output across 10 consecutive calls with the same inputs", () => {
-    const results = Array.from({ length: 10 }, () => recordDecisionLifecycle(event()));
-    const first = JSON.stringify(results[0]);
-    for (let i = 1; i < results.length; i++) {
-      expect(JSON.stringify(results[i])).toBe(first);
-    }
-  });
-
-  it("the first and tenth calls produce the exact same object shape", () => {
-    const results = Array.from({ length: 10 }, () => recordDecisionLifecycle(event()));
     const firstKeys = Object.keys(results[0]);
     const lastKeys = Object.keys(results[results.length - 1]);
     expect(firstKeys).toEqual(lastKeys);

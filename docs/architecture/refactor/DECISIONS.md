@@ -427,3 +427,30 @@ exists). A record never restates the constitution — a field whose answer is
   - _Compatibility impact_: none. _Owner_: the maintainer.
   - _Verification/acceptance evidence_: this record; PR bodies naming
     their finding ids. _Supersedes_: nothing.
+- **PD-16 (2026-09-06) — WI-6 ruled delete.**
+  - _Question_: does the dormant `recordDecisionLifecycle` write surface
+    fold into a live command, or delete?
+  - _Evidence_: a whole-tree census found zero production consumers — no
+    entry point, re-export, CLI verb, workflow, or script ever called it;
+    the fold gate (2-A's outcome (a)) requires a live consumer need to
+    fold against, and none exists; the read half (`recordOrigin`) is live
+    and untouched by the question.
+  - _Decision_ (maintainer, this session): **delete** the surface — its
+    typedef, kinds constant, writer, tests, and the stale docs section —
+    under the SAFE/internal-only classification; `recordOrigin` stays the
+    single provenance producer.
+  - _Scope_: `provenance-record.mjs`, its test file,
+    `docs/concepts/provenance.md`; the SEMANTIC-MODEL canonical row
+    updates in the same PR.
+  - _Alternatives rejected_: folding into `decisions` (invents a write
+    the engine never had); keeping it dormant behind a pin (a pin would
+    defend bytes nothing calls).
+  - _Consequences_: the canonical row names one owner; a future lifecycle
+    write surface starts from a clean slate with its own gate.
+  - _Compatibility impact_: none — the deleted surface was unreachable
+    from every public face.
+  - _Owner_: [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md) (canonical ownership
+    table).
+  - _Verification/acceptance evidence_: the reviewer's regenerated census
+    and 478-test consumer sweep; the row edit in this PR.
+    _Supersedes_: nothing.

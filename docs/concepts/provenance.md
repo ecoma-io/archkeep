@@ -125,18 +125,6 @@ history — every transition a decision passed through, each with its own
 recorder — is a later wave; this surface reads the ADR files as they are
 committed today, not an event log.
 
-## The lifecycle write surface
-
-The read surface's counterpart is the module-level write surface,
-`recordDecisionLifecycle` in
-`packages/archkeep/src/governance/provenance-record.mjs`. It records one
-lifecycle event — a `status-transition` (`from`/`to`), a `supersession` (the
-decisions it replaces), or a `bindings-change` (`added`/`removed`) — into an
-origin-carrying record built through the same injected clock and the same loud
-refusals as a row's `origin`. The engine commands never call it; it exists for
-the tooling that writes decision records, and it is what a later wave's event
-log will append from.
-
 ## Validation is loud
 
 A malformed origin is rejected where it is read — a constraint row whose
