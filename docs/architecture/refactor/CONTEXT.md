@@ -883,6 +883,45 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
   check per
   [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
 
+### CHK-2-R1 — R1's boundary sentence pair lands (2-E tail) (2026-09-06)
+
+- **Goal**: complete the last code-facing 2-E tail — R1's "one sentence each
+  way" pair (#755, PR #757). The coverage side already existed
+  (`coverage-verdict.mjs:2-3`); this unit writes the status side into
+  `completeness.mjs`'s module header ("Not the coverage refusal (register
+  R1)") and rewrites the R1 register row to the landed state, citation
+  updated to `completeness.mjs:47-53` in the same landing so the row cannot
+  go stale inside its own PR.
+- **Invariants touched**: none. INV-18: `completeness.mjs` is not a
+  manifest-named artifact, and the edit is comment-only.
+- **Canonical ownership changes**: none — R1 stays a register, not a defect
+  (PD-13); R2–R7 rows untouched, no renumbering.
+- **Dependency-boundary changes**: none — no import moves; the
+  cross-reference is prose.
+- **Contracts affected and compatibility classification**: none —
+  performance/internal by construction (comment-only `.mjs` change + prose).
+- **Differential evidence**: on base `main` (`2083200`),
+  `grep coverageVerdict packages/archkeep/src/commands/completeness.mjs`
+  returned nothing (#755's reproduction); after the branch both directions
+  name each other. No test pins comments; the push battery (boundary check,
+  lint, vitest) is the run evidence.
+- **Debt budget**: before — one register row prescribing an unlanded
+  sentence pair, one header silent about its nearest vocabulary neighbor;
+  closed — both; introduced — 0; net — negative.
+- **Unresolved questions**: the WI-2 fold decision record (PD-15) stays
+  maintainer-gated — explicitly not decided here; Phase-2 exit recording
+  waits on it, and this checkpoint does not declare that exit.
+- **Rejected approaches**: deriving one vocabulary from the other (PD-13
+  already resolved the semantically-equal shapes as registers, not defects —
+  unification is not on the table); embedding the sentence in
+  `EVALUATION_STATUS`'s own JSDoc (the pair must read at the module's front
+  door, not on one constant).
+- **Forbidden next moves / next**: do not author the PD-15 record from this
+  branch; do not renumber registers; do not touch landed CHK text. Next:
+  control-plane state reconciliation (#756), then the PD-15 ruling gates
+  the Phase-2 exit recording per
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
+
 ## Conventions maintained here
 
 - Phase completions append a CHK-n block above, never edit an old one.
