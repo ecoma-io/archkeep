@@ -483,6 +483,40 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
   `tsconfig-paths.mjs`) overlap this PR's files. Next: 2-C per
   [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
 
+### CHK-2-738 — Phase 2, correctness fix: evolution-store write validation (#738 → PR #744) (2026-09-06)
+
+- **ID**: CHK-2-738. **Phase**: 2 correctness-hardening unit. **Status**:
+  complete — pending merge of PR #744.
+- **Goal**: close #738 — the evolution store's write path persisted events
+  whose identity fields or disposition vocabulary it had not validated, so
+  bytes the read path later narrates were never checked at the door that
+  could refuse them.
+- **Invariants touched**: INV-6's write half — the store now validates
+  identity and vocabulary before persisting. The INV-6 gap-line rewrite is
+  deliberately deferred to #741's closeout: it names both halves, and one
+  edit in one PR beats a two-PR conflict in INVARIANTS.md.
+- **Canonical ownership changes**: none.
+- **Dependency-boundary changes**: none.
+- **Contracts affected and compatibility classification**: behavior change
+  at the write door only — invalid identity or vocabulary is now refused
+  before persist; read-path messages byte-identical (differential-proven).
+  Classified CORRECTNESS HARDENING, lands on the 0.x line per the
+  program's standing classification.
+- **Differential evidence**: an independent adversarial review APPROVED —
+  it re-ran a 9-case byte-identity differential of read-path messages;
+  `evolution-store.test.mjs` green; CI `ci-gate` + `analysis-gate` green.
+- **Debt budget**: before — a store write that could not refuse malformed
+  identity or vocabulary (the silent data-integrity gap #738); closed —
+  write-side validation; introduced — none; net — negative.
+- **Unresolved questions**: none new. The read-side vocabulary validation
+  and the disposition-latch throw land via #741.
+- **Rejected approaches**: folding into the 2-A docs PR (correctness
+  fixes ride their own repro-first PRs); answering stranger statuses with
+  `no-verdict` (that shape belongs to the disposition latch, #739 → #741).
+- **Forbidden next moves / next**: none carried. Next: #741 merges, then
+  WI-2 (the `provenance-command.mjs` bypass fold into `policy.mjs`'s
+  ladder) dispatches — P-F holds one disposition law per PR.
+
 ## Conventions maintained here
 
 - Phase completions append a CHK-n block above, never edit an old one.
