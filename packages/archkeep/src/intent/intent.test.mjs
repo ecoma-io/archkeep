@@ -5,6 +5,20 @@
  * implementation that satisfies it. An intent test fails when the intent no
  * longer holds, regardless of which implementation detail changed.
  *
+ * Which "intent" this is: one of four unrelated surfaces sharing the word —
+ * PD-13 outcome (c), four surfaces, never one type
+ * (`../../../../docs/architecture/refactor/DECISIONS.md`). This directory is
+ * the v1.0 evidence-manifest registry: `intent-manifest.json` declares every
+ * v1.0 intent with content-addressed evidence, this file is its executable
+ * gate, and Contract K's determinism guard beside it
+ * (`./determinism-source-guard.test.mjs`, scanning through
+ * `./mask-non-code.mjs`) proves the no-wall-clock intent the manifest
+ * states. The other three: the workspace-declared law
+ * (`../architecture-intent/` — the `architecture-intent.json` file `check`
+ * and `drift` judge), the declared-change grammar
+ * (`../commands/change-intent.mjs`), and the fileless run-envelope intent
+ * shape (`result.intent` in a `--format json` envelope).
+ *
  * Each test is named by contract letter (describe blocks run A–L; contract
  * M holds no describe block — the manifest load above certifies its digest,
  * existence, discoverability, and no-skip structurally, and its behavior is

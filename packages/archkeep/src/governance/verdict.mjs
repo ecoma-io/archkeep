@@ -49,6 +49,21 @@
  * (`../verdict.mjs`) depend on the presentation layer. `../report/evidence.mjs`
  * re-exports `buildDecision` so the render-side callers keep their import
  * path — a path, never a second implementation.
+ *
+ * Layer: the verdict vocabulary and decision owner — `VERDICTS`, `isVerdict`,
+ * `verdictForStatus`, `fitnessVerdict`, and `buildDecision`. Its counterpart,
+ * `../verdict.mjs`, is the check lane built on top of `buildDecision` — the
+ * process's exit codes, the coverage clauses, and `verdictFor`, the per-lint
+ * verdict the `check` command words its envelope and its exit from. The two
+ * near-collision pairs cross that boundary, and the name decides which file
+ * a reader wants: `verdictForStatus` here looks one status up in a frozen
+ * map, while `../verdict.mjs`'s `verdictFor` folds a run's counts into
+ * status + exitCode; `VERDICT_FOR_STATUS` here is an independently frozen
+ * map, while `../verdict.mjs`'s `EXIT_FOR_STATUS` is derived from its own
+ * `EXIT`. Verdict vocabulary and decision construction live here; exit-code,
+ * coverage and check-lane concerns live there — and the layering stays
+ * one-directional (the check lane imports this module, never the reverse),
+ * so this module must not grow exit-code or coverage concerns.
  */
 
 import { describe, isNonEmptyString } from "../values.mjs";

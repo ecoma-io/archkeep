@@ -11,6 +11,17 @@
  * observed architecture stays the graph Archkeep derives from source; governance
  * is a deterministic comparison (`./judge.mjs`). NO LLM/AI anywhere in the core.
  *
+ * Which "intent" this is: one of four unrelated surfaces sharing the word —
+ * PD-13 outcome (c), four surfaces, never one type
+ * (`../../../../docs/architecture/refactor/DECISIONS.md`). This module is
+ * the workspace-declared law: the grammar, validation, and loading of
+ * `architecture-intent.json`, judged against the observed graph by `check`
+ * and `drift`. The other three: the v1.0 evidence-manifest registry
+ * (`../intent/` — `intent-manifest.json` and its executable gate), the
+ * declared-change grammar (`../commands/change-intent.mjs`, one change's
+ * expected consequences, verified by the `change` command), and the fileless
+ * run-envelope intent shape (`result.intent` in a `--format json` envelope).
+ *
  * This module mirrors `../../config.mjs`'s and
  * `../../providers/native/model.mjs`'s split: a pure `(raw) -> string[]`
  * validator and a thin loader that reads, parses, validates and throws — one
