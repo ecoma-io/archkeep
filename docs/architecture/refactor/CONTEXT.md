@@ -48,24 +48,30 @@ A missing field is a review defect, not a style preference.
 
 ## Program state
 
-| Phase                                               | Status                              | Record                      |
-| --------------------------------------------------- | ----------------------------------- | --------------------------- |
-| 0 — Architecture cartography                        | **complete** (PR #727 merged)       | CHK-0 below                 |
-| 0.5 — Decision closure & Phase 1 execution baseline | **complete** (PR #729 merged)       | CHK-1-PREP below            |
-| 1 — Authority hardening                             | **complete** (PRs #730–#734 + #736) | CHK-1-CLOSE below           |
-| 2 — Canonical model hardening                       | in progress — 2-B pinned (PR #745)  | CHK-2-A, CHK-2-B below      |
-| 3 — Boundary enforcement                            | not started                         | blocked by 2                |
-| 4 — Internal extraction                             | not started                         | **blocked by GAP-A** (PD-4) |
-| 5 — Capability facades                              | not started                         | blocked by 4                |
-| 6 — CLI recomposition                               | not started                         | blocked by 5                |
-| 7 — Additional surfaces                             | not started                         | blocked by 6                |
-| 8 — Federation readiness                            | not started                         | maintainer-gated            |
-| 9 — Final hardening                                 | not started                         | blocked by 8 (or waiver)    |
+| Phase                                               | Status                                                                                                                           | Record                      |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| 0 — Architecture cartography                        | **complete** (PR #727 merged)                                                                                                    | CHK-0 below                 |
+| 0.5 — Decision closure & Phase 1 execution baseline | **complete** (PR #729 merged)                                                                                                    | CHK-1-PREP below            |
+| 1 — Authority hardening                             | **complete** (PRs #730–#734 + #736)                                                                                              | CHK-1-CLOSE below           |
+| 2 — Canonical model hardening                       | in progress — all units landed (PRs #740–#749, #753, #754, #757); exit pending the PD-15 fold-decision record (maintainer-gated) | CHK-2-A–CHK-2-R1 below      |
+| 3 — Boundary enforcement                            | not started                                                                                                                      | blocked by 2                |
+| 4 — Internal extraction                             | not started                                                                                                                      | **blocked by GAP-A** (PD-4) |
+| 5 — Capability facades                              | not started                                                                                                                      | blocked by 4                |
+| 6 — CLI recomposition                               | not started                                                                                                                      | blocked by 5                |
+| 7 — Additional surfaces                             | not started                                                                                                                      | blocked by 6                |
+| 8 — Federation readiness                            | not started                                                                                                                      | maintainer-gated            |
+| 9 — Final hardening                                 | not started                                                                                                                      | blocked by 8 (or waiver)    |
 
 Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
 #729 (Phase 0.5), PRs #730–#734 (Phase 1 units A, B, E, F, C), PR #736
-(the Phase 1 close), PR #740 (the 2-A adjudication record), and this PR
-(#745 — the 2-B relationship pins, branch `refactor-2b-relationship-pins`).
+(the Phase 1 close), PR #740 (the 2-A adjudication record), PRs #741–#744
+(the post-audit fixes: #739's disposition latch, the vscode Moon-marker
+walk, the decision-fitness leg, the evolution write-time refusal), PR #745
+(the 2-B relationship pins), PRs #746–#748 (the dormant lifecycle-surface
+deletion, the one message registry, provenance config through the policy
+ladder), PR #749 (the WI-5 ladder preamble), PR #754 (the 2-D
+module-header pins), PR #753 (the 2-E register closeout), and PR #757
+(R1's boundary sentence — the last 2-E tail).
 
 ## Checkpoints
 
