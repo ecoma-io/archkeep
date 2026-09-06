@@ -642,6 +642,51 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
 - **Forbidden next moves / next**: none carried. Next: 2-C (#747) —
   with this PR merged, every Phase-2 fix unit will have landed.
 
+### CHK-2-C — Phase 2, 2-C: the three message registries collapse to one home (2026-09-06)
+
+- **ID**: CHK-2-C. **Phase**: 2 (item 2-C). **Status**: complete —
+  pending merge of PR #747.
+- **Goal**: execute 2-C — the message-template registries' one home with
+  per-domain tables: `GO_WORK_MESSAGES`/`GO_WORK_MESSAGE_IDS` and
+  `TSCONFIG_PATHS_MESSAGES`/`TSCONFIG_PATHS_MESSAGE_IDS` moved verbatim
+  from `src/go-work.mjs` and `src/tsconfig-paths.mjs` into
+  `src/rules/messages.mjs`; `MESSAGES`/`MESSAGE_IDS`/`renderMessage`
+  untouched; `report/sarif.mjs` derives its descriptors from the one
+  module.
+- **Invariants touched**: CON-4 (canonical semantic models) — one home
+  for message templates, the out-of-home spellings removed. Byte-identity
+  is structural, not asserted: finding construction renders sentences
+  inline and never stores table strings.
+- **Canonical ownership changes**: none — the tables moved homes; the
+  owning concept (the message vocabulary) keeps one owner, now literal:
+  every full template literal appears exactly once under
+  `packages/archkeep/src`.
+- **Dependency-boundary changes**: none — the moved tables joined the
+  same module's exports; no import edge changed shape.
+- **Contracts affected and compatibility classification**: none —
+  performance/internal: rendered bytes identical, no exported API moved
+  (the tables were module-private), no message changed. Verified TRUE by
+  the unmodified pins and the differential evidence below.
+- **Differential evidence**: independent adversarial review APPROVED —
+  16/16 byte-falsification checks identical (both moved tables, both id
+  arrays, `renderMessage` over all 15 boundary ids including the
+  missing-data-key case, `sarifRules()` JSON old vs new); the pin files
+  (`messages.test.mjs`, `upstream.integration.test.mjs`) diff-empty vs
+  base and passing; VALIDATION-MATRIX differential rows 1 and 12 green;
+  full suite 215 files / 5778 tests green; eslint, tsc, prettier and
+  check-docs-links green.
+- **Debt budget**: before — two verbatim table copies a refactor could
+  silently diverge; closed — one home, duplication grep-verified zero;
+  introduced — none; net — negative.
+- **Unresolved questions**: none new. The `architecture-intent/judge.mjs`
+  docstring pointer folded in this PR (comment-only).
+- **Rejected approaches**: per-domain modules (three files again — one
+  shape, three spellings); re-exporting the old paths as aliases (a
+  compatibility surface for a module-private table); touching
+  `renderMessage` (the pins own its bytes).
+- **Forbidden next moves / next**: none carried. Next: 2-D per
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
+
 ## Conventions maintained here
 
 - Phase completions append a CHK-n block above, never edit an old one.

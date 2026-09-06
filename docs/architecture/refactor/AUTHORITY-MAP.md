@@ -60,7 +60,7 @@ legitimate peers on the same law, not violations awaiting unification:
 ```
 violationOf (rules/index.mjs:428-442)      ┐
 judgeEdge (rules/edge-constraints.mjs:79)  ├─→ evaluateRun → evaluate ──→ verdictFor (check's fold)
-compareGoWork (go-work.mjs:313-394)        │    (rules/index.mjs)         (src/verdict.mjs:201-333)
+compareGoWork (go-work.mjs:298-379)        │    (rules/index.mjs)         (src/verdict.mjs:201-333)
 judgeTsconfigPaths (tsconfig-paths.mjs)    ┘
 ```
 
