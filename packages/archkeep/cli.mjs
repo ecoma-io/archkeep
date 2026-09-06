@@ -1948,7 +1948,7 @@ async function runDecisions(options, { cwd, env }) {
       ? await loadIntent(commandContext.root, { tracked: commandContext.tracked })
       : null;
 
-    result = decisionsCommand(options.paths[0], commandContext, config, { intent });
+    result = await decisionsCommand(options.paths[0], commandContext, config, { intent });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { decisionsCommand } from "./decisions.mjs";
+import { fitnessCommand } from "./fitness.mjs";
 import { ADR_DIR } from "../governance/adr-registry.mjs";
 
 /**
@@ -103,6 +104,26 @@ const SUPERSEDE_ADR = [
   "",
 ].join("\n");
 
+/** One accepted ADR binding a declared drift-free gate — the #737 parity pair. */
+const DRIFT_FREE_ADR = [
+  "---",
+  "id: 0001-layers",
+  "status: accepted",
+  "bindings:",
+  "  - fitness:intent-matches",
+  "---",
+  "",
+  "# Layers",
+  "",
+].join("\n");
+
+/** A clean intent model, as `architecture-intent.json` carries it on disk. */
+const CLEAN_INTENT_JSON = `${JSON.stringify({
+  version: "1",
+  boundaries: [{ name: "packages", match: ["tag:type-package"] }],
+  allowed: [{ from: "packages", to: "packages" }],
+})}\n`;
+
 /** A minimal command context in the `resolveCommandContext` shape. */
 function context(root, overrides = {}) {
   return {
@@ -174,7 +195,7 @@ function intent(overrides = {}) {
 }
 
 describe("decisionsCommand — the chain", () => {
-  it("walks a resolved chain: exit 0, ok status, complete coverage, text includes governs/evidence", () => {
+  it("walks a resolved chain: exit 0, ok status, complete coverage, text includes governs/evidence", async () => {
     const root = tree({ adrs: { "0001-layers.md": NO_CYCLES_ADR } });
     const ctx = context(root);
     // A declared gate named "no-cycles" gives the fitness:no-cycles binding a
@@ -189,7 +210,7 @@ describe("decisionsCommand — the chain", () => {
         },
       ],
     });
-    const result = decisionsCommand("adr:0001-layers", ctx, law, { intent: intent() });
+    const result = await decisionsCommand("adr:0001-layers", ctx, law, { intent: intent() });
 
     expect(result.status).toBe("ok");
     expect(result.coverage.complete).toBe(true);
@@ -211,14 +232,14 @@ describe("decisionsCommand — the chain", () => {
     expect(text).not.toContain("unresolved:");
   });
 
-  it("resolves an intent row that cites the decision through its decisionRef", () => {
+  it("resolves an intent row that cites the decision through its decisionRef", async () => {
     const root = tree({ adrs: { "0001-layers.md": CITED_ADR } });
     const ctx = context(root);
     const law = config();
     const it = intent({
       forbidden: [{ from: "packages", to: "packages", decisionRef: "0001-layers" }],
     });
-    const result = decisionsCommand("0001-layers", ctx, law, { intent: it });
+    const result = await decisionsCommand("0001-layers", ctx, law, { intent: it });
 
     expect(result.status).toBe("ok");
     const ids = result.result.walk.nodes.map((n) => n.id);
@@ -234,12 +255,12 @@ describe("decisionsCommand — the chain", () => {
     expect(governed).toEqual(["alpha", "beta"]);
   });
 
-  it("reports a dangling binding as no-verdict (exit 3) with the ref in notAnalyzed", () => {
+  it("reports a dangling binding as no-verdict (exit 3) with the ref in notAnalyzed", async () => {
     const root = tree({ adrs: { "0001-layers.md": NO_CYCLES_ADR } });
     const ctx = context(root);
     // No fitness gate declared, so `fitness:no-cycles` binds no row → the
     // walk cannot resolve that hop.
-    const result = decisionsCommand("0001-layers", ctx, config(), { intent: null });
+    const result = await decisionsCommand("0001-layers", ctx, config(), { intent: null });
 
     expect(result.status).toBe("no-verdict");
     expect(result.coverage.complete).toBe(false);
@@ -257,10 +278,10 @@ describe("decisionsCommand — the chain", () => {
     expect(result.report.text).toContain('"fitness:no-cycles" is bound by 0001-layers');
   });
 
-  it("derives unverifiable fitness for a binding that names no declared gate", () => {
+  it("derives unverifiable fitness for a binding that names no declared gate", async () => {
     const root = tree({ adrs: { "0001-layers.md": NO_CYCLES_ADR } });
     const ctx = context(root);
-    const result = decisionsCommand("0001-layers", ctx, config(), { intent: null });
+    const result = await decisionsCommand("0001-layers", ctx, config(), { intent: null });
     expect(result.result.fitness).toMatchObject({
       id: "0001-layers",
       status: "accepted",
@@ -269,10 +290,10 @@ describe("decisionsCommand — the chain", () => {
     });
   });
 
-  it("overrides fitness verdicts via io for determinism", () => {
+  it("overrides fitness verdicts via io for determinism", async () => {
     const root = tree({ adrs: { "0001-layers.md": NO_CYCLES_ADR } });
     const ctx = context(root);
-    const result = decisionsCommand("0001-layers", ctx, config(), {
+    const result = await decisionsCommand("0001-layers", ctx, config(), {
       intent: null,
       fitnessVerdicts: [{ name: "no-cycles", verdict: "pass" }],
     });
@@ -283,10 +304,10 @@ describe("decisionsCommand — the chain", () => {
     });
   });
 
-  it("reports an unknown id as no-verdict (exit 3) with a decision-kind unresolved ref", () => {
+  it("reports an unknown id as no-verdict (exit 3) with a decision-kind unresolved ref", async () => {
     const root = tree({ adrs: { "0001-layers.md": NO_CYCLES_ADR } });
     const ctx = context(root);
-    const result = decisionsCommand("9999-missing", ctx, config(), { intent: null });
+    const result = await decisionsCommand("9999-missing", ctx, config(), { intent: null });
 
     expect(result.status).toBe("no-verdict");
     expect(JSON.parse(result.report.json).exitCode).toBe(3);
@@ -297,7 +318,7 @@ describe("decisionsCommand — the chain", () => {
     expect(result.report.text).toContain("unresolved:");
   });
 
-  it("accepts the adr: spelling of an existing id", () => {
+  it("accepts the adr: spelling of an existing id", async () => {
     const root = tree({ adrs: { "0001-layers.md": NO_CYCLES_ADR } });
     const ctx = context(root);
     const law = config({
@@ -305,13 +326,13 @@ describe("decisionsCommand — the chain", () => {
         { name: "no-cycles", match: ["*"], condition: { type: "cycle-free" }, reason: "r" },
       ],
     });
-    const result = decisionsCommand("adr:0001-layers", ctx, law, { intent: null });
+    const result = await decisionsCommand("adr:0001-layers", ctx, law, { intent: null });
     expect(result.status).toBe("ok");
     expect(result.result.decisionId).toBe("adr:0001-layers");
     expect(result.result.record.id).toBe("0001-layers");
   });
 
-  it("derives supersededBy and sorts knownFitness", () => {
+  it("derives supersededBy and sorts knownFitness", async () => {
     const root = tree({
       adrs: {
         "0001-layers.md": SUPERSEDED_ADR,
@@ -325,7 +346,7 @@ describe("decisionsCommand — the chain", () => {
         { name: "no-drift", match: ["*"], condition: { type: "drift-free" }, reason: "r" },
       ],
     });
-    const result = decisionsCommand("0001-layers", ctx, law, { intent: null });
+    const result = await decisionsCommand("0001-layers", ctx, law, { intent: null });
 
     // 0001 is superseded by 0002.
     expect(result.result.record.supersededBy).toEqual(["0002-layers-v2"]);
@@ -334,7 +355,7 @@ describe("decisionsCommand — the chain", () => {
     expect(result.result.knownFitness).toEqual(["fitness:no-cycles"]);
   });
 
-  it("never carries a top-level decision field in the envelope", () => {
+  it("never carries a top-level decision field in the envelope", async () => {
     const root = tree({ adrs: { "0001-layers.md": NO_CYCLES_ADR } });
     const ctx = context(root);
     const law = config({
@@ -342,7 +363,7 @@ describe("decisionsCommand — the chain", () => {
         { name: "no-cycles", match: ["*"], condition: { type: "cycle-free" }, reason: "r" },
       ],
     });
-    const result = decisionsCommand("0001-layers", ctx, law, { intent: null });
+    const result = await decisionsCommand("0001-layers", ctx, law, { intent: null });
     const envelope = JSON.parse(result.report.json);
     expect("decision" in envelope).toBe(false);
     // The shape the wave-2 contract owns.
@@ -350,9 +371,42 @@ describe("decisionsCommand — the chain", () => {
     expect(envelope.result.decisionId).toBe("0001-layers");
   });
 
-  it("throws on an unreadable registry — never a clean result", () => {
+  it("throws on an unreadable registry — never a clean result", async () => {
     const root = tree({ adrDirIsAFile: true });
     const ctx = context(root);
-    expect(() => decisionsCommand("0001-layers", ctx, config(), { intent: null })).toThrow();
+    await expect(
+      decisionsCommand("0001-layers", ctx, config(), { intent: null }),
+    ).rejects.toThrow();
+  });
+
+  it("derives the fitness leg from the same verdict-shaped intent the fitness command feeds", async () => {
+    // Clean drift: a tracked intent the observed graph satisfies, a declared
+    // drift-free gate, and an accepted decision binding it. `fitness` derives
+    // the gate's verdict from `driftForCheck`'s shaped intent (`verdict: "ok"`
+    // → `pass`); this command used to feed the registry the RAW normalized
+    // model, whose lack of a `.verdict` field read as a fail — the two faces
+    // disagreed about the same workspace, the chain reporting `violated` over
+    // a clean tree: a false verdict on the silent path, announced confidently.
+    const root = tree({ adrs: { "0001-layers.md": DRIFT_FREE_ADR } });
+    writeFileSync(join(root, "architecture-intent.json"), CLEAN_INTENT_JSON);
+    const ctx = context(root, {
+      tracked: [...(trackedByRoot.get(root) ?? []), "architecture-intent.json"],
+    });
+    const law = config({
+      fitness: [
+        { name: "intent-matches", match: ["*"], condition: { type: "drift-free" }, reason: "r" },
+      ],
+    });
+
+    // The `fitness` face: the row both faces must derive identically.
+    const fitness = await fitnessCommand(ctx, { config: law });
+    expect(fitness.status).toBe("ok");
+    expect(fitness.fitness.functions).toMatchObject([{ name: "intent-matches", verdict: "pass" }]);
+
+    // The `decisions` face: the same row, projected through the bound gate —
+    // `pass` verifies the decision (`enforced`), never the false `violated`.
+    const result = await decisionsCommand("0001-layers", ctx, law, { intent: intent() });
+    expect(result.status).toBe("ok");
+    expect(result.result.fitness).toMatchObject({ level: "enforced", verified: true });
   });
 });
