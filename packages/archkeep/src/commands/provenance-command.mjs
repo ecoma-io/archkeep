@@ -73,7 +73,7 @@
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatProvenanceReport } from "../report/provenance-text.mjs";
 import { loadIntent } from "../architecture-intent/model.mjs";
-import { loadBoundaryConfig } from "../config.mjs";
+import { resolvePolicy } from "./policy.mjs";
 import { resolveFileAttribution, resolveProvenance } from "./provenance.mjs";
 import { readAdrContext } from "./adr.mjs";
 import {
@@ -206,7 +206,6 @@ export function unresolvedDecisionRefNote(decisionRef) {
  *   options: {boundaryConfig: string|object, inline?: boolean}}} commandContext
  *   From `resolveCommandContext`.
  * @param {{loadIntentOverride?: (root: string, io: object) => Promise<object>,
- *   loadConfigOverride?: (root: string, boundaryConfig: string) => Promise<object>,
  *   loadAdrRegistryOverride?: typeof import("../governance/adr-registry.mjs").loadAdrRegistry,
  *   fileAttribution?: (root: string, file: string) =>
  *     {createdBy: import("../governance/provenance-record.mjs").OriginRecord,
@@ -234,7 +233,7 @@ export function unresolvedDecisionRefNote(decisionRef) {
  *   exit 3, the loud refusal every command that reads them makes.
  */
 export async function provenanceCommand(commandContext, io = {}) {
-  const { root, tracked, options } = commandContext;
+  const { root, tracked } = commandContext;
 
   const repo = resolveProvenance(root);
   const rowList = [];
@@ -254,27 +253,19 @@ export async function provenanceCommand(commandContext, io = {}) {
     }
   }
 
-  // The boundary law is either a filename (the string form `loadBoundaryConfig`
-  // reads) or an inline policy object living directly in `archkeep.json`
-  // (`../providers/native/model.mjs`, `normalizeNativeModel`'s
-  // `inlineBoundaryConfig`). Both are walked — a policy whose rows the report
-  // never inspected would claim "every row attests" over an unread table,
-  // which is the silent direction this command exists to end.
-  const boundaryConfig = options.boundaryConfig;
-  const walked = [];
-  let loadedConfig = null;
-  if (typeof boundaryConfig === "string") {
-    const config = await (io.loadConfigOverride ?? loadBoundaryConfig)(root, boundaryConfig);
-    loadedConfig = config;
-    walked.push(...configRows(config));
-  } else if (
-    boundaryConfig !== null &&
-    typeof boundaryConfig === "object" &&
-    !Array.isArray(boundaryConfig)
-  ) {
-    loadedConfig = boundaryConfig;
-    walked.push(...configRows(boundaryConfig));
-  }
+  // The boundary law resolves through the one policy ladder every command
+  // that reads a law shares (`./policy.mjs`'s `resolvePolicy`) — the
+  // profile, file, and inline arms included — so the rows attested here are
+  // exactly the rows `check` judges, never a law resolved by a private
+  // second copy. A policy whose rows the report never inspected would claim
+  // "every row attests" over an unread table, which is the silent direction
+  // this command exists to end. `config: null` — there is no `--config`
+  // flag here (`PROVENANCE_FLAG_HELP`): the workspace's own law,
+  // profile-selected when a registry is named, is the only one a provenance
+  // report may cite. A `null` config (the workspace declares no law) walks
+  // zero rows.
+  const { config: loadedConfig } = await resolvePolicy({ config: null }, commandContext, root);
+  const walked = configRows(loadedConfig);
   for (const { kind, row } of walked) {
     const attested = hasOrigin(row);
     rowList.push({ kind, attested, origin: attested ? row.origin : null });

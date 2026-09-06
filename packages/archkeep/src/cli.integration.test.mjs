@@ -5673,6 +5673,20 @@ var _ = adapter.Name
     expect(text).toContain("origin: ticket-91");
   });
 
+  it("provenance attests the profile's law — the fold's seam, not a filename it never named (WI-2)", async () => {
+    const streams = profEnv();
+    expect(await runCli(["provenance"], streams)).toBe(EXIT.ok);
+    const text = streams.lines.out.join("\n");
+    expect(text).not.toContain(WRONG_REASON);
+    // The profile's single depConstraints row was walked: exactly one
+    // governance row, reported unattested (the shared fixture's row carries
+    // no origin). A no-law walk would count zero rows; the private filename
+    // walk this fold replaced would have died with WRONG_REASON below.
+    expect(text).toContain("rows      1 governance row, 0 with an origin, 1 without");
+    expect(text).toContain("depConstraints[0]");
+    expect(streams.lines.err.join("\n")).not.toContain(WRONG_REASON);
+  });
+
   it("fitness reaches its OWN no-fitness-declared refusal, not the config-loading one — proof the block was actually read", async () => {
     // A profile's `block` cannot carry a `fitness` key at all
     // (`docs/concepts/profiles.md`, "A profile's block carries exactly three
