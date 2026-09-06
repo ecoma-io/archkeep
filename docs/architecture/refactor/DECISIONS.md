@@ -407,6 +407,98 @@ exists). A record never restates the constitution — a field whose answer is
     in [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md); the contract sentence is in
     the seam section of the same PR.
   - _Supersedes_: nothing.
+- **PD-15 (2026-09-06) — The WI-2 fold ruling: the three reachable deltas
+  classified.**
+  - _Question_: how are WI-2's three reachable behavior deltas classified —
+    profiled workspaces resolving through the registry, malformed laws
+    exiting 3 via the ladder's throw, and the `coverage` key in a native
+    tree's boundary config refusing — and what is the canonical resolution
+    of profile registries the policy fingerprint must name (the residual
+    question #702 closed with)?
+  - _Evidence_: CHK-2-WI2's differential evidence (adversarial scout
+    APPROVE; byte-identical outputs on every shape a fixture exercised;
+    the P1-26-class test with teeth proven by stash-reverting the fold;
+    the coverage-channel witness exiting 3 naming
+    `archkeep.json`'s `coverage.exempt`), read against the merged ladder:
+    `commands/policy.mjs`'s `resolvePolicy` (the profiles arm resolving the
+    selected law by name via `profilePolicy`; the coverage-key refusal
+    held at the first point that knows both provider and loaded policy —
+    "for every command that reads a policy, so the editor-adjacent
+    commands cannot accept a law `check` refuses");
+    `computePolicyFingerprint`'s field list, which already hashes the
+    selected profile's NAME — two profiles whose resolved blocks converge
+    are "still two different named laws" — closing #702's converging-
+    registries false-match class (#702 closed completed 2026-09-04); and
+    `docs/reference/exit-codes.md`'s documented split — exit 3 covers "the
+    run could not start ... or the law itself could not be established"
+    (malformed config among the examples), and "a run can exit 3 having
+    never built an envelope".
+  - _Decision_ (maintainer-delegated ruling, this session — the maintainer
+    directed the refactor coordinator to run the adversarial analysis and
+    rule on their behalf; this PR is the veto window):
+    1. **Profile registries.** The ladder's profiles arm is the canonical
+       resolution: a workspace naming a `profiles` registry resolves its
+       law by NAME, never by reading the name as a filename (the P1-26
+       defect class the fold removed). The policy fingerprint identifies
+       the named resolved law — the selected profile's name plus the
+       hashed resolved blocks. Hashing the whole registry is rejected: an
+       edit that leaves the judged law unchanged (an unselected profile's
+       row, registry metadata) would fire `policyChanged` over a law that
+       did not move. An edit that changes the selected name or the
+       resolved blocks moves the fingerprint, and must.
+    2. **Malformed law.** A law that is named but cannot be loaded is its
+       own refusal class — the law could not be established, an
+       input-contract breach — riding the shared exit 3, envelope-less at
+       the load site because the failure precedes any run. It is not the
+       analysis-coverage `no-verdict` (that status documents a run that
+       managed to build an envelope and could not fully read the tree),
+       and it takes no new exit code: the documented exit-3 row already
+       names malformed config among its causes.
+    3. **The `coverage` key in a native boundary config.** A
+       config-conflict refusal, not a coverage verdict: the key is the
+       acceptance channel, and on a native tree the identical decision
+       already lives on `archkeep.json`'s own `coverage.exempt` — two
+       channels for one decision is the drift the refusal prevents. It is
+       the file-dialect twin of the inline spelling's refusal at model
+       load, held on the ladder so every command that reads a law refuses
+       what `check` refuses. It sits outside the analysis-coverage
+       refusal contract (#608/#612 unified that class — incomplete
+       analysis coverage — into one envelope shape; this refusal, like
+       the plugin-gap refusal, is a pre-analysis input-law conflict and
+       stays a throw).
+       All three deltas are semantic changes on the 0.x line — what an
+       unchanged profiled, malformed, or native-configured workspace is told
+       differs — to be named in the changelog of the 0.x minor that next
+       cuts following PR #748's merge, per the compatibility contract; no
+       exported API moved.
+  - _Scope_: classification and its recording. No code, no exit-code
+    table change, no fingerprint formula change.
+  - _Alternatives rejected_: hashing the whole `profiles` registry (fires
+    `policyChanged` when the judged law did not move); a dedicated exit
+    code for malformed law (a second exit/status table — INV-2); an
+    envelope for pre-run refusals (fabricates a result object for a run
+    that never started); reading the `coverage`-key refusal as an
+    analysis-coverage `no-verdict` (the name collision is the trap — the
+    key is the acceptance channel, not analysis completeness); accepting
+    the key in editor-adjacent commands while `check` refuses (faces
+    would disagree about one law).
+  - _Consequences_: Phase 2's exit condition — the fold-decision record —
+    is satisfied; CHK-2-WI2's unresolved question and the WI-5
+    carry-forward note are decided (those checkpoints stand as history).
+    The exit-code status row for an unresolvable profile is expressly out
+    of scope here.
+  - _Compatibility impact_: none from this record — docs only. The
+    classified deltas ride the 0.x minor line per the compatibility
+    contract; this record moves no surface.
+  - _Owner_: this record; the mechanism sentences live where they already
+    are (`commands/policy.mjs`'s ladder comments,
+    `computePolicyFingerprint`'s field list, `docs/reference/exit-codes.md`'s
+    exit-3 row).
+  - _Verification/acceptance evidence_: CHK-2-WI2's differential evidence
+    stands (byte-identical outputs, the P1-26 teeth, the coverage-channel
+    witness); #702 closed completed; the docs gates run green on the
+    recording PR.
+  - _Supersedes_: nothing.
 - **PD-17 (2026-09-06) — Refactor-unit issue routing.**
   - _Question_: does the cross-repo gate (issue → branch → draft PR per
     unit) require a dedicated issue for every refactor work item?
