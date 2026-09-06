@@ -6,9 +6,14 @@ import { INTENT_MESSAGE_IDS, INTENT_MESSAGES } from "../architecture-intent/judg
 import { buildEvidenceBundle, serializeEvidenceBundle } from "../custom-rules/evidence.mjs";
 import { evaluateCustomRule, loadCustomRule } from "../custom-rules/host.mjs";
 import { buildRuleModule } from "../custom-rules/wasm-fixture.mjs";
-import { GO_WORK_MESSAGE_IDS, GO_WORK_MESSAGES } from "../go-work.mjs";
-import { MESSAGE_IDS, renderMessage } from "../rules/messages.mjs";
-import { TSCONFIG_PATHS_MESSAGE_IDS, TSCONFIG_PATHS_MESSAGES } from "../tsconfig-paths.mjs";
+import {
+  GO_WORK_MESSAGE_IDS,
+  GO_WORK_MESSAGES,
+  MESSAGE_IDS,
+  renderMessage,
+  TSCONFIG_PATHS_MESSAGE_IDS,
+  TSCONFIG_PATHS_MESSAGES,
+} from "../rules/messages.mjs";
 
 import {
   FITNESS_FAILED_RULE_ID,

@@ -20,10 +20,8 @@ import { readArtifactBytes } from "./commands/custom-rules.mjs";
 import { computePolicyFingerprint } from "./commands/graph.mjs";
 import { loadBoundaryConfigFile } from "./config.mjs";
 import { buildRuleModule } from "./custom-rules/wasm-fixture.mjs";
-import { GO_WORK_MESSAGE_IDS } from "./go-work.mjs";
 import { FITNESS_FAILED_RULE_ID } from "./report/sarif.mjs";
-import { MESSAGE_IDS } from "./rules/messages.mjs";
-import { TSCONFIG_PATHS_MESSAGE_IDS } from "./tsconfig-paths.mjs";
+import { GO_WORK_MESSAGE_IDS, MESSAGE_IDS, TSCONFIG_PATHS_MESSAGE_IDS } from "./rules/messages.mjs";
 
 /**
  * Custom rules through the real `check` command — the real policy loader, the

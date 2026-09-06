@@ -65,18 +65,21 @@ surface-specific rendering stays rejected at review
 ([CON-3](CONSTITUTION.md#con-3--generalize-computation-not-domain-vocabulary),
 [CON-4](CONSTITUTION.md#con-4--canonical-semantic-models)).
 
-## Message-template registries — one shape, three homes
+## Message-template registries — one shape, one home
 
-Three registries with identical structure exist:
+One registry home with per-domain tables; the former out-of-home copies
+were consolidated verbatim (PR #747):
 
 - `MESSAGE_IDS`/`MESSAGES` — `src/rules/messages.mjs` (canonical; pinned
   verbatim against installed `@nx/eslint-plugin` where upstream parity holds)
-- `GO_WORK_MESSAGES` — `src/go-work.mjs:80-95`
-- `TSCONFIG_PATHS_MESSAGES` — `src/tsconfig-paths.mjs:87-94`
+- `GO_WORK_MESSAGES`/`GO_WORK_MESSAGE_IDS` — `src/rules/messages.mjs`
+  (moved verbatim from `src/go-work.mjs`)
+- `TSCONFIG_PATHS_MESSAGES`/`TSCONFIG_PATHS_MESSAGE_IDS` —
+  `src/rules/messages.mjs` (moved verbatim from `src/tsconfig-paths.mjs`)
 
-Same semantics (message id → template), three spellings. Consolidation is a
-Phase 2 candidate; it must not change any rendered message byte (messages are
-pinned by tests — `src/rules/messages.test.mjs`, `src/rules/upstream.integration.test.mjs`).
+Same semantics (message id → template), one spelling. The consolidation
+changed no rendered message byte (messages are pinned by tests —
+`src/rules/messages.test.mjs`, `src/rules/upstream.integration.test.mjs`).
 
 ## Vocabulary registers (R1–R7)
 

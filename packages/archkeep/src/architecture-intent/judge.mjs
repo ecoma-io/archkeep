@@ -34,7 +34,7 @@ import { buildReachability, getPath, pathExists } from "../../src/rules/reachabi
 /**
  * What a finding means — one entry per `messageId`, the arrangement
  * `../../src/report/sarif.mjs` derives its rule descriptors from, the same as
- * `../../src/go-work.mjs` and `../../src/tsconfig-paths.mjs`.
+ * the per-domain tables in `../rules/messages.mjs`.
  */
 export const INTENT_MESSAGES = Object.freeze({
   intentForbiddenEdge:

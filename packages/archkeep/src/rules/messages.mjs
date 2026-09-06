@@ -1,20 +1,30 @@
 /**
- * The fifteen violation messages, and the renderer that fills them.
+ * The violation message tables — one per finding domain — and the renderer
+ * that fills the boundary table's templates.
  *
- * Every string below is a verbatim copy of `meta.messages` in
- * `@nx/eslint-plugin`'s `enforce-module-boundaries` rule, and every key is that
- * rule's `messageId` spelled exactly. The ids are the contract: a differential
- * test can put this engine's verdict beside ESLint's for the same import and
- * compare ids, which is the only way to know the two agree rather than merely
- * both being red. `src/rules/upstream.integration.test.mjs` reads the installed
- * plugin's source and fails when a copy here drifts from it.
+ * `MESSAGES` below is a verbatim copy of `meta.messages` in
+ * `@nx/eslint-plugin`'s `enforce-module-boundaries` rule, and every key is
+ * that rule's `messageId` spelled exactly. The ids are the contract: a
+ * differential test can put this engine's verdict beside ESLint's for the
+ * same import and compare ids, which is the only way to know the two agree
+ * rather than merely both being red. `upstream.integration.test.mjs` reads
+ * the installed plugin's source and fails when a copy here drifts from it.
  *
- * Copied rather than imported, and rather than derived: this
+ * `GO_WORK_MESSAGES` and `TSCONFIG_PATHS_MESSAGES` are this package's own
+ * domains — one entry per `messageId` a finding of that family can carry,
+ * stating what it means. Their checks live beside the code that produces the
+ * findings (`../../go-work.mjs`, `../../tsconfig-paths.mjs`); the message
+ * text lives here, because this file is the one home every violation message
+ * answers to and `../report/sarif.mjs` derives its rule descriptors from all
+ * three tables — a kind added to any of them cannot be nameless in a
+ * code-scanning upload.
+ *
+ * `MESSAGES` is copied rather than imported, and rather than derived: this
  * project may import Node built-ins and `typescript` only (`../../AGENTS.md`),
- * and importing the plugin would pull `@nx/devkit` — a project graph read — into
- * a layer whose whole point is being pure. The value is intrinsic to a fixed
- * external contract, it lives in exactly this one place, and the integration
- * test is what keeps the copy honest.
+ * and importing the plugin would pull `@nx/devkit` — a project graph read —
+ * into a layer whose whole point is being pure. The value is intrinsic to a
+ * fixed external contract, it lives in exactly this one place, and the
+ * integration test is what keeps the copy honest.
  */
 
 /**
@@ -43,6 +53,46 @@ export const MESSAGES = Object.freeze({
 
 /** Every `messageId` this engine can produce — the checklist, as data. */
 export const MESSAGE_IDS = Object.freeze(Object.keys(MESSAGES));
+
+/**
+ * What each go.work drift finding means — one entry per `messageId` a finding
+ * can carry. `../report/sarif.mjs` derives its rule descriptors from this
+ * table, so a kind added here cannot be nameless in a code-scanning upload.
+ * The findings themselves — including their rendered sentences — are built by
+ * `compareGoWork` in `../../go-work.mjs`.
+ */
+export const GO_WORK_MESSAGES = Object.freeze({
+  goWorkMissingUse:
+    "A project's go.mod is not in go.work's use list: a developer's go build and gopls skip a " +
+    "module the Nx graph covers, so dev machines and CI select different module sets.",
+  goWorkStaleUse:
+    "A go.work use entry names a directory with no tracked go.mod: go commands fail on developer " +
+    "machines while CI, which never reads go.work, stays green.",
+  goWorkUnmodeledUse:
+    "A go.work use entry names a module the Nx graph does not model: it builds on developer " +
+    "machines while nx affected and the boundary check never see it.",
+  goWorkOutsideUse:
+    "A go.work use entry points outside the workspace: developer builds include a module no run " +
+    "over this workspace can cover.",
+});
+
+export const GO_WORK_MESSAGE_IDS = Object.freeze(Object.keys(GO_WORK_MESSAGES));
+
+/**
+ * What a tsconfig paths hygiene finding means — one entry per `messageId`, the
+ * arrangement `../report/sarif.mjs` derives its rule descriptors from, so the
+ * id cannot be nameless in a code-scanning upload. The finding — including its
+ * rendered sentence — is built by `judgeTsconfigPaths` in
+ * `../../tsconfig-paths.mjs`.
+ */
+export const TSCONFIG_PATHS_MESSAGES = Object.freeze({
+  tsconfigDeadPathAlias:
+    "A tsconfig paths alias maps only to targets whose directories do not exist: no import of it " +
+    "can resolve through the alias table, so the build breaks — or silently resolves to an " +
+    "installed package of the same name instead of the workspace source the alias promised.",
+});
+
+export const TSCONFIG_PATHS_MESSAGE_IDS = Object.freeze(Object.keys(TSCONFIG_PATHS_MESSAGES));
 
 /**
  * Renders a message the way ESLint's own reporter does: `{{key}}` (whitespace

@@ -71,29 +71,6 @@ import { isAbsolute, posix, relative, sep } from "node:path";
 
 import { projectOwning } from "./analysis/source-util.mjs";
 
-/**
- * What each drift finding means — one entry per `messageId` a finding can
- * carry. `../report/sarif.mjs` derives its rule descriptors from this table,
- * the same arrangement it has with `../rules/messages.mjs`, so a kind added
- * here cannot be nameless in a code-scanning upload.
- */
-export const GO_WORK_MESSAGES = Object.freeze({
-  goWorkMissingUse:
-    "A project's go.mod is not in go.work's use list: a developer's go build and gopls skip a " +
-    "module the Nx graph covers, so dev machines and CI select different module sets.",
-  goWorkStaleUse:
-    "A go.work use entry names a directory with no tracked go.mod: go commands fail on developer " +
-    "machines while CI, which never reads go.work, stays green.",
-  goWorkUnmodeledUse:
-    "A go.work use entry names a module the Nx graph does not model: it builds on developer " +
-    "machines while nx affected and the boundary check never see it.",
-  goWorkOutsideUse:
-    "A go.work use entry points outside the workspace: developer builds include a module no run " +
-    "over this workspace can cover.",
-});
-
-export const GO_WORK_MESSAGE_IDS = Object.freeze(Object.keys(GO_WORK_MESSAGES));
-
 /** A parse failure that names its line, so the failure record is actionable. */
 const parseError = (line, reason) => new Error(`go.work:${line}: ${reason}`);
 

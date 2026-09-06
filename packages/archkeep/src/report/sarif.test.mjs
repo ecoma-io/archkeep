@@ -1,22 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
-// Both collaborators are mocked so this pins the TRANSFORM and not the content
-// of the message table: the catalogue must be derived from whatever ids exist,
-// which a fake two-id table proves and the real fifteen-id one would not
-// (a hard-coded catalogue passes against the real table until upstream adds a
-// sixteenth). `sarif.integration.test.mjs` drives the real pair.
+// All the message tables are mocked so this pins the TRANSFORM and not the
+// content of the tables: the catalogue must be derived from whatever ids
+// exist, which fake tables prove and the real ones would not (a hard-coded
+// catalogue passes against the real tables until upstream adds a sixteenth).
+// `sarif.integration.test.mjs` drives the real tables.
 vi.mock("../rules/messages.mjs", () => ({
   MESSAGE_IDS: ["firstRule", "secondRule"],
   MESSAGES: {
     firstRule: "First rule says {{what}}",
     secondRule: "Second rule says {{what}}\n\nAnd then some detail",
   },
-}));
-vi.mock("../go-work.mjs", () => ({
   GO_WORK_MESSAGE_IDS: ["driftRule"],
   GO_WORK_MESSAGES: { driftRule: "Drift rule's summary line\n\nAnd its detail" },
-}));
-vi.mock("../tsconfig-paths.mjs", () => ({
   TSCONFIG_PATHS_MESSAGE_IDS: ["deadAliasRule"],
   TSCONFIG_PATHS_MESSAGES: { deadAliasRule: "Dead alias rule's summary line\n\nAnd its detail" },
 }));

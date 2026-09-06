@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { compareGoWork, GO_WORK_MESSAGE_IDS, parseGoWorkUse } from "./go-work.mjs";
+import { GO_WORK_MESSAGE_IDS } from "./rules/messages.mjs";
+import { compareGoWork, parseGoWorkUse } from "./go-work.mjs";
 
 /**
  * The position a finding cites is computed from the fixture rather than
