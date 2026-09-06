@@ -96,17 +96,22 @@ construction. Registers, not defects:
 - **R3** — reconciliation verdicts `matched/undeclared/unfulfilled/unproven`
   (`change.mjs:27-45`; membership guard refuses strangers).
 - **R4** — evolution dispositions: stored vocabulary in
-  `evolution-event.mjs:48`; the mapping functions in `delta.mjs:399-404`,
-  `change.mjs:403-431` and `evolution.mjs:802-830` do not validate their
-  output against it. Measured by the 2-A audit: the store validates
-  identity at **write** time and vocabulary at **read** time
-  (`validateEventRecord`, reachable only from `readEvents`) — so the write
-  path accepts records the read path refuses
-  ([#738](https://github.com/ecoma-io/archkeep/issues/738)), and
-  `deltaDisposition` answers `accepted` for any status outside its
-  documented three ([#739](https://github.com/ecoma-io/archkeep/issues/739)).
-  Phase 2 correctness hardening owns both fixes; this register states the
-  gap, not the fix.
+  `evolution-event.mjs:48` (`accepted`/`rejected`/`no-verdict`). The 2-A
+  audit's two gaps are closed: the store runs one vocabulary copy on both
+  sides — `validateEventForWrite` (`evolution-store.mjs:113-143`, through
+  the shared `eventVocabularyViolation`, `evolution-store.mjs:157-175`)
+  refuses at **write** time exactly what `validateEventRecord` refuses at
+  **read** time, so the write path no longer accepts records the read path
+  refuses ([#738](https://github.com/ecoma-io/archkeep/issues/738), closed
+  by PR #744); and every mapping into the vocabulary latches its input:
+  `deltaDisposition` throws on any status outside its documented three
+  (`delta.mjs:406-417`,
+  [#739](https://github.com/ecoma-io/archkeep/issues/739), closed by
+  PR #741), `reconcileDisposition` refuses a stranger axis or constraint
+  verdict (`change.mjs:403-431`), and `buildEvolutionSummary` folds
+  dispositions by rank over `EVENT_DISPOSITIONS`, throwing on a value
+  outside it (`evolution.mjs:855-871`). Single-owned; the residual risk is
+  conflation at consumer edges, not construction.
 - **R5** — delta verdict-deltas `pass|fail` words from counts
   (`delta-classify.mjs:635-641`); a projection, not a verdict record.
 - **R6** — history transition signals are per-record facts; classification
@@ -119,6 +124,23 @@ construction. Registers, not defects:
   arithmetic never persisted; escaped `source>target:type` never built from a
   pre-escaped string), cross-referenced from both sites against ADR 0008 and
   INV-6.
+
+Two follow-ups recorded verbatim from
+[PR #742](https://github.com/ecoma-io/archkeep/pull/742)'s out-of-scope
+list, landing status appended to the second — program tracking under the
+umbrella ([#725](https://github.com/ecoma-io/archkeep/issues/725)), not
+registers:
+
+- The VS Code client-side workspace walk carries no git ceiling
+  (repository-root bound) — an under-tested client/server boundary
+  surfaced by the adversarial review of this PR. Testing the boundary is
+  tracked under the refactor program umbrella #725; no behavior change in
+  this PR depends on it.
+- The VS Code integration prose undercounts the routed extension set
+  (documented "four"; `ROUTED_EXTENSIONS` carries eight, including `.cs`) —
+  documentation correction owned by the 2-E docs unit of #725, landing in
+  its own PR. Landed by 2-E (PR #753): the prose says eight and the
+  routing table carries the `.cs` row.
 
 ## Naming hazards
 
