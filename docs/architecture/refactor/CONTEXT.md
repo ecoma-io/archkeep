@@ -687,6 +687,60 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
 - **Forbidden next moves / next**: none carried. Next: 2-D per
   [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
 
+### CHK-2-WI2 — Phase 2 work item, WI-2: provenance joins the shared policy ladder (2026-09-06)
+
+- **ID**: CHK-2-WI2. **Phase**: 2 (work item WI-2). **Status**: complete —
+  pending merge of PR #748.
+- **Goal**: fold `provenance`'s private boundary-law resolution (the
+  `loadConfigOverride ?? loadBoundaryConfig` read plus its inline
+  `configRows` walk) into `commands/policy.mjs`'s shared `resolvePolicy`
+  ladder; the attestation walk and report rendering untouched; zero
+  `loadConfigOverride` references remain under `packages/`.
+- **Invariants touched**: the ladder stays the one boundary-law path —
+  every command that reads a law resolves it through `resolvePolicy`
+  (`commands/policy.mjs`'s preamble;
+  [BOUNDARIES.md](BOUNDARIES.md) policy-ladder section).
+- **Canonical ownership changes**: boundary-law resolution for
+  `provenance` moves from a command-private walk to the ladder; no new
+  owner — one fewer off-ladder consumer.
+- **Dependency-boundary changes**: none — `provenance-command.mjs`
+  already imports from `commands/` (`./policy.mjs`); no edge changed
+  shape.
+- **Contracts affected and compatibility classification**: semantic —
+  three reachable deltas on shapes no current fixture exercises: profiled
+  workspaces resolve through the registry (the private walk misread the
+  profile name as a filename — the P1-26 defect class); malformed laws
+  exit 3 via `policyFrom`; a native tree whose `boundaryConfig` file
+  carries a `coverage` key refuses with the ladder's second-channel
+  error (previously rendered a report, exit 0). Classification PENDING a
+  PD decision record — maintainer-gated follow-up, not decided here; the
+  compatibility contract names a change to what is reported on an
+  unchanged workspace a breaking-class semantic change on the 0.x line.
+- **Differential evidence**: adversarial scout verdict APPROVE — old vs
+  new `provenanceCommand` byte-identical over the ladder's string-law,
+  well-formed inline-object and absent-law shapes; scoped suites 285/285;
+  the P1-26-class case has teeth proven by stash-reverting the fold (its
+  test fails); the coverage-channel refusal has a new witness (exit 3
+  naming `archkeep.json`'s `coverage.exempt`); the repo fixture's
+  `provenance` renders byte-identical pre/post fold; the full pre-push
+  gate battery green.
+- **Debt budget**: before — one command resolving the law off-ladder,
+  the P1-26 class reachable there; closed — zero off-ladder consumers;
+  introduced — two witness tests; net — negative.
+- **Unresolved questions**: (1) the PD decision record for the named
+  deltas — maintainer-gated, written separately, never silently;
+  (2) two doc nits parked to WI-5: `commands/policy.mjs`'s preamble still
+  says "eleven sites"/"eleven callers" (provenance makes twelve) and
+  `cli.mjs`'s `runProvenance` JSDoc omits the ladder refusal among its
+  exit-3 sources. Both outside this PR's closed file set.
+- **Rejected approaches**: `--config` on `provenance` (a second
+  resolution surface no consumer asked for); keeping the private walk
+  (the defect class stays reachable); folding report rendering into the
+  ladder (report bytes are pinned — not this work item's contract).
+- **Forbidden next moves / next**: the two WI-5 doc fixes must not ride
+  this PR (closed file set). Next: WI-5 (comment-only), then 2-D per
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
+
 ## Conventions maintained here
 
 - Phase completions append a CHK-n block above, never edit an old one.
