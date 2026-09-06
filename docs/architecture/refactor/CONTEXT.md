@@ -601,6 +601,47 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
 - **Forbidden next moves / next**: none carried. Next: 2-E folds
   Finding C.
 
+### CHK-2-WI6 — Phase 2, WI-6: delete the dormant decision-lifecycle write surface (#746) (2026-09-06)
+
+- **ID**: CHK-2-WI6. **Phase**: 2 work item WI-6. **Status**: complete —
+  pending merge of PR #746. The maintainer's delete ruling is recorded as
+  [PD-16](DECISIONS.md#program-decisions) (below, in DECISIONS).
+- **Goal**: execute WI-6 — the dormant `recordDecisionLifecycle` surface
+  (the writer, `DECISION_LIFECYCLE_KINDS`, the `DecisionLifecycleRecord`
+  typedef, its two test blocks, and the stale
+  `docs/concepts/provenance.md` section claiming it live) deleted;
+  `recordOrigin` stays the single `on` producer, consumed by row-schema,
+  delta, and evolution.
+- **Invariants touched**: CON-6 semantic conservation — deleting an
+  unreachable write surface moves no verdict; INV-8's write-door census
+  shrinks by one dormant door. The canonical row is repaired in this PR:
+  SEMANTIC-MODEL's "Origin / decision-lifecycle records" names one owner
+  again (independent review flagged the stale co-owner cell; it lands
+  here, coordinator-side, per P-A).
+- **Canonical ownership changes**: one owner **removed** —
+  `recordDecisionLifecycle` leaves the canonical table; `recordOrigin`
+  is sole owner of the row. That removal is the work item, not drift.
+- **Dependency-boundary changes**: none.
+- **Contracts affected and compatibility classification**: none reachable
+  — SAFE/internal-only verified TRUE: the exports map, entry re-exports,
+  and CLI roster never named the surface; the CLI roster gate ran green.
+- **Differential evidence**: an independent adversarial review APPROVED —
+  census regenerated (zero live consumers at main, whole-tree), the
+  surviving half untouched, the diff re-measured `+0/−349` with no drift,
+  the 18-file/478-test consumer sweep reproduced, and
+  `tsc -p tsconfig.json` clean; CI green (all twelve checks).
+- **Debt budget**: before — a dormant write surface implying an engine
+  capability that never existed, with docs claiming it; closed — deleted
+  with its tests and stale prose; introduced — none; net — negative.
+- **Unresolved questions**: none new. Dormant-marked historical records
+  (SEMANTIC-MODEL's lifecycle note at :174, CHK-2-A, the DECISIONS
+  history) stay as history.
+- **Rejected approaches**: folding the surface into `decisions` (invents
+  a write the engine never had); keeping it dormant behind a pin (a pin
+  defending bytes nothing calls is maintained weight).
+- **Forbidden next moves / next**: none carried. Next: 2-C (#747) —
+  with this PR merged, every Phase-2 fix unit will have landed.
+
 ## Conventions maintained here
 
 - Phase completions append a CHK-n block above, never edit an old one.
