@@ -1176,7 +1176,9 @@ async function runDrift(options, { cwd, env }) {
  * Provenance reads no graph and judges nothing — it describes where the run's
  * facts came from and which governance rows carry an origin. It is
  * fail-closed the way every descriptive command is: a malformed intent or
- * boundary config throws out of `provenanceCommand` → exit 3, so "rows
+ * boundary config throws out of `provenanceCommand` → exit 3, and so does
+ * a law the shared ladder refuses (`./src/commands/policy.mjs` — e.g. a
+ * `coverage` key in a native workspace's `boundaryConfig` file), so "rows
  * unlisted" never reads as "rows attested".
  *
  * @param {{format: string, output: string|null, paths: string[]}} options
