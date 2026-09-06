@@ -87,8 +87,10 @@ because they share one function.
 - Witness: `eventDedupeKey`/`eventId` pins (base/head/declaration sensitivity;
   clock/narration excluded); store idempotency/atomicity/containment pins;
   dirty/commitless-head refusal shared by all three producers.
-- Gap: disposition words constructed in delta/change/evolution are validated
-  only at store write (register R4).
+- Gap: none — the write path validates identity and vocabulary before
+  persisting (#738 → #744), the read path validates vocabulary against
+  stored bytes, and a disposition latch throws on stranger statuses
+  (#739 → #741).
 
 ## INV-7 — Determinism
 

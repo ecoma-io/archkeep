@@ -82,6 +82,7 @@ import {
   classifyEvolution,
   edgeEvolutionIdentity,
   eventDedupeKey,
+  EVENT_DISPOSITIONS,
   eventId,
   EVOLUTION_EVENT_SCHEMA_VERSION,
 } from "../governance/evolution-event.mjs";
@@ -838,14 +839,33 @@ function buildTransitionEvent(from, to, transition, comparison) {
  * axis at any transition is surfaced as `{available: false, reason}` naming
  * the transition index, never folded into a fabricated clean aggregate.
  *
+ * The disposition loop latches the event vocabulary: a comparison whose
+ * disposition is unknown or absent THROWS naming it — the `?? 1` it replaced
+ * defaulted a stranger to rank 1, accepted's own rank, so a garbled
+ * disposition could never be the summary's worst. Production dispositions
+ * arrive validated (`classifyEvolution`, `readEvents`), so the throw fires
+ * only where archkeep itself is buggy — the same latch `deltaDisposition`
+ * holds.
+ *
  * @param {object[]} comparisons The per-transition comparison objects.
  * @returns {object} The summary.
+ * @throws {Error} On a comparison whose `disposition` is outside
+ *   `EVENT_DISPOSITIONS`, naming the value.
  */
-function buildEvolutionSummary(comparisons) {
+export function buildEvolutionSummary(comparisons) {
   const dispositionRank = { accepted: 1, rejected: 2, "no-verdict": 3 };
   let disposition = "accepted";
   for (const comparison of comparisons) {
-    if ((dispositionRank[comparison.disposition] ?? 1) > dispositionRank[disposition]) {
+    if (!EVENT_DISPOSITIONS.includes(comparison.disposition)) {
+      throw new Error(
+        `the evolution summary folds dispositions by rank, and ${JSON.stringify(
+          comparison.disposition,
+        )} is not one of [${EVENT_DISPOSITIONS.join(", ")}] — an unknown disposition would ` +
+          `default to rank 1, accepted's own rank, and could never be the summary's worst. ` +
+          `This is a bug in archkeep, not a fact about the workspace.`,
+      );
+    }
+    if (dispositionRank[comparison.disposition] > dispositionRank[disposition]) {
       disposition = comparison.disposition;
     }
   }

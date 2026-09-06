@@ -34,24 +34,25 @@ recorded.)
 
 ## Contract → pin map (external contracts a refactor must not move)
 
-| Contract                                                         | Pin today                                                                                                                                   |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Exit codes 0/1/2/3; `check` the only 4-code verb                 | `EXIT` table + `verdict-layering` scan + `exit-matrix.integration` + spawned `cli.integration`                                              |
-| JSON envelope `schemaVersion: 2` + field roster                  | `envelope-shape.integration` vs `envelope-shape.json` (both directions, human-gated regen) + `json.test` self-contradiction refusals        |
-| SARIF shape                                                      | `sarif.integration.test.mjs`                                                                                                                |
-| Intent contracts A–M                                             | `src/intent/intent-manifest.json` + `intent.test.mjs`                                                                                       |
-| CLI verb/flag spellings                                          | `COMMAND_NAMES`-derived rosters + `check-cli-docs-roster` + `cli-contract-edge-cases`                                                       |
-| Package exports/subpaths/bins                                    | `module-graph.test` entry derivation + `boundary.test` manifest parity + `verify-package`                                                   |
-| Config schema + 4-dialect equivalence                            | `config*.test` family with red twins                                                                                                        |
-| Analysis record contract (frozen)                                | `src/analysis/contract.md` + intent C + metamorphic/corpus                                                                                  |
-| Status ladder `ok/findings/no-verdict`                           | `verdict-layering` STATUS_KEYS + refusal-contract                                                                                           |
-| LSP surface + empty-diagnostic invariant                         | protocol/diagnose/server suites + `verify-package` check 3                                                                                  |
-| MCP tool surfaces                                                | `packages/archkeep-mcp` suite (runs via its own moon target)                                                                                |
-| Rule-SDK one contract                                            | `rule-sdks.integration.test.mjs` (ADR 0002 gate)                                                                                            |
-| Provider parity Nx/Moon/Native                                   | intent L + `e2e/parity` + CI twins                                                                                                          |
-| Docs claims, rosters, prereqs                                    | the `scripts/check-*` gates                                                                                                                 |
-| PR title convention                                              | commitlint step in `ci.yml`                                                                                                                 |
-| `reconcile` byte-identity (`architecture-intent.json` untouched) | `reconcile.integration.test.mjs` — both `--propose` shapes (`:139`, `:153`); OQ-5's named witness ([PD-13](DECISIONS.md#program-decisions)) |
+| Contract                                                         | Pin today                                                                                                                                                           |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exit codes 0/1/2/3; `check` the only 4-code verb                 | `EXIT` table + `verdict-layering` scan + `exit-matrix.integration` + spawned `cli.integration`                                                                      |
+| JSON envelope `schemaVersion: 2` + field roster                  | `envelope-shape.integration` vs `envelope-shape.json` (both directions, human-gated regen) + `json.test` self-contradiction refusals                                |
+| SARIF shape                                                      | `sarif.integration.test.mjs`                                                                                                                                        |
+| Intent contracts A–M                                             | `src/intent/intent-manifest.json` + `intent.test.mjs`                                                                                                               |
+| CLI verb/flag spellings                                          | `COMMAND_NAMES`-derived rosters + `check-cli-docs-roster` + `cli-contract-edge-cases`                                                                               |
+| Package exports/subpaths/bins                                    | `module-graph.test` entry derivation + `boundary.test` manifest parity + `verify-package`                                                                           |
+| Config schema + 4-dialect equivalence                            | `config*.test` family with red twins                                                                                                                                |
+| Analysis record contract (frozen)                                | `src/analysis/contract.md` + intent C + metamorphic/corpus                                                                                                          |
+| Status ladder `ok/findings/no-verdict`                           | `verdict-layering` STATUS_KEYS + refusal-contract                                                                                                                   |
+| LSP surface + empty-diagnostic invariant                         | protocol/diagnose/server suites + `verify-package` check 3                                                                                                          |
+| MCP tool surfaces                                                | `packages/archkeep-mcp` suite (runs via its own moon target)                                                                                                        |
+| Rule-SDK one contract                                            | `rule-sdks.integration.test.mjs` (ADR 0002 gate)                                                                                                                    |
+| Provider parity Nx/Moon/Native                                   | intent L + `e2e/parity` + CI twins                                                                                                                                  |
+| Docs claims, rosters, prereqs                                    | the `scripts/check-*` gates                                                                                                                                         |
+| PR title convention                                              | commitlint step in `ci.yml`                                                                                                                                         |
+| `reconcile` byte-identity (`architecture-intent.json` untouched) | `reconcile.integration.test.mjs` — both `--propose` shapes (`:139`, `:153`); OQ-5's named witness ([PD-13](DECISIONS.md#program-decisions))                         |
+| Evolution event identity + disposition vocabulary                | `EVENT_DISPOSITIONS` frozen in `evolution-event.mjs` + `evolution-store.test.mjs` write-validation pins + `delta-events`/`evolution.test` latch suites (#744, #741) |
 
 ## Existing differentials (old-vs-new machinery already real)
 

@@ -517,6 +517,48 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
   WI-2 (the `provenance-command.mjs` bypass fold into `policy.mjs`'s
   ladder) dispatches — P-F holds one disposition law per PR.
 
+### CHK-2-739 — Phase 2, correctness fix: disposition latch (#739 → PR #741) (2026-09-06)
+
+- **ID**: CHK-2-739. **Phase**: 2 correctness-hardening unit. **Status**:
+  complete — pending merge of PR #741.
+- **Goal**: close #739 — `reconcileDisposition` accepted stranger statuses
+  (anything outside `ok`/`findings`/`no-verdict`) by falling through to a
+  default mapping, so an out-of-vocabulary byte could flow into a recorded
+  disposition instead of being refused. Fix shape: latch-and-throw at the
+  mapping site, matching `verdictFor`'s input-latch discipline; every
+  in-vocabulary mapping, `ok→accepted` included, byte-identical.
+- **Invariants touched**: INV-6's read half — the read path now validates
+  vocabulary against stored bytes and the mapping latches throw on
+  strangers. This PR carries the full INV-6 gap-line rewrite (both halves,
+  per CHK-2-738's deferral); #744 merges first, so the rewritten line cites
+  landed evidence when this PR lands.
+- **Canonical ownership changes**: none.
+- **Dependency-boundary changes**: none.
+- **Contracts affected and compatibility classification**: behavior change
+  — stranger statuses now throw instead of silently mapping;
+  `buildEvolutionSummary` exported for the pin (precedent:
+  `deltaDisposition`). Classified CORRECTNESS HARDENING, lands on the 0.x
+  line per the program's standing classification.
+- **Differential evidence**: an independent adversarial review APPROVED —
+  byte-identity of all in-vocabulary mappings proven, exports map
+  untouched; `delta-events.test.mjs` + `evolution.test.mjs` green (319
+  tests across the 12-file delta/evolution family); package-wide
+  `typecheck` exit 0 after the strict-checkJs test-argument fix;
+  CI `ci-gate` + `analysis-gate` green on the fix head, and this
+  docs-only delta re-runs it.
+- **Debt budget**: before — a disposition mapping that could not refuse a
+  stranger byte (the silent-vocabulary gap #739); closed — latch-and-throw
+  plus read-side validation; introduced — none; net — negative.
+- **Unresolved questions**: none new.
+- **Rejected approaches**: answering strangers with `no-verdict` (a
+  stranger byte is a contract breach, not a verdict); widening the
+  vocabulary (no consumer asked); a shared latch module across
+  delta/evolution (P-F: one disposition law per PR, no new seam).
+- **Forbidden next moves / next**: WI-2 (the `provenance-command.mjs`
+  bypass fold into `policy.mjs`'s ladder) dispatches only after this PR
+  merges — P-F holds one disposition law per PR; PD-15 (the fold ruling)
+  records on WI-2's own PR.
+
 ## Conventions maintained here
 
 - Phase completions append a CHK-n block above, never edit an old one.
