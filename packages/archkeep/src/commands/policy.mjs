@@ -35,7 +35,9 @@ function hasProfiles(options) {
  * shares, in the one place all of them now call it from. Hand-copied 11
  * times before this — `check`, `graph`, `diff`, `waivers`, `fitness`,
  * `impact`, `explain`, `context`, `history`'s `--capture` branch, `debt`,
- * `health` — the duplication is what let two defects land in it independently:
+ * `health` — and `provenance` joined at WI-2's fold, its private walk until
+ * then keeping the P1-26 class alive there too — the duplication is what
+ * let two defects land in it independently:
  * P1-25 found `graph`'s copy alone missing the inline-object arm, and P1-26
  * found only `check`'s copy aware of a `profiles` registry at all — the other
  * ten tried to resolve a profile NAME as a file, and named the wrong problem
@@ -43,7 +45,7 @@ function hasProfiles(options) {
  * `"strict"` as "names an unsupported boundaryConfig extension '(none)'",
  * which blames a typo that was never made rather than naming the real gap —
  * that command never knew profiles existed. One function, called from all
- * eleven sites, is what makes that defect class structurally impossible to
+ * twelve sites, is what makes that defect class structurally impossible to
  * reintroduce one copy at a time.
  *
  * Checked in order, and the first match wins:
@@ -76,7 +78,7 @@ function hasProfiles(options) {
  * intent's `file`). Only `check` reads either field today (P1-01, naming the
  * law that governed a run in its own report), but they are returned
  * unconditionally rather than as a second, `check`-only code path, so the
- * eleven callers keep sharing the one ladder this function exists to be.
+ * twelve callers keep sharing the one ladder this function exists to be.
  *
  * @param {{config: string|null}} options The command's own parsed flags —
  *   only `config` is read here, so a command with no `--config` flag at all
