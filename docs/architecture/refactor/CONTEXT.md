@@ -48,19 +48,19 @@ A missing field is a review defect, not a style preference.
 
 ## Program state
 
-| Phase                                               | Status                                                                                                                           | Record                      |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| 0 — Architecture cartography                        | **complete** (PR #727 merged)                                                                                                    | CHK-0 below                 |
-| 0.5 — Decision closure & Phase 1 execution baseline | **complete** (PR #729 merged)                                                                                                    | CHK-1-PREP below            |
-| 1 — Authority hardening                             | **complete** (PRs #730–#734 + #736)                                                                                              | CHK-1-CLOSE below           |
-| 2 — Canonical model hardening                       | in progress — all units landed (PRs #740–#749, #753, #754, #757); exit pending the PD-15 fold-decision record (maintainer-gated) | CHK-2-A–CHK-2-R1 below      |
-| 3 — Boundary enforcement                            | not started                                                                                                                      | blocked by 2                |
-| 4 — Internal extraction                             | not started                                                                                                                      | **blocked by GAP-A** (PD-4) |
-| 5 — Capability facades                              | not started                                                                                                                      | blocked by 4                |
-| 6 — CLI recomposition                               | not started                                                                                                                      | blocked by 5                |
-| 7 — Additional surfaces                             | not started                                                                                                                      | blocked by 6                |
-| 8 — Federation readiness                            | not started                                                                                                                      | maintainer-gated            |
-| 9 — Final hardening                                 | not started                                                                                                                      | blocked by 8 (or waiver)    |
+| Phase                                               | Status                                                                                            | Record                      |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------- |
+| 0 — Architecture cartography                        | **complete** (PR #727 merged)                                                                     | CHK-0 below                 |
+| 0.5 — Decision closure & Phase 1 execution baseline | **complete** (PR #729 merged)                                                                     | CHK-1-PREP below            |
+| 1 — Authority hardening                             | **complete** (PRs #730–#734 + #736)                                                               | CHK-1-CLOSE below           |
+| 2 — Canonical model hardening                       | **complete** — all units + the exit record (PD-15) landed (PRs #740–#749, #753, #754, #757, #759) | CHK-2-A–CHK-2-PD15 below    |
+| 3 — Boundary enforcement                            | not started                                                                                       | blocked by 2                |
+| 4 — Internal extraction                             | not started                                                                                       | **blocked by GAP-A** (PD-4) |
+| 5 — Capability facades                              | not started                                                                                       | blocked by 4                |
+| 6 — CLI recomposition                               | not started                                                                                       | blocked by 5                |
+| 7 — Additional surfaces                             | not started                                                                                       | blocked by 6                |
+| 8 — Federation readiness                            | not started                                                                                       | maintainer-gated            |
+| 9 — Final hardening                                 | not started                                                                                       | blocked by 8 (or waiver)    |
 
 Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
 #729 (Phase 0.5), PRs #730–#734 (Phase 1 units A, B, E, F, C), PR #736
@@ -70,8 +70,9 @@ walk, the decision-fitness leg, the evolution write-time refusal), PR #745
 (the 2-B relationship pins), PRs #746–#748 (the dormant lifecycle-surface
 deletion, the one message registry, provenance config through the policy
 ladder), PR #749 (the WI-5 ladder preamble), PR #754 (the 2-D
-module-header pins), PR #753 (the 2-E register closeout), and PR #757
-(R1's boundary sentence — the last 2-E tail).
+module-header pins), PR #753 (the 2-E register closeout), PR #757
+(R1's boundary sentence — the last 2-E tail), and PR #759 (the PD-15
+fold-decision record — Phase 2's exit).
 
 ## Checkpoints
 
@@ -930,6 +931,47 @@ module-header pins), PR #753 (the 2-E register closeout), and PR #757
   control-plane state reconciliation (#756), then the PD-15 ruling gates
   the Phase-2 exit recording per
   [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
+
+### CHK-2-PD15 — Phase 2 exit: the WI-2 fold decision recorded (2026-09-06)
+
+- **ID**: CHK-2-PD15. **Phase**: 2 (exit). **Status**: complete — pending
+  merge of PR #759.
+- **Gate-table state**: Phase 2's exit condition — the PD-15
+  fold-decision record — is satisfied by this PR; the Program state table
+  above records Phase 2 complete in this same PR. Phase 3 stays closed
+  until the maintainer confirms the exit.
+- **Checkpoints completed**: CHK-2-WI2's unresolved question (the fold
+  decision) — answered by [PD-15](DECISIONS.md#program-decisions) in this
+  PR. No other checkpoint moves; every landed CHK block stands as written.
+- **Invariants touched**: none — docs-only. INV-2's one-exit-table
+  reading is what PD-15 applies, not amends.
+- **Canonical ownership changes**: none — SEMANTIC-MODEL rows untouched.
+- **Dependency-boundary changes**: none.
+- **Contracts affected and compatibility classification**: classification
+  only, no surface moves in this PR — PD-15 records the three WI-2 deltas
+  as semantic changes on the 0.x line, to be named in the changelog of
+  the minor that next cuts following PR #748's merge, and this PR's own
+  delta is docs-only.
+- **Differential evidence**: none produced here (docs-only); the
+  classification's evidence is CHK-2-WI2's, re-cited by PD-15 —
+  byte-identical outputs, the P1-26-class teeth, the coverage-channel
+  witness — read against the merged ladder and
+  `docs/reference/exit-codes.md`'s documented exit-3 split.
+- **Architectural debt budget**: before — one pending maintainer-gated
+  record gating the Phase-2 exit; closed — the record; introduced — 0;
+  net — negative.
+- **Unresolved questions**: none carried. Phase 3 opens only on the
+  maintainer's confirmation of the Phase-2 exit (a process gate, not an
+  open question).
+- **Rejected approaches**: authoring the record inside CHK-2-WI2's own PR
+  retroactively (checkpoints are append-only); editing any landed
+  checkpoint's wording to say "decided" (this new checkpoint supersedes
+  instead); a dedicated issue for a docs-only unit (PD-17 routes refactor
+  units through umbrella #725 plus the finding id in the PR body).
+- **Forbidden next moves / next**: do not start Phase 3 on this PR — the
+  exit awaits the maintainer's confirmation. Next: report the Phase-2
+  exit to the maintainer; then Phase 3 per
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-3--boundary-enforcement).
 
 ## Conventions maintained here
 
