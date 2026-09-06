@@ -832,6 +832,57 @@ Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
 - **Forbidden next moves / next**: none carried. Next: 2-E per
   [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
 
+### CHK-2-E — Phase 2, 2-E: the vocabulary registers meet the landed phases (2026-09-06)
+
+- **ID**: CHK-2-E. **Phase**: 2 (unit 2-E). **Status**: complete —
+  pending merge of PR #753.
+- **Goal**: close the register table against what has landed — R4
+  rewritten from open-gap prose to its landed state (store side:
+  `validateEventForWrite` via the shared `eventVocabularyViolation`
+  refuses at write what read-side validation refuses, tracking issue
+  #738 closed by PR #744; mapping side: the `deltaDisposition`
+  throw-latch, tracking issue #739 closed by PR #741; the
+  `reconcileDisposition` stranger latch and the rank-fold latch cited
+  beside them), R1–R3 and R5–R6 checked accurate and left untouched, R7
+  checked with its cross-references resolving; `vscode.md`'s router
+  count corrected from four to the eight of `ROUTED_EXTENSIONS`, the
+  missing `.cs` row added (Finding C, #742's review); #742's two
+  out-of-scope follow-ups folded verbatim as program-tracked items
+  outside the register list.
+- **Invariants touched**: none — docs only.
+- **Canonical ownership changes**: none.
+- **Dependency-boundary changes**: none.
+- **Contracts affected and compatibility classification**: none —
+  performance/internal by construction: prose and tables only; register
+  ids R1–R7 unchanged in number and order (grep-verified), so every
+  control-plane citation of an id still lands.
+- **Differential evidence**: the extension count verified against
+  `ROUTED_EXTENSIONS`' authoritative list (eight entries; the test pins
+  "eight extensions"); every new R4 citation pinned to symbol-and-lines
+  in the adversarial review's detached checkout; issues #738/#739
+  confirmed CLOSED and PRs #744/#741 MERGED before the row claimed them;
+  with the landing-status annotation disclosed in the lead-in after the
+  review's P3; `check-docs-links` green (704 files, no broken
+  references); prettier green; lefthook battery green at both commits,
+  signed (`%G?` = G).
+- **Debt budget**: before — a register row describing a closed gap as
+  open (inviting re-solving), an integration doc undercounting the
+  routed languages by half, two follow-ups living only in a merged PR's
+  body; closed — all three; introduced — one tracked item (the client
+  walk's git ceiling) deliberately kept open under the umbrella; net —
+  negative.
+- **Unresolved questions**: R1's cross-boundary sentence remains open
+  and the row says so — no merged work closes it, and claiming closure
+  was rejected as fabrication.
+- **Rejected approaches**: renumbering or reordering the registers
+  (ids are cited across the control plane — CONTEXT, VALIDATION-MATRIX,
+  MIGRATION-PLAN); code changes (R4's validation already landed — the
+  unit's work was the row, not the gap); folding #742's items into the
+  register rows (they are program tracking, not vocabulary).
+- **Forbidden next moves / next**: none carried. Next: the Phase 2 exit
+  check per
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening).
+
 ## Conventions maintained here
 
 - Phase completions append a CHK-n block above, never edit an old one.

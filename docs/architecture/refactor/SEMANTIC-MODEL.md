@@ -127,8 +127,9 @@ construction. Registers, not defects:
 
 Two follow-ups recorded verbatim from
 [PR #742](https://github.com/ecoma-io/archkeep/pull/742)'s out-of-scope
-list — program tracking under the umbrella
-([#725](https://github.com/ecoma-io/archkeep/issues/725)), not registers:
+list, landing status appended to the second — program tracking under the
+umbrella ([#725](https://github.com/ecoma-io/archkeep/issues/725)), not
+registers:
 
 - The VS Code client-side workspace walk carries no git ceiling
   (repository-root bound) — an under-tested client/server boundary
