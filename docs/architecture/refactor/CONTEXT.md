@@ -398,6 +398,48 @@ branch `johnitvn/refactor-2a-adjudication`).
   ([MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-2--canonical-model-hardening)),
   and in parallel WI-1 through its own gate (#737 → branch → draft PR).
 
+### CHK-2-737 — Phase 2, correctness fix: decisions' fitness mirrors the sanctioned construction (#737 → PR #743) (2026-09-06)
+
+- **ID**: CHK-2-737. **Phase**: 2 correctness-hardening unit. **Status**:
+  complete — pending merge of PR #743.
+- **Goal**: close #737 — the audit found decisions' `fitnessVerdictsFor`
+  constructing its verdicts independently of `fitness.mjs`'s sanctioned
+  construction: a second spelling of one law, free to diverge silently.
+  Fix: mirror `fitness.mjs`'s construction byte-for-byte behind a
+  cross-reference header — no shared module, PD-13's restatement-over-seams
+  precedent — and harden the refusal path: `driftForCheck` refusals
+  (unreadable/invalid `architecture-intent.json`, unregistered-plugin
+  graph) now exit 3 from `decisions` as they already did from `fitness`.
+- **Invariants touched**: INV-18 / PD-5 — the intent manifest's `cli.mjs`
+  evidence digest is re-pinned in this same PR (same-PR re-certification;
+  Contract B's recorded digest now matches the shipped bytes).
+- **Canonical ownership changes**: none — `fitness.mjs` stays the sole
+  owner of the construction; decisions restates it at its own seam.
+- **Dependency-boundary changes**: none.
+- **Contracts affected and compatibility classification**: behavior change
+  on the refusal path only — `decisions` exits 3 where it previously
+  proceeded from an unverified manifest; verdict outputs byte-identical
+  for every non-refusal input. Classified CORRECTNESS HARDENING, lands on
+  the 0.x line. The exit-3 consequence is disclosed in the PR body
+  ("Consumer impact").
+- **Differential evidence**: an independent adversarial review APPROVED —
+  the mirror construction verified byte-for-byte against `fitness.mjs`;
+  `intent.test.mjs` 58/58 after the digest re-pin; the full
+  check-packages battery green across all nine packages (lefthook
+  pre-commit); CI re-run green on the re-pinned head.
+- **Debt budget**: before — a free-to-diverge second construction plus a
+  fail-open refusal path (the silent direction #737); closed — the mirror
+  with a cross-ref header and fail-closed refusals; introduced — the
+  maintenance duty the mirror owes (bound by its header and the digest
+  tripwire); net — negative.
+- **Unresolved questions**: none new.
+- **Rejected approaches**: a shared module for the two constructions
+  (PD-13 (c) — the seams are the point); leaving exit code 0 on refusal
+  (a refusal answered as success is the invariant's silent direction);
+  widening the manifest schema (no consumer asked).
+- **Forbidden next moves / next**: none carried. Next: #742's closeout,
+  then 2-C after #745 merges.
+
 ## Conventions maintained here
 
 - Phase completions append a CHK-n block above, never edit an old one.
