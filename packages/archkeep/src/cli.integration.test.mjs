@@ -5673,6 +5673,76 @@ var _ = adapter.Name
     expect(text).toContain("origin: ticket-91");
   });
 
+  it("provenance attests the profile's law — the fold's seam, not a filename it never named (WI-2)", async () => {
+    const streams = profEnv();
+    expect(await runCli(["provenance"], streams)).toBe(EXIT.ok);
+    const text = streams.lines.out.join("\n");
+    expect(text).not.toContain(WRONG_REASON);
+    // The profile's single depConstraints row was walked: exactly one
+    // governance row, reported unattested (the shared fixture's row carries
+    // no origin). A no-law walk would count zero rows; the private filename
+    // walk this fold replaced would have died with WRONG_REASON below.
+    expect(text).toContain("rows      1 governance row, 0 with an origin, 1 without");
+    expect(text).toContain("depConstraints[0]");
+    expect(streams.lines.err.join("\n")).not.toContain(WRONG_REASON);
+  });
+
+  it("provenance inherits the ladder's native coverage-channel refusal — one law, judged once (WI-2)", async () => {
+    // The fold adopted the ladder wholesale, its refusals included: on a
+    // native tree whose boundaryConfig FILE carries a `coverage` key,
+    // the private walk used to render a report off a law `check`
+    // refuses — the same question, two answers. The refusal below is the
+    // ladder's own, and the exit is 3 where the pre-fold command printed a
+    // report and exited 0.
+    const root = mkdtempSync(join(tmpdir(), "polyglot-cli-provenance-native-cov-"));
+    try {
+      const writeNat = (relativePath, text) => {
+        mkdirSync(join(root, relativePath, ".."), { recursive: true });
+        writeFileSync(join(root, relativePath), text);
+      };
+      writeNat(
+        "archkeep.json",
+        JSON.stringify({
+          projects: { declared: [{ root: "libs/a", name: "a", type: "lib", tags: [] }] },
+          boundaryConfig: "law.json",
+        }),
+      );
+      writeNat(
+        "law.json",
+        JSON.stringify({
+          depConstraints: [],
+          moduleBoundaryOptions: {
+            allow: [],
+            buildTargets: ["build"],
+            enforceBuildableLibDependency: false,
+            allowCircularSelfDependency: false,
+            checkDynamicDependenciesExceptions: [],
+            ignoredCircularDependencies: [],
+            banTransitiveDependencies: false,
+            checkNestedExternalImports: false,
+          },
+          coverage: { unowned: [{ path: "orphans/**", reason: "vendored fixture corpus" }] },
+        }),
+      );
+      writeNat("libs/a/a.go", "package a\n");
+      const streams = {
+        out: (text) => streams.lines.out.push(text),
+        err: (text) => streams.lines.err.push(text),
+        lines: { out: [], err: [] },
+        cwd: root,
+        listFiles: () => ["archkeep.json", "law.json", "libs/a/a.go"],
+      };
+      expect(await runCli(["provenance"], streams)).toBe(EXIT.error);
+      const errText = streams.lines.err.join("\n");
+      expect(errText).toContain("declares 'coverage'");
+      expect(errText).toContain("coverage.exempt");
+      // Refused before anything rendered: no report, no rows.
+      expect(streams.lines.out.join("\n")).toBe("");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("fitness reaches its OWN no-fitness-declared refusal, not the config-loading one — proof the block was actually read", async () => {
     // A profile's `block` cannot carry a `fitness` key at all
     // (`docs/concepts/profiles.md`, "A profile's block carries exactly three

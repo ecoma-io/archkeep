@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   configRows,
@@ -7,6 +7,7 @@ import {
   provenanceCommand,
   rowLabel,
 } from "./provenance-command.mjs";
+import { resolvePolicy } from "./policy.mjs";
 
 vi.mock("./provenance.mjs", () => ({
   resolveProvenance: vi.fn(() => ({
@@ -21,6 +22,20 @@ vi.mock("./provenance.mjs", () => ({
   // surface down explicitly.
   resolveFileAttribution: vi.fn(() => null),
 }));
+
+// The fold: the command resolves its boundary law through the shared policy
+// ladder (`./policy.mjs`'s `resolvePolicy`), so the config payload a case
+// stages arrives as the ladder's resolved value — the same handoff `check`
+// and the other ten commands live with. The ladder's own arms are exercised
+// for real in `cli.integration.test.mjs` (P1-26), including the
+// profile-resolution case this fold adds there (WI-2).
+vi.mock("./policy.mjs", () => ({
+  resolvePolicy: vi.fn(async () => ({ config: null, profile: null, source: null })),
+}));
+
+beforeEach(() => {
+  vi.mocked(resolvePolicy).mockResolvedValue({ config: null, profile: null, source: null });
+});
 // The real jsonEnvelope builds the `workspace.provenance` block this command's
 // JSON contract depends on; the envelope is part of what is under test here,
 // so it is not mocked (unlike drift's test, which only reads the text report).
@@ -52,7 +67,7 @@ const intent = (overrides = {}) => ({
 const config = (rows = []) => ({ depConstraints: rows });
 
 /**
- * `io` playing both the intent and config loaders off these payloads.
+ * `io` staging the intent and the ladder-resolved config for these payloads.
  *
  * @param {{intent?: object, config?: object, adrRecords?: object[],
  *   fileAttribution?: (root: string, file: string) => object|null}} payload
@@ -63,9 +78,13 @@ const config = (rows = []) => ({ depConstraints: rows });
  *   answers `null` — cannot-attest) is passed to the command as `io.fileAttribution`.
  */
 function ioWith({ intent: file, config: cfg, adrRecords = [], fileAttribution }) {
+  vi.mocked(resolvePolicy).mockResolvedValue({
+    config: cfg ?? null,
+    profile: null,
+    source: null,
+  });
   return {
     loadIntentOverride: async () => file,
-    loadConfigOverride: async () => cfg,
     // Defaults to an empty registry — a `/workspace` root has no real
     // `docs/adr/` behind it in these tests either way, so this only matters
     // for a case that injects a non-empty one.
