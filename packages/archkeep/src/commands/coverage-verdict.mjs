@@ -151,6 +151,18 @@ export function coverageRefusal({ command, commandContext, what, acceptedFiles, 
   }
   /** @type {"no-verdict"} The completeness is false, so this is the status. */
   const status = "no-verdict";
+  // The `complete` throw above pins the STATUS; this guard pins the EXIT the
+  // same way, so the `{3}` annotation below is a checked fact rather than an
+  // unchecked assertion — a future `coverageVerdict` that let an incomplete
+  // run claim a clean exit dies here, loudly, instead of typing the lie.
+  if (verdict.exitCode !== EXIT.error) {
+    throw new Error(
+      `coverageRefusal: ${command}'s incomplete verdict carries exit ${verdict.exitCode} — ` +
+        `a refusal never exits clean`,
+    );
+  }
+  /** @type {3} The value flows from the one verdict table; the type is proven above. */
+  const refusalExitCode = verdict.exitCode;
   const reasons = coverageIncompleteReasons({
     unchecked: verdict.notAnalyzed.length,
     blindSpots: verdict.blindSpotCount,
@@ -174,7 +186,7 @@ export function coverageRefusal({ command, commandContext, what, acceptedFiles, 
       provenance: resolveProvenance(commandContext.root),
     },
     status,
-    exitCode: verdict.exitCode,
+    exitCode: refusalExitCode,
     coverage,
     result: undefined,
     ...(decision === true
@@ -190,7 +202,7 @@ export function coverageRefusal({ command, commandContext, what, acceptedFiles, 
   });
   return {
     status,
-    exitCode: verdict.exitCode,
+    exitCode: refusalExitCode,
     coverage,
     report: {
       text:

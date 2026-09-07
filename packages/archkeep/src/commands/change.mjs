@@ -1229,7 +1229,7 @@ export function changeOutputRefusal(options, cwd) {
  * IO seams, and where output lands (`./README.md`). The engine this returns
  * from is `changeCommand` above, unchanged.
  *
- * @param {{config: string|null, eventOut: string|null, intent: string, paths: string[]}} options
+ * @param {{config: string|null, eventOut?: string|null, intent: string, paths: string[]}} options
  *   This run's parsed flags; `paths[0]` is the baseline evidence snapshot.
  * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
  *   seams a test injects, the same ones `check` takes.

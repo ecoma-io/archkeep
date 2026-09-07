@@ -209,7 +209,7 @@ function declaredEdgeManifest({ provider, graph }, sourceProject) {
  *   evidenceOut?: string|null}} options
  * @param {{cwd: string, readGraph?: Function, listFiles?: Function,
  *   listUntracked?: Function}} context
- * @returns {Promise<{report: string, violations: number, declaredEdgeFindings: number,
+ * @returns {Promise<{exitCode: 0|1|3, report: string, violations: number, declaredEdgeFindings: number,
  *   goWorkDrift: number, tsconfigPathsDead: number, intentFindings: number,
  *   intentUnresolved: number, intentUnresolvedDecisionRefs: number, fitnessFail: number,
  *   fitnessUnknown: number, customRuleFail: number, customRuleUnknown: number,
