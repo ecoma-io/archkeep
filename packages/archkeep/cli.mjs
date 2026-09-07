@@ -107,7 +107,11 @@ import { UsageError } from "./src/errors.mjs";
 // `<word>-capability.mjs` module is its word's explicit verb roster — pure
 // re-exports, zero judgment (PD-18, docs/architecture/refactor/DECISIONS.md).
 // Non-verb helper modules keep their direct imports.
-import { discoverCommand, intentJsonFromProposal } from "./src/commands/analyze-capability.mjs";
+import {
+  discoverCommand,
+  intentJsonFromProposal,
+  intentWriteRefusal,
+} from "./src/commands/analyze-capability.mjs";
 import { check, fitness, scenario, sortViolations } from "./src/commands/check-capability.mjs";
 import {
   captureBaseline,
@@ -2113,16 +2117,13 @@ async function runDiscover(options, { cwd, env }) {
   }
 
   if (options.writeIntent) {
-    // The one write that can turn a proposal into the law `check` gates on,
-    // so it refuses to replace: a file already at the target is a law (or a
-    // candidate someone holds), and silently overwriting it with a proposal
-    // is the adoption this command must never perform by itself. Move or
-    // delete the file first — a step a human reviews.
-    if (existsSync(options.writeIntent)) {
-      env.err(
-        `archkeep: ${options.writeIntent} already exists, and a proposal must never ` +
-          `silently replace what is there. Move or delete the file first, then run this again.`,
-      );
+    // The one write that can turn a proposal into the law `check` gates on —
+    // the refusal DECISION is discover's own (`intentWriteRefusal`, beside the
+    // proposal it protects, the way `historyOutputRefusal` sits with history);
+    // this driver keeps the mechanics only.
+    const intentRefusal = intentWriteRefusal(options.writeIntent, { exists: existsSync });
+    if (intentRefusal) {
+      env.err(intentRefusal);
       return EXIT.error;
     }
     try {

@@ -137,6 +137,29 @@ export function intentJsonFromProposal(proposal) {
 }
 
 /**
+ * The `--write-intent` self-footgun refusal, decided beside the proposal it
+ * protects. A proposal is a suggestion; a file already at the target is a law
+ * (or a candidate someone holds), and silently overwriting it with a proposal
+ * is the adoption this command must never perform by itself — the same
+ * posture `--output`'s fixed-name table holds at the write door, specialized
+ * to the one target `discover` itself names. The CLI keeps the mechanics
+ * (the `wx` write, the stderr wording around it); the DECISION to refuse
+ * travels with the verb, the way `historyOutputRefusal` does for history.
+ *
+ * @param {string} target The `--write-intent` path as the user wrote it.
+ * @param {{exists: (path: string) => boolean}} io Injectable existence read —
+ *   the same seam style `loadNativeModel`'s `{readFile}` keeps.
+ * @returns {string|null} The refusal message, or `null` when the write may
+ *   proceed.
+ */
+export function intentWriteRefusal(target, { exists }) {
+  return exists(target)
+    ? `archkeep: ${target} already exists, and a proposal must never ` +
+        `silently replace what is there. Move or delete the file first, then run this again.`
+    : null;
+}
+
+/**
  * Runs the `discover` command: observes the workspace, optionally proposes the
  * candidate architecture over it, and returns the report.
  *
