@@ -54,7 +54,7 @@ A missing field is a review defect, not a style preference.
 | 0.5 — Decision closure & Phase 1 execution baseline | **complete** (PR #729 merged)                                                                     | CHK-1-PREP below            |
 | 1 — Authority hardening                             | **complete** (PRs #730–#734 + #736)                                                               | CHK-1-CLOSE below           |
 | 2 — Canonical model hardening                       | **complete** — all units + the exit record (PD-15) landed (PRs #740–#749, #753, #754, #757, #759) | CHK-2-A–CHK-2-PD15 below    |
-| 3 — Boundary enforcement                            | not started                                                                                       | blocked by 2                |
+| 3 — Boundary enforcement                            | **complete** — all units + the exit checkpoint landed (PRs #762–#765, #766)                       | CHK-3 below                 |
 | 4 — Internal extraction                             | not started                                                                                       | **blocked by GAP-A** (PD-4) |
 | 5 — Capability facades                              | not started                                                                                       | blocked by 4                |
 | 6 — CLI recomposition                               | not started                                                                                       | blocked by 5                |
@@ -72,7 +72,10 @@ deletion, the one message registry, provenance config through the policy
 ladder), PR #749 (the WI-5 ladder preamble), PR #754 (the 2-D
 module-header pins), PR #753 (the 2-E register closeout), PR #757
 (R1's boundary sentence — the last 2-E tail), and PR #759 (the PD-15
-fold-decision record — Phase 2's exit).
+fold-decision record — Phase 2's exit), PRs #762–#765 (Phase 3's units:
+the G-1/G-5/G-2 scans, the G-7 orphan detector and its test-support
+roster, the intra-`src/` DAG statement, the G-3/G-4/G-6/G-8
+dispositions), and PR #766 (the Phase 3 exit checkpoint).
 
 ## Checkpoints
 
@@ -972,6 +975,85 @@ fold-decision record — Phase 2's exit).
   exit awaits the maintainer's confirmation. Next: report the Phase-2
   exit to the maintainer; then Phase 3 per
   [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-3--boundary-enforcement).
+
+### CHK-3 — Phase 3 exit: the layer laws scan (2026-09-07)
+
+- **ID**: CHK-3. **Phase**: 3 (exit). **Status**: complete — pending
+  merge of PR #766.
+- **Gate-table state**: the table row above flips to complete in this PR.
+  Phase 3's three exit criteria each hold: (1) every new scan demonstrated
+  red on a planted violation — G-1/G-5/G-2 by the synthetic-tree red twins
+  in `layer-direction-imports.test.mjs` (#762), where the G-5 roster is
+  asserted equal so a second edge and a vanished edge both fail naming
+  themselves; G-7 by the planted-orphan probe on a throwaway clone of the
+  pushed tree, which failed naming exactly `src/zz-orphan.mjs` (#763),
+  plus the roster's bidirectional teeth (rotten name, stale excuse,
+  unrostered orphan). (2) The DAG is stated (BOUNDARIES.md, #764) and
+  consistent with `module-graph.test.mjs`'s acyclicity — the suite runs
+  green on final main. (3) The boundary self-check is green —
+  `node packages/archkeep/cli.mjs check` on `cdce8fd`, recorded in this
+  PR's evidence comment.
+- **Checkpoints completed**: the phase ran as four units, each with its
+  own PR and lock table — 3-A the G-1/G-5/G-2 scans (#762), 3-B the G-7
+  orphan detector and test-support roster (#763), 3-C the intra-`src/`
+  DAG statement (#764), 3-D the G-3/G-4/G-6/G-8 dispositions (#765). No
+  per-unit CHK blocks: PD-17 routes refactor units through umbrella #725
+  plus the finding id in each PR body; this block is the phase's single
+  record.
+- **Invariants touched**: INV-13's gap closed — the orphan rule now
+  scans (`VALIDATION-MATRIX.md`'s Scanned register, #763).
+  INV-20/INV-21 untouched: OQ-4 is NOT claimed by this exit (below).
+- **Canonical ownership changes**: none — `SEMANTIC-MODEL.md` rows
+  untouched.
+- **Dependency-boundary changes**: BOUNDARIES.md grows the intra-`src/`
+  dependency DAG (DG-2 closed, #764) and records five pressure-edge
+  decisions, all keep-with-reason (analysis→rules, options↔analysis,
+  rules↔config, core→governance, report→rules).
+  `module-boundaries.config.mjs` is untouched — the scans are conformance
+  tests, not tag rows; the config judges cross-project tag edges only.
+- **Contracts affected and compatibility classification**: none — all
+  four units are test/docs-only; no CLI, schema, output-contract, or
+  exit-code surface moves, so no compatibility entry is due.
+- **Differential evidence**: `VALIDATION-MATRIX.md`'s Scanned sub-list
+  (#765) cites the per-gap witnesses — G-1/G-5/G-2 scans (real-tree edges
+  clean; G-5 exactly one edge, rostered) and G-7's entry-rooted walk plus
+  the roster (#763). The differential against
+  `@nx/enforce-module-boundaries` (inside `archkeep:test`) stays green on
+  final main.
+- **Architectural debt budget**: before — G-1, G-2, G-5, G-7 unscanned;
+  DG-2 unstated; G-3/G-4/G-6/G-8 undispositioned. Closed — G-1/G-2/G-5/G-7
+  scanned with red twins; DG-2 stated; G-3/G-6/G-8 recorded
+  keep-convention; G-4 dispositioned as scan-worthy and routed as a
+  follow-up on umbrella #725 (its own record says follow-up — not claimed
+  closed as a scan). Introduced — 0: two recorded follow-ups (the G-4
+  scan candidate; the four shipped-but-entry-unreached modules #763's
+  roster names) ride the umbrella; they are follow-ups, not new gaps.
+  Net — negative.
+- **Unresolved questions**: OQ-4 (do INV-20/INV-21 gain scans?) is NOT
+  resolved by this phase — no unit adjudicated it, so it carries
+  unchanged with its owner; claiming it here would be an unproven field.
+  OQ-6 is resolved: the Contract-K exempt-site roster is clock only —
+  witness `src/intent/determinism-source-guard.test.mjs`, whose
+  `WALL_CLOCK_ALLOWLIST` names exactly the injectable clock seam
+  (`governance/clock.mjs:27`) and whose empty-allow-list negative control
+  proves the exemption load-bearing; recorded beside
+  [INV-16](INVARIANTS.md#inv-16--clock-discipline) and as the register's
+  CLOSED — DECIDED entry, in this same PR.
+- **Rejected approaches**: adding the layer directions as tag rows in
+  `module-boundaries.config.mjs` (the config judges cross-project tag
+  edges only — intra-project directions there would be silent by
+  construction); re-homing the four shipped-but-entry-unreached modules
+  inside Phase 3 (a maintainer re-home-or-accept decision; the roster
+  keeps them named and rot-proofed meanwhile); claiming OQ-4 closed here
+  (no unit adjudicated it); a separate CHK block per unit (PD-17 keeps
+  the append-only ledger single-sourced per phase).
+- **Forbidden next moves / next**: do not start Phase 4 on this PR —
+  Phase 4 is **blocked by GAP-A** (PD-4) and awaits the maintainer's
+  approval to enter. Next: report the Phase-3 exit to the maintainer
+  with the two follow-ups (the G-4 scan candidate; the four-module
+  finding), then GAP-A's implementation per
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-4--internal-extraction-proven-gains-only)
+  once approved.
 
 ## Conventions maintained here
 

@@ -89,6 +89,13 @@ each closure in one line and links it.
   who named it — is the documented contract, stated once in
   [BOUNDARIES.md](BOUNDARIES.md)'s provider seam section. The widening
   remains its own compatibility-classified change.
+- **OQ-6 — the Contract-K exempt-site roster beyond the clock.** CLOSED by
+  PR #766 (Phase 3): clock only — the roster is exactly the injectable
+  seam, `WALL_CLOCK_ALLOWLIST = new Map([["governance/clock.mjs", [27]]])`
+  (`intent.test.mjs:1296`); the guard's own test
+  (`determinism-source-guard.test.mjs`) proves the exemption load-bearing
+  with an empty-allow-list negative control; recorded beside
+  [INV-16](INVARIANTS.md#inv-16--clock-discipline).
 
 ## VERIFICATION REQUIRED
 
@@ -97,11 +104,10 @@ names: owner (the phase that owes it), decision class, exact evidence
 required, the phase it blocks, what evidence closes it, and the no-issue
 outcome.
 
-| ID   | Question                                                                 | Owner                      | Evidence required                                                                                                                                             | Blocks                                 | What closes it                                                                                                                                                                   | No-issue outcome                                           |
-| ---- | ------------------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| OQ-4 | Do INV-20/INV-21 (static-reading-only, edges-never-nodes) gain scans?    | Phase 3                    | The investigation's record: per candidate scan — mechanical-witness cost, false-positive rate, false-negative rate, maintenance burden, architectural gain    | Phase 3's G-scan work                  | A scan adopted with a red-twin demonstration, **or** the recorded decision that none earns it — "no scan" is a legitimate outcome; a scan is not added because it can be written | The recorded "no scan" decision, with its reasons          |
-| OQ-6 | What is the Contract-K exempt-site roster beyond the clock?              | Phase 3                    | The determinism source guard's own test enumerates the roster; record it beside [INV-16](INVARIANTS.md#inv-16--clock-discipline)                              | Phase 3                                | The enumerated roster recorded with its witness                                                                                                                                  | "Clock only" recorded with the guard's test as the witness |
-| OQ-9 | What do `nightly.yml` and `check-docs-claims-parity.mjs` actually carry? | GAP-A work (Phase 4 entry) | Both files read; the [gap list](VALIDATION-MATRIX.md#differential-gaps-what-the-harness-cannot-prove-today) updated if nightly carries determinism/sweep legs | GAP-A's implementation (Phase 4 entry) | A recorded reading of both files, gap list updated or confirmed                                                                                                                  | Gap list confirmed unchanged — GAP-A's gates unaffected    |
+| ID   | Question                                                                 | Owner                      | Evidence required                                                                                                                                             | Blocks                                 | What closes it                                                                                                                                                                   | No-issue outcome                                        |
+| ---- | ------------------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| OQ-4 | Do INV-20/INV-21 (static-reading-only, edges-never-nodes) gain scans?    | Phase 3                    | The investigation's record: per candidate scan — mechanical-witness cost, false-positive rate, false-negative rate, maintenance burden, architectural gain    | Phase 3's G-scan work                  | A scan adopted with a red-twin demonstration, **or** the recorded decision that none earns it — "no scan" is a legitimate outcome; a scan is not added because it can be written | The recorded "no scan" decision, with its reasons       |
+| OQ-9 | What do `nightly.yml` and `check-docs-claims-parity.mjs` actually carry? | GAP-A work (Phase 4 entry) | Both files read; the [gap list](VALIDATION-MATRIX.md#differential-gaps-what-the-harness-cannot-prove-today) updated if nightly carries determinism/sweep legs | GAP-A's implementation (Phase 4 entry) | A recorded reading of both files, gap list updated or confirmed                                                                                                                  | Gap list confirmed unchanged — GAP-A's gates unaffected |
 
 ## MAINTAINER GATED
 
