@@ -60,12 +60,8 @@ import {
   TEXT_DOCUMENT_SYNC_KIND,
   uriToPath,
 } from "./protocol.mjs";
-import {
-  buildWorkspaceIndex,
-  listWorkspaceFiles,
-  PROJECT_CONFIG_FILE,
-  readWorkspaceFile,
-} from "./workspace-index.mjs";
+import { PROJECT_CONFIG_FILE } from "../providers/native/discover.mjs";
+import { buildWorkspaceIndex, listWorkspaceFiles, readWorkspaceFile } from "./workspace-index.mjs";
 
 /**
  * A project's own `package.json`, and the two spellings of its Module
@@ -232,8 +228,9 @@ const POLYGLOT_GRAPH_MANIFESTS = Object.freeze([
  * the annotations cached against the old one. The stale waiver then publishes
  * `[]` for a real violation for the rest of the session, which is the silent
  * direction exactly (`../../../../AGENTS.md`). `package.json` earns the entry a
- * second way as well: it is where `./workspace-index.mjs`'s `discoverProjects`
- * takes a project's NAME when its `project.json` states none, so an edit to it
+ * second way as well: it is where the static acquisition
+ * (`../providers/nx-static.mjs`'s `discoverProjects`) takes a project's NAME
+ * when its `project.json` states none, so an edit to it
  * can move a project in the graph and not only waive something in it.
  *
  * The polyglot graph manifests are here for that same argument one level out,

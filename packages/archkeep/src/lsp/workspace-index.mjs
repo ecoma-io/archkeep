@@ -6,33 +6,33 @@
  * (`../rules/README.md`). Under Nx that graph arrives from Nx. A language
  * server has no Nx — it is spawned by an editor, in a directory, with nothing
  * else — so this module builds the same shape from whichever source of truth
- * the root actually carries: the tracked `project.json` files when there is no
- * `archkeep.json` at the root, `../providers/native/`'s own `discover()`/
- * `buildGraph()` when there is (`buildNativeWorkspaceIndex` below), and
- * `../providers/moon.mjs`'s one-call `readProjectGraph` when the root carries
- * `.moon/` or `.config/moon/` (`buildMoonWorkspaceIndex`) — the same provider
- * object `../commands/context.mjs` hands `check`, so the editor's graph and
- * the CLI's come from one dispatch rather than two (#223). Before that Moon
- * branch existed, this module fell through to `discoverProjects` on a
- * `.moon`-rooted tree — which finds a project only by its `project.json`, a
- * file a Moon workspace never has — and built a zero-node index that read as
- * clean while `check` exited 1 on the same tree.
+ * the root actually carries: `../providers/nx-static.mjs`'s static acquisition
+ * from the tracked `project.json` files when there is no `archkeep.json` at
+ * the root, `../providers/native/`'s own `discover()`/`buildGraph()` when
+ * there is (`buildNativeWorkspaceIndex` below), and `../providers/moon.mjs`'s
+ * one-call `readProjectGraph` when the root carries `.moon/` or
+ * `.config/moon/` (`buildMoonWorkspaceIndex`) — every acquisition through the
+ * provider layer (`../../AGENTS.md`, "`src/providers/` is the only layer
+ * allowed to build a graph"), never per-surface. Before the Moon branch
+ * existed, this module fell through to static discovery on a `.moon`-rooted
+ * tree — which finds a project only by its `project.json`, a file a Moon
+ * workspace never has — and built a zero-node index that read as clean while
+ * `check` exited 1 on the same tree.
  *
- * `nodeTypeOf`, `PROJECT_CONFIG_FILE` and `buildDependencies` are imported
- * from `../providers/native/`, not defined here — that package is where a
- * `project.json`-shaped graph is built for BOTH the Nx-less native provider
- * and this server, so the two do not grow separate copies of Nx's own
- * `getProjectType` rule and its implicit-dependency expansion
- * (`../../AGENTS.md`, "`src/providers/` is the only layer allowed to build a
- * graph"). `discoverProjects` and `buildNodes` below are the Nx-shaped
- * branch's own project discovery — reading `project.json` is correct THERE,
- * because a root with no `archkeep.json` has no other source of truth to read.
+ * The static acquisition is the provider layer's, not this file's: what a
+ * `project.json` is, how its name resolves, which node type a project gets,
+ * how duplicate names are recorded — all of it lives in
+ * `../providers/nx-static.mjs`, beside the CLI-backed `readProjectGraph` it
+ * is the no-Nx counterpart of. This branch is the composition the seam
+ * contract assigns the caller: provider nodes in, annotations
+ * (`annotateMFERemotes`/`annotatePackageFacts`) and the workspace and the
+ * analysis and the edge folds composed around them, gap records out.
  *
- * ## Why the native branch cannot reuse `discoverProjects`
+ * ## Why the native branch cannot reuse the static acquisition
  *
  * A native workspace can declare or infer a project with no `project.json` at
- * all — the whole point of `archkeep.json` is not needing one — and
- * `discoverProjects` below finds nothing there. A silently missing project is
+ * all — the whole point of `archkeep.json` is not needing one — and static
+ * discovery finds nothing there. A silently missing project is
  * indistinguishable from a project that legitimately has no boundary
  * violations, which is exactly the hole `../../../../AGENTS.md`'s invariant
  * refuses ("An empty result is a claim, not a shrug"). So a root carrying
@@ -56,10 +56,11 @@
  *
  * No project name, no directory layout, no tag vocabulary (`../../AGENTS.md` —
  * the tool is installed into workspaces it has never seen). Everything below is
- * derived: projects from the `project.json` files that exist (Nx-shaped
- * branch) or from `archkeep.json`'s declared∪inferred model (native branch),
- * node types from `projectType` by Nx's own rule either way, tags from each
- * project's own list, edges from the imports the analyzers actually find.
+ * derived: projects from the `project.json` files that exist (static
+ * acquisition) or from `archkeep.json`'s declared∪inferred model (native
+ * branch), node types from `projectType` by Nx's own rule either way, tags
+ * from each project's own list, edges from the imports the analyzers actually
+ * find.
  *
  * ## Why the file list comes from git
  *
@@ -113,12 +114,7 @@ import { join } from "node:path";
 import { analyzeFile } from "../analysis/analyze.mjs";
 import { fileFailure, isWholeFileFailure } from "../analysis/source-util.mjs";
 import { containmentViolation } from "../containment.mjs";
-import { parseNxJson } from "../nx-json.mjs";
-import {
-  NX_CONFIG_FILE,
-  readWorkspaceLayout,
-  requireCompleteWorkspaceLayout,
-} from "../options.mjs";
+import { NX_CONFIG_FILE, readWorkspaceLayout } from "../options.mjs";
 import {
   analyzeWorkspace,
   annotateMFERemotes,
@@ -126,37 +122,17 @@ import {
   createWorkspace,
   listTrackedFiles,
 } from "../workspace.mjs";
+import { PROJECT_CONFIG_FILE } from "../providers/native/discover.mjs";
 import { buildDependencies, mergeDeclaredEdges } from "../providers/native/graph.mjs";
 import {
   resolveDeclaredManifestEdges,
   resolveDeclaredManifestFailures,
 } from "../graph/create-dependencies.mjs";
-import { nodeTypeOf, PROJECT_CONFIG_FILE } from "../providers/native/discover.mjs";
 import { ARCHKEEP_MODEL_FILE } from "../providers/native/model.mjs";
 import { nativeProvider } from "../providers/native/index.mjs";
 import { requireSingleProjectModel } from "../providers/model-gate.mjs";
 import { mergeImportEdges, moonProvider } from "../providers/moon.mjs";
-
-export { PROJECT_CONFIG_FILE, nodeTypeOf, buildDependencies };
-
-/**
- * One `project.json` — or the `package.json` beside it — read the way Nx reads
- * it, which is NOT `JSON.parse`.
- *
- * The reader itself is `../nx-json.mjs`, shared with `../options.mjs` because
- * `nx.json` has to be read the same way for the same reason. This name stays as
- * the local one because the stakes are specific to a project config, and worth
- * stating where a reader of this module will look for them: losing a
- * `project.json` here is the worst failure this server can have. The project
- * leaves the graph; an import into it then resolves as external rather than
- * cross-project; the rule engine's npm branch returns before the tag checks
- * run; and the editor paints a real violation clean.
- *
- * @param {string} text
- * @returns {object} Whatever the JSON describes.
- * @throws {Error} when neither parser can read it.
- */
-const parseProjectJson = parseNxJson;
+import { readStaticProjectGraph } from "../providers/nx-static.mjs";
 
 /**
  * Every file git considers part of the working tree, workspace-relative and
@@ -186,127 +162,6 @@ export function listWorkspaceFiles(root) {
       { cause },
     );
   }
-}
-
-/** The directory part of a workspace-relative path; `""` at the tree root. */
-const directoryOf = (file) => {
-  const slash = file.lastIndexOf("/");
-  return slash === -1 ? "" : file.slice(0, slash);
-};
-
-/**
- * The projects declared in a tree, from its `project.json` files.
- *
- * A `project.json` that will not parse is SKIPPED and reported, not thrown on:
- * one project being edited must not blank the graph for the other nineteen. The
- * caller decides how loud to be about the ones that were skipped.
- *
- * @param {{files: string[], readFile: (path: string) => string|null}} tree
- * @returns {{projects: {name: string, root: string, config: object}[], skipped: {file: string, reason: string}[]}}
- */
-export function discoverProjects({ files, readFile }) {
-  // used by its own test
-  const projects = [];
-  const skipped = [];
-  for (const file of files) {
-    if (file !== PROJECT_CONFIG_FILE && !file.endsWith(`/${PROJECT_CONFIG_FILE}`)) continue;
-    const text = readFile(file);
-    if (text === null) {
-      skipped.push({ file, reason: "could not be read" });
-      continue;
-    }
-    let config;
-    try {
-      config = parseProjectJson(text);
-    } catch (cause) {
-      skipped.push({ file, reason: `is not valid JSON: ${cause?.message ?? cause}` });
-      continue;
-    }
-    const root = directoryOf(file);
-    // Nx's own precedence: the name a project states, then the one its
-    // `package.json` states, then the directory it lives in.
-    const packageName = (() => {
-      const manifest = readFile(root === "" ? "package.json" : `${root}/package.json`);
-      if (manifest === null) return undefined;
-      try {
-        // The same parser, because Nx reads this file with the same
-        // `readJsonFile` — a `package.json` Nx can name a project from must
-        // not become a project named after its directory here.
-        return parseProjectJson(manifest).name;
-      } catch {
-        return undefined;
-      }
-    })();
-    const name =
-      config.name ?? packageName ?? (root === "" ? "" : root.slice(root.lastIndexOf("/") + 1));
-    if (typeof name !== "string" || name === "") {
-      skipped.push({ file, reason: "declares no usable project name" });
-      continue;
-    }
-    projects.push({ name, root, config });
-  }
-  return { projects, skipped };
-}
-
-/**
- * The graph nodes for a project list, in Nx's shape: `data` is the project's
- * own configuration with `tags` guaranteed present, because `../rules/tags.mjs`
- * reads it unguarded and an absent list is not the same fact as an empty one.
- *
- * @param {{name: string, root: string, config: object}[]} projects
- * @returns {{nodes: Record<string, object>, duplicateProjects: {name: string, roots: string[]}[]}}
- *   `duplicateProjects` names every name two or more projects resolved to and
- *   every root that claimed it (#375): a silent `nodes[name] = …` overwrite
- *   drops the shadowed project from the graph, its files match no root, and
- *   the editor publishes no diagnostics for real boundary crossings — the
- *   exact silent direction `../../../../AGENTS.md`'s invariant refuses. The
- *   first project still wins in `nodes` (the index stays usable); the caller
- *   publishes the collision through `indexGaps`.
- */
-export function buildNodes(projects) {
-  // used by its own test
-  // Null-prototype for the same reason `../providers/native/graph.mjs` and
-  // `../providers/moon.mjs` use them: every key here is a project NAME, and
-  // project names come from a `project.json`'s own `name` field —
-  // attacker-supplied the moment a pull request adds a project called
-  // `__proto__`. A plain `{}` answers `nodes["__proto__"] = …` by repointing
-  // the object's OWN prototype rather than adding an entry, so the project
-  // vanishes from `graph.nodes` while `filesOf` still attributes it files — a
-  // real cross-project import into it then read a poisoned Node as a graph
-  // node and flips/throws on every rule that touches it. `Object.create(null)`
-  // has no inherited `__proto__` accessor to collide with, so the name behaves
-  // like every other project name: a real, own, enumerable entry.
-  const nodes = Object.create(null);
-  /** @type {Map<string, string>} name → root of the first project that claimed it. */
-  const seenNames = new Map();
-  /** @type {Map<string, string[]>} name → every root that resolved to it, for names claimed twice or more. */
-  const duplicateMap = new Map();
-
-  for (const { name, root, config } of projects) {
-    if (seenNames.has(name)) {
-      // Duplicate name detected — record it for loud reporting
-      if (!duplicateMap.has(name)) {
-        duplicateMap.set(name, [seenNames.get(name)]);
-      }
-      duplicateMap.get(name).push(root);
-      // Skip adding the duplicate to nodes — first project wins
-      continue;
-    }
-    seenNames.set(name, root);
-    nodes[name] = {
-      name,
-      type: nodeTypeOf(name, config.projectType),
-      data: { ...config, root, tags: config.tags ?? [] },
-    };
-  }
-
-  // Convert the duplicate map to the expected output format
-  const duplicateProjects = [];
-  for (const [name, roots] of duplicateMap.entries()) {
-    duplicateProjects.push({ name, roots });
-  }
-
-  return { nodes, duplicateProjects };
 }
 
 /**
@@ -372,7 +227,7 @@ export function buildWorkspaceIndex({
   const { hasNx, moonMarker } = requireSingleProjectModel(root, { exists: pathExists });
   // A root carrying ARCHKEEP_MODEL_FILE has a project model this module does
   // not read from `project.json` at all — see this file's header — so it is
-  // handed to the native branch below rather than to `discoverProjects`.
+  // handed to the native branch below rather than to the static acquisition.
   //
   // Detected by READING the file, not by whether git tracks it: `../../cli.mjs`
   // and this server's own `readWorkspaceOptions` (`./server.mjs`'s `markersAt`)
@@ -381,7 +236,7 @@ export function buildWorkspaceIndex({
   // to the tree but not yet `git add`ed) exists by that test. Dispatching here
   // on `files.includes(...)` instead — `files` is the TRACKED list `listFiles`
   // returns — disagreed with both of them: this branch would fall through to
-  // `discoverProjects`, find no `project.json` for a native-only tree, and
+  // the static acquisition, find no `project.json` for a native-only tree, and
   // build a zero-node, zero-edge index that publishes `analyzed: true` with an
   // empty diagnostic list on a workspace `archkeep check` exits 1 on — the gap
   // machinery below has no entry for "wrong provider" to report. `readFile`
@@ -395,8 +250,14 @@ export function buildWorkspaceIndex({
     return buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph });
   }
 
-  const { projects, skipped } = discoverProjects({ files, readFile });
-  const { nodes, duplicateProjects } = buildNodes(projects);
+  // Static acquisition — see this file's header. The provider returns the
+  // nodes, the projects it skipped on the way, the duplicate-name records, and
+  // `nx.json`'s `workspaceLayout` merged onto the graph (`./nx.mjs`
+  // `readProjectGraph`'s own merge, in its caught-into-a-record form — that
+  // function's doc owns why the merge exists at all); this branch composes
+  // everything else around them.
+  const { nodes, skippedProjects, duplicateProjects, workspaceLayout, workspaceLayoutFailure } =
+    readStaticProjectGraph({ root, files, readFile, readLayout });
   // The same Module Federation fact the CLI path computes, from the same
   // predicate (`../workspace.mjs` → `annotateMFERemotes`): a CLI verdict and an
   // editor verdict on the same import must match, and the field failing closed
@@ -408,8 +269,8 @@ export function buildWorkspaceIndex({
   // write would fail closed — extra reports, not waived ones — but the two
   // faces would then disagree about the same import, which is the line
   // `src/lsp/` exists to hold. It also DELETES a stale `entryPoints` or
-  // `declaredPackages` riding in from `project.json` (`buildNodes` spreads that
-  // config into `data` verbatim), because an unmeasured claim that waives
+  // `declaredPackages` riding in from `project.json` (`../providers/nx-static.mjs`'s
+  // `buildNodes` spreads that config into `data` verbatim), because an unmeasured claim that waives
   // violations is the silent direction.
   annotatePackageFacts(nodes, readFile);
 
@@ -443,34 +304,9 @@ export function buildWorkspaceIndex({
   // silently missing edges.
   const manifestRefusalFailures = resolveDeclaredManifestFailures(workspace);
 
-  // `nx.json`'s `workspaceLayout` reaches the rule engine here the same way
-  // `../providers/nx.mjs`'s `readProjectGraph` merges it onto the graph it
-  // returns to `cli.mjs` — see that function's own doc for why a merge step
-  // exists at all (`nx graph --file=` itself emits no such key) and why a
-  // declared-but-incomplete layout is refused rather than completed
-  // (`requireCompleteWorkspaceLayout`, `../options.mjs`). Without this, an
-  // editor open on a workspace with a non-default `appsDir`/`libsDir` would
-  // draw no diagnostic for exactly the import `archkeep check` flags on the
-  // same tree — the language server's own stated rule (this package's
-  // `AGENTS.md`, "An empty diagnostic list must mean 'no violation'"),
-  // violated from the direction it exists to catch. A read/validation
-  // failure is caught rather than thrown onward — one malformed `nx.json`
-  // must not blank the whole index — and recorded as `workspaceLayoutFailure`
-  // for `indexGaps` to turn into a diagnostic, the same shape
-  // `nativeModelFailure` already uses for the native branch's own
-  // model-load failure.
-  let workspaceLayout;
-  let workspaceLayoutFailure = null;
-  try {
-    const declared = requireCompleteWorkspaceLayout(readLayout(root));
-    if (declared !== null) workspaceLayout = declared;
-  } catch (cause) {
-    workspaceLayoutFailure = cause?.message ?? String(cause);
-  }
-
   // An Nx-marked root that yielded no project at all is a tree this branch
   // could not see the shape of, not a tree with nothing in it.
-  // `discoverProjects` above finds a project only by its `project.json`, and a
+  // The static acquisition finds a project only by its `project.json`, and a
   // PACKAGE-BASED Nx workspace has none: its projects are declared in
   // `package.json` files, which this module reads only to resolve the NAME of a
   // project a `project.json` already found. `../providers/nx.mjs`'s
@@ -517,7 +353,7 @@ export function buildWorkspaceIndex({
     files,
     workspace,
     graph,
-    skippedProjects: skipped,
+    skippedProjects,
     fileFailures: [...fileFailures, ...manifestRefusalFailures],
     // Retained past the graph build — the evidence half of `evaluate()`'s
     // input (`./diagnose.mjs` composes its run from these). See this module
@@ -589,8 +425,8 @@ function analyzeTrackedFiles({ files, workspace }) {
 
 /**
  * The native branch of `buildWorkspaceIndex`: drives `../providers/native/`'s
- * two-call contract (`discover()` then `buildGraph()`) instead of
- * `discoverProjects`/`buildNodes`, because a `archkeep.json` project can have no
+ * two-call contract (`discover()` then `buildGraph()`) instead of the static
+ * acquisition (`../providers/nx-static.mjs`), because a `archkeep.json` project can have no
  * `project.json` at all — see this module's header.
  *
  * @param {{root: string, files: string[], readFile: (path: string) => string|null, tsConfig?: string}} args
@@ -711,10 +547,9 @@ function buildNativeWorkspaceIndex({ root, files, readFile, tsConfig }) {
 /**
  * The Moon branch of `buildWorkspaceIndex`: drives `../providers/moon.mjs`'s
  * one-call contract (`readProjectGraph`) — the same provider object
- * `../commands/context.mjs` hands `check` on this tree — instead of
- * `discoverProjects`/`buildNodes`, because a Moon project has no `project.json`
- * for those to find. See this module's header for the fall-through this branch
- * replaces.
+ * `../commands/context.mjs` hands `check` on this tree — instead of the static
+ * acquisition, because a Moon project has no `project.json` for it to find. See
+ * this module's header for the fall-through this branch replaces.
  *
  * @param {{root: string, files: string[], readFile: (path: string) => string|null, tsConfig?: string, readGraph: (root: string) => object}} args
  * @returns {ReturnType<typeof buildWorkspaceIndex>}
@@ -859,7 +694,7 @@ function buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph })
  *   command whose failure a developer has to resolve.
  * - **An `nxModelFailure` gap is that same family again, for the Nx-shaped
  *   branch's own project discovery.** Present only while `nx.json` marks the
- *   root AND `discoverProjects` found no project in it at all — never merely
+ *   root AND the static acquisition found no project in it at all — never merely
  *   because the root carries `nx.json`. A package-based Nx workspace (projects
  *   declared in `package.json`, no `project.json` anywhere) is the shape that
  *   reaches it, and reading that shape is NOT what this server does about it:
@@ -873,8 +708,8 @@ function buildMoonWorkspaceIndex({ root, files, readFile, tsConfig, readGraph })
  *   equivalent of `nativeModelFailure`, not a second copy of it.** It is
  *   present only while `NX_CONFIG_FILE`'s own `workspaceLayout` is malformed
  *   or declared partially (`../options.mjs`'s `readWorkspaceLayout` /
- *   `requireCompleteWorkspaceLayout`, called from `buildWorkspaceIndex`
- *   above) — never on the native branch, where the identically-shaped
+ *   `requireCompleteWorkspaceLayout`, called from the static acquisition
+ *   `../providers/nx-static.mjs`) — never on the native branch, where the identically-shaped
  *   failure already surfaces as `nativeModelFailure` instead (see
  *   `buildNativeWorkspaceIndex`). It **clears itself** the same way: `nx.json`
  *   is already a watched file (`./server.mjs`), so fixing it republishes

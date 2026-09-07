@@ -412,7 +412,7 @@ describe("annotating package facts onto the graph nodes", () => {
 
   it("DELETES a stale field a manifest-less node carried in from config — the silent direction", () => {
     // `nx graph --file=` copies arbitrary `project.json` keys into `data`
-    // verbatim, and `buildNodes` in `lsp/workspace-index.mjs` spreads the same
+    // verbatim, and `buildNodes` in `providers/nx-static.mjs` spreads the same
     // config. A stale `entryPoints` or `declaredPackages` riding in that way
     // would WAIVE violations on a claim nobody measured; deleting it restores
     // "absent fails closed".
