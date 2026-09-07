@@ -122,7 +122,13 @@ tracked, or a claim with no gate. Owners are phases or the maintainer.
 - **DG-1** single-owner-per-semantic-concept lived only in the (then
   untracked) constitution — closed: [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md)
   is the owner.
-- **DG-2** no stated/tested intra-`src/` dependency DAG — Phase 3.
+- **DG-2** no stated/tested intra-`src/` dependency DAG — closed:
+  [BOUNDARIES.md](BOUNDARIES.md#the-intra-src-dag) states the declared layer
+  rank and records a keep decision per measured pressure edge; each stated
+  edge is mapped to its enforcing test (`layer-direction.test.mjs`,
+  `verdict-layering.test.mjs`, `module-graph.test.mjs`, with G-1/G-5/G-2
+  scanned by #762 — the G-5 `report/sarif` exception rostered — and
+  reachability by #763).
 - **DG-3** snapshot/event family semantics beyond ADR-0008 live in code
   headers — [closed by PD-10](#closed--decided).
 - **DG-4** "descriptive commands project canonical evaluation; they never

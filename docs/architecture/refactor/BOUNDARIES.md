@@ -47,8 +47,9 @@ static-import assertion over the shipped tree, same mechanics as
 ## Measured pressure points (edges that exist today)
 
 The graph is acyclic and law-abiding, but these edges are where the declared
-layering bends (all verified by audit; none is a violation of any current
-rule):
+layering bends (all verified by audit and re-measured 2026-09-07 at 7fd2828;
+none violated an enforced rule — the fifth bends G-5's declared-but-unscanned
+letter, and its exception is rostered by #762):
 
 1. **`analysis → rules`** — `src/analysis/markdown.mjs:51` imports
    `rules/match.mjs` (analyzer consulting rule vocabulary).
@@ -58,11 +59,78 @@ rule):
    `config.mjs:132-141` imports `rules/match` + `rules/messages`.
 4. **core → governance** — `config.mjs:129-131` and `rules/index.mjs:58-59`
    import from `src/governance/`.
+5. **`report → rules`** — `report/sarif.mjs:58-65` imports
+   `rules/messages.mjs` (SARIF rule descriptors derived from the message
+   tables — the one home every violation message answers to, per that
+   file's header).
 
 Each is acceptable under
 [CON-0](CONSTITUTION.md#con-0--do-not-trade-semantic-maturity-for-structural-purity)
 until it costs something; Phase 3 records the decision per edge (keep, with a
 documented reason, or break) rather than blanket-forbidding them.
+
+## The intra-src DAG
+
+The declared layer chain, stated once so the graph has a doctrinal home and
+not only a test file (closing DG-2); then the five measured pressure edges
+from the section above, each with its recorded decision.
+
+**The declared chain.** The rank lives in `packages/archkeep/AGENTS.md`'s
+"Layout, and what each layer may know" — the engine is "one analysis behind
+three faces" (root AGENTS.md), and the layout is the
+order those faces compose in:
+
+```text
+entries       nx.mjs, index.mjs, commands.mjs — re-export only
+executables   cli.mjs, lsp.mjs — wiring only
+surface       commands/ → analysis/ → rules/ → report/
+feeds         options.mjs (the only filename-knowing layer) and providers/
+              (the only graph builders) feed commands/
+lsp/          composes the same engine the CLI does — analysis, rules,
+              providers — and is barred from commands/ (#649)
+conformance/  reads the whole shipped tree from outside it; the terminal tier
+```
+
+`lsp/` and `conformance/` sit after `report/` in the chain as rank, not as
+import: nothing in `src/` imports the executable faces, and the conformance
+suite is the reader everything answers to.
+
+**Declared directions and their enforcement.** Every stated edge maps to the
+test that fails when it breaks — or to the Phase 3 G-scan work that owes it
+("Declared but unscanned" above):
+
+| Stated edge                                         | Law    | Enforced by                                                  |
+| --------------------------------------------------- | ------ | ------------------------------------------------------------ |
+| core (`rules`, `analysis`, `report`) ↛ `providers/` | G-1    | #762                                                         |
+| `commands/` ↛ `lsp/`                                | G-2    | #762                                                         |
+| `report/` ↛ `rules/`, `config`                      | G-5    | #762 — with the `report/sarif` exception rostered (below)    |
+| `lsp/` ↛ `commands/`                                | #649   | `src/conformance/layer-direction.test.mjs`                   |
+| verdict core ↛ `report/`                            | INV-11 | `src/conformance/verdict-layering.test.mjs:1-31`             |
+| every `src/**.mjs` reachable, graph acyclic         | INV-13 | `src/conformance/module-graph.test.mjs` (reachability: #763) |
+
+**The pressure edges, decided.** Each measured edge above is recorded
+**keep**, per CON-0's bar — a boundary earns its existence only by making a
+previously possible dependency impossible or unnecessary, or by buying real
+isolation, and none of the five pays its way:
+
+| Edge                 | Measured at                                                                       | Decision | Reason                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------------------- | --------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `analysis → rules`   | `analysis/markdown.mjs:51` (`safeMatchesGlob`)                                    | keep     | the analyzer consults rule vocabulary — a pure shared primitive, not a judgment; a second glob matcher in `analysis/` is the duplicate-domain-model rejection CON-0 names. INV-10 is untouched: matching a glob decides nothing                                                                                                                                                          |
+| `options ↔ analysis` | `analysis/typescript.mjs:85` (`DEFAULT_OPTIONS`); `options.mjs:94` (`languageOf`) | keep     | both directions carry frozen vocabulary, not policy — the frozen Nx-conventions table and the import-free extension→language table kept apart so asking the language never loads the analyzers. Mutual at directory granularity only: `registry.mjs` imports nothing, so the module graph stays acyclic. Breaking either direction duplicates a frozen table                             |
+| `rules ↔ config`     | `rules/index.mjs:57`; `config.mjs:132-141`                                        | keep     | config validates rule-bearing rows using the rules' own vocabulary (glob grammar, message ids), then rules consume the validated config — validator and validated share one vocabulary by necessity. Module-level acyclic: `config.mjs` imports `rules/match` + `rules/messages`, never `rules/index`                                                                                    |
+| core → `governance/` | `config.mjs:129-131`; `rules/index.mjs:58-59`                                     | keep     | the imports are vocabulary and evidence — the clock, waiver fate and expired-waiver evidence, registry names; `rules/` cannot evaluate waiver expiry without the waiver vocabulary, and a private copy would be the duplicate domain model CON-0 rejects                                                                                                                                 |
+| `report → rules`     | `report/sarif.mjs:58-65` (`rules/messages.mjs`)                                   | keep     | report consumes the message tables as data — SARIF rule descriptors derived from the one home every violation message answers to, so a descriptor cannot drift from the text a user is shown. No verdict logic crosses: report still renders and decides nothing. Held honest by #762's roster-equality scan — a new forbidden edge fails, and removing this edge fails the stale roster |
+
+Four of the five owe no forbidding scan: they are intra-tier or
+vocabulary-shaped, and the guard that holds them is module-graph acyclicity.
+The fifth is not banned either — it is an exception with a roster (#762),
+the one shape a declared law may bend in without going quiet. A future
+break decision needs the cost named first — CON-0's bar is the entry
+price, not a formality.
+
+Measured by walking `packages/archkeep/src/` static imports (re-measured
+2026-09-07 at base 7fd2828); consistent with `module-graph.test.mjs`
+acyclicity.
 
 ## Provider seam
 
