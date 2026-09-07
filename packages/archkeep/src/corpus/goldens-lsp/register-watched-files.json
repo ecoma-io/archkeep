@@ -1,0 +1,72 @@
+{
+  "registrations": [
+    {
+      "id": "archkeep/watched-files",
+      "method": "workspace/didChangeWatchedFiles",
+      "registerOptions": {
+        "watchers": [
+          {
+            "globPattern": "**/module-boundaries.config.mjs"
+          },
+          {
+            "globPattern": "**/tsconfig.base.json"
+          },
+          {
+            "globPattern": "**/project.json"
+          },
+          {
+            "globPattern": "**/nx.json"
+          },
+          {
+            "globPattern": "**/archkeep.json"
+          },
+          {
+            "globPattern": "**/package.json"
+          },
+          {
+            "globPattern": "**/module-federation.config.js"
+          },
+          {
+            "globPattern": "**/module-federation.config.ts"
+          },
+          {
+            "globPattern": "**/go.mod"
+          },
+          {
+            "globPattern": "**/go.work"
+          },
+          {
+            "globPattern": "**/Cargo.toml"
+          },
+          {
+            "globPattern": "**/pyproject.toml"
+          },
+          {
+            "globPattern": "**/pom.xml"
+          },
+          {
+            "globPattern": "**/settings.gradle"
+          },
+          {
+            "globPattern": "**/settings.gradle.kts"
+          },
+          {
+            "globPattern": "**/build.gradle"
+          },
+          {
+            "globPattern": "**/build.gradle.kts"
+          },
+          {
+            "globPattern": "**/moon.yml"
+          },
+          {
+            "globPattern": "**/.moon/workspace.yml"
+          },
+          {
+            "globPattern": "**/.config/moon/workspace.yml"
+          }
+        ]
+      }
+    }
+  ]
+}
