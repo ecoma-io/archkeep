@@ -1,3 +1,7 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -6,6 +10,7 @@ import {
   boundaryNames,
   findIntentViolations,
   loadIntent,
+  loadIntentIfTracked,
   normalizeIntent,
   TOP_LEVEL_KEYS,
 } from "./model.mjs";
@@ -503,5 +508,42 @@ describe("the file's identity", () => {
       "dependencies",
       "forbiddenTags",
     ]);
+  });
+});
+
+describe("loadIntentIfTracked — the gate the cli.mjs drivers share", () => {
+  it("returns null when the tracked list does not name the file, reading nothing", async () => {
+    // The answer the three drivers render as their no-intent face. The real
+    // filesystem reader is in play on purpose: the gate must refuse BEFORE
+    // any byte is touched, so a nonexistent root proves the order. `null`,
+    // not `undefined` — the drivers branch on nullarity, and a helper that
+    // let `loadIntent`'s absent answer leak through would hand them
+    // `undefined` and silently skip the no-intent face.
+    await expect(
+      loadIntentIfTracked("/ws-definitely-absent", ["package.json"]),
+    ).resolves.toBeNull();
+  });
+
+  it("returns the model when the file is tracked and readable", async () => {
+    const root = await mkdtemp(join(tmpdir(), "archkeep-intent-"));
+    try {
+      await writeFile(join(root, INTENT_FILE), JSON.stringify(VALID));
+      await expect(loadIntentIfTracked(root, [INTENT_FILE, "package.json"])).resolves.toEqual(
+        normalizeIntent(VALID),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("propagates loadIntent's no-verdict throw for a tracked path whose bytes are absent", async () => {
+    // The silent direction: folding this throw into null would render, for a
+    // tree whose declared law exists but is unreadable, the same output as a
+    // workspace that declared none. The gate stays a pure equivalence with
+    // the ternary it replaced — this throw is what the shared catch folds to
+    // exit 3.
+    await expect(loadIntentIfTracked("/ws-definitely-absent", [INTENT_FILE])).rejects.toThrow(
+      /is tracked but could not be read/,
+    );
   });
 });
