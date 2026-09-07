@@ -247,12 +247,20 @@ spawnSync(
 writeTree(changeRoot, {
   "nx.json": NX_JSON,
   "module-boundaries.config.mjs": PERMISSIVE_LAW,
-  // One project-owned, analyzable source file: a run that judged nothing is
-  // the no-verdict lane (#599, shared with the throw family since #608), so
-  // the ok-side rows here need a workspace the run actually judged. Import-
-  // free, so it adds no blind spot and no edge to a fixture pinned on
-  // matched.
+  // The findings rows run in THIS repo too, and their verdict lane needs
+  // the override law on disk: `--config strict.config.mjs` resolves
+  // against the run's cwd, and changeRoot is where both findings sides
+  // live (the one committed fixture).
+  "strict.config.mjs": STRICT_LAW,
+  // One project-owned, analyzable source file per project. Both start
+  // import-free — a run that judged nothing is the no-verdict lane (#599,
+  // shared with the throw family since #608), so the ok-side rows here
+  // need a workspace the run actually judged, and the findings
+  // choreography needs a pre-import state to capture as its baseline. The
+  // strict-forbidden import is landed on disk by `beforeAll` AFTER those
+  // captures, so only the matrix's findings sides ever see it.
   "libs/domain/domain.js": 'export const name = "domain";\n',
+  "libs/adapter/adapter.js": 'export const name = "adapter";\n',
 });
 spawnSync("git", ["init", "-q", "-b", "main"], {
   cwd: changeRoot,
@@ -350,6 +358,33 @@ const seamFor = {
   }),
 };
 
+/**
+ * The change repo, one commit earlier in its architectural story: `domain`
+ * alone, no `adapter` yet, and every file on disk covered. `changeRoot` is
+ * the fixture that is a real git repository — the only one where a
+ * baseline's provenance commit resolves — so the findings sides capture
+ * their snapshots HERE and replay them against the full two-project graph,
+ * which makes the `domain → adapter` edge INTRODUCED: the one edge the
+ * strict law (also on disk here) forbids.
+ *
+ * @returns {{cwd: string, readGraph: Function, listFiles: Function}} The
+ *   seam a capture run reads.
+ */
+const seamForDomainOnly = () => ({
+  cwd: changeRoot,
+  readGraph: () => ({
+    nodes: {
+      domain: {
+        name: "domain",
+        type: "lib",
+        data: { root: "libs/domain", tags: ["layer:domain"] },
+      },
+    },
+    dependencies: {},
+  }),
+  listFiles: () => ["nx.json", "module-boundaries.config.mjs", "libs/domain/domain.js"],
+});
+
 /** Capturing streams for one in-process run. */
 const streams = () => {
   const out = [];
@@ -359,9 +394,12 @@ const streams = () => {
 
 let baseline;
 let deltaBaseline;
+let deltaFindingsBaseline;
 let changeBaseline;
 let changeIntent;
 let changeIntentWrongBase;
+let changeFindingsBaseline;
+let changeFindingsIntent;
 let scenarioFile;
 let tamperedCatalog;
 beforeAll(async () => {
@@ -381,11 +419,67 @@ beforeAll(async () => {
     EXIT.ok,
   );
 
-  // `change` reads an evidence baseline captured in its own committed world
-  // (its manifest pins the provenance commit) plus two manifests written from
-  // that snapshot's own provenance: the correct pin for the ok row, and a
-  // deliberately wrong one for the refused row — the quiet-direction case,
-  // which must exit 3 rather than reconcile against a base nobody declared.
+  // The findings sides need an INTRODUCED violation, and `delta`/`change`
+  // classify violations over analyzed import records — the evidence the
+  // analyzers read off the tree — not over the injected graph alone. So
+  // the choreography runs in three beats, all inside the one committed
+  // fixture. First, while `domain.js` is still import-free, capture the
+  // findings baselines: the domain-only view of the same tree, judged
+  // under the strict law whose fingerprint both sides must share (a law
+  // edit between capture and compare retires the introduced/resolved
+  // lanes by design). Their provenance pin is the fixture's commit.
+  deltaFindingsBaseline = join(artifactsDir, "delta-findings-baseline.json");
+  const deltaFindingsCaptureRun = { ...streams(), ...seamForDomainOnly() };
+  expect(
+    await runCli(
+      ["delta", "--capture", "--config", "strict.config.mjs", "--output", deltaFindingsBaseline],
+      deltaFindingsCaptureRun,
+    ),
+  ).toBe(EXIT.ok);
+  changeFindingsBaseline = join(artifactsDir, "change-findings-baseline.json");
+  const changeFindingsCaptureRun = { ...streams(), ...seamForDomainOnly() };
+  expect(
+    await runCli(
+      ["delta", "--capture", "--config", "strict.config.mjs", "--output", changeFindingsBaseline],
+      changeFindingsCaptureRun,
+    ),
+  ).toBe(EXIT.ok);
+  const findingsCommit = JSON.parse(readFileSync(changeFindingsBaseline, "utf8")).provenance.commit;
+  changeFindingsIntent = join(artifactsDir, "change-findings-intent.json");
+  writeFileSync(
+    changeFindingsIntent,
+    `${JSON.stringify(
+      {
+        version: "1",
+        base: { commit: findingsCommit },
+        projects: { add: ["adapter"], remove: [] },
+        edges: { add: [{ from: "domain", to: "adapter" }], remove: [] },
+        // The declarative gate: without `noNewViolations` the change fold
+        // never judges the introduced set at all — an omitted constraint
+        // was never asserted, so the findings row must DECLARE it.
+        constraints: { noNewViolations: true },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  // Second beat: land the strict-forbidden import on disk — the record the
+  // findings sides classify. Everything captured above keeps its
+  // pre-import view; every row that RUNS from here on sees the record.
+  writeFileSync(
+    join(changeRoot, "libs/domain/domain.js"),
+    'import { name } from "../adapter/adapter.js";\nexport const out = name;\n',
+  );
+
+  // Third beat: `change`'s ok row reads an evidence baseline captured in
+  // its own committed world AFTER the import — its manifest pins that
+  // snapshot's provenance commit, the baseline already holds the record
+  // the head shows, and nothing is introduced, so the empty manifest
+  // matches and exits 0. Two manifests come from the same snapshot: the
+  // correct pin for the ok row, and a deliberately wrong one for the
+  // refused row — the quiet-direction case, which must exit 3 rather than
+  // reconcile against a base nobody declared.
   changeBaseline = join(artifactsDir, "change-baseline.json");
   const changeCaptureRun = { ...streams(), ...seamFor.change() };
   expect(await runCli(["delta", "--capture", "--output", changeBaseline], changeCaptureRun)).toBe(
@@ -493,6 +587,16 @@ const MATRIX = {
       argv: () => ["delta", join(artifactsDir, "no-such-evidence.json")],
       exit: EXIT.error,
     },
+    // A baseline captured over the domain-only snapshot of the committed
+    // change repo, compared against its full two-project graph under the
+    // strict law: `domain → adapter` is an INTRODUCED edge the strict law
+    // forbids — the findings exit 1, the lane the two-side shape had
+    // nowhere to carry.
+    findings: {
+      world: "change",
+      argv: () => ["delta", deltaFindingsBaseline, "--config", "strict.config.mjs"],
+      exit: EXIT.violations,
+    },
   },
   change: {
     // The committed change world, its own baseline captured there, and a
@@ -508,6 +612,23 @@ const MATRIX = {
       world: "change",
       argv: () => ["change", changeBaseline, "--intent", changeIntentWrongBase],
       exit: EXIT.error,
+    },
+    findings: {
+      // The same introduced-edge mechanics, through the declared lane: the
+      // domain-only snapshot, a manifest declaring exactly the added
+      // project and edge, and the strict law — the declared edge is
+      // introduced and forbidden, so the verdict is findings (1), never a
+      // quiet match.
+      world: "change",
+      argv: () => [
+        "change",
+        changeFindingsBaseline,
+        "--intent",
+        changeFindingsIntent,
+        "--config",
+        "strict.config.mjs",
+      ],
+      exit: EXIT.violations,
     },
   },
   discover: {
