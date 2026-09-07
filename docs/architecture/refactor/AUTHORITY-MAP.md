@@ -168,12 +168,19 @@ are since closed by Phase 1, annotated in place:
    hostile review; the seam table records it with its per-item verdict
    owed to Phase 2-A, so the closure names five and the seam contract
    carries six.
-2. **LSP holds a second Nx discovery** — `workspace-index.mjs:398-533`
+2. ~~**LSP holds a second Nx discovery** — `workspace-index.mjs:398-533`
    re-implements Nx project-graph discovery for the editor; package-based Nx
    workspaces yield zero editor nodes while the CLI sees them. Mitigated by
    `nxModelFailure` loudness; structurally a second implementation of a
    provider seam (Phase 7). Registered against the seam contract's table as
-   a temporary divergence with its Current/Target/Phase/Reason block.
+   a temporary divergence with its Current/Target/Phase/Reason block.~~ —
+   **CLOSED by Phase 7**: the discovery is now the provider layer's —
+   `providers/nx-static.mjs`'s `readStaticProjectGraph`, composed by
+   `workspace-index.mjs:260` as the seam contract's fourth row records
+   ([BOUNDARIES.md](BOUNDARIES.md#provider-seam)); the package-based blind
+   spot stays a recorded `nxModelFailure` gap, and the collapse was proven
+   behavior-identical against the GAP-E golden corpus
+   ([VALIDATION-MATRIX.md](VALIDATION-MATRIX.md#differential-gaps)).
 3. **MCP imports past its seam** — `packages/archkeep-mcp/src/engine.mjs:71`
    imports `findWorkspaceRoot`/`listTrackedFiles` from the package root,
    widening the documented `./commands`-only seam (Phase 7 hygiene).

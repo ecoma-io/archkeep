@@ -73,7 +73,7 @@ describe("discoverNativeProjects", () => {
     // `manifest` was falsy (`!manifest`), but a `project.json` that EXISTS
     // and simply omits `name` is still a truthy manifest — that guard skipped
     // `package.json` entirely and fell straight to the directory basename,
-    // one rung early. `../../lsp/workspace-index.mjs`'s `discoverProjects`,
+    // one rung early. `../nx-static.mjs`'s `discoverProjects`,
     // the oracle this precedence reproduces, reads `package.json`
     // unconditionally; this project.json-present-but-nameless case is the one
     // that told the two implementations apart.

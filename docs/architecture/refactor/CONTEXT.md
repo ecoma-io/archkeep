@@ -1342,6 +1342,49 @@ checkpoint).
 - **Next**: Phase 7 (additional surfaces) starts only through its own gate —
   the maintainer's steering governs when.
 
+### CHK-8 — Phase 7 progress: GAP-E corpus + LSP provider convergence (2026-09-07)
+
+- **ID**: CHK-8. **Phase**: 7 (mid-phase). **Status**: two units landed on
+  this branch — GAP-E `3194e7e` (corpus recorded BEFORE the refactor) and the
+  7-A collapse `5df63c0d`. Maintainer-delegated execution (PD-18); Phase 7
+  continues — MCP seam unit in flight, VS Code disposition and the provider
+  boundary re-measure to close.
+- **Units**: GAP-E — `src/corpus/goldens-lsp/` (6 recorded artifacts: the
+  `initialize` result, the watcher registration, and four
+  `publishDiagnostics` records, two of them EMPTY — the invariant's silent
+  direction pinned as bytes) over one Nx-shaped fixture, gated by
+  `src/corpus/lsp-golden.integration.test.mjs` spawning the real server over
+  stdio; one L3 normalization (`serverInfo.version`, the `sampleTime`
+  precedent). 7-A — the private Nx acquisition `workspace-index.mjs` held
+  inline moved to `src/providers/nx-static.mjs`
+  (`discoverProjects`/`buildNodes`/`readStaticProjectGraph`); the index
+  composes it (`workspace-index.mjs:260`) and keeps annotation and edge
+  folding caller-side per the seam contract; ownership move only — static
+  strategy kept (no spawn per file save), records-not-throws failure policy
+  kept, and the `workspaceLayout`-read catch moved with the code verbatim
+  (`workspaceLayoutFailure` — the index's own pre-existing behavior, not a
+  new shape; the provider's throw contrast is with the CLI's
+  `readProjectGraph`, which blanks the run). No input class changes
+  verdict.
+- **Canonical ownership changes**: one — Nx static acquisition now lives in
+  `src/providers/`, where [BOUNDARIES.md](BOUNDARIES.md#provider-seam)'s
+  table has its fourth row and
+  [AUTHORITY-MAP.md](AUTHORITY-MAP.md#known-divergences-and-pressures)
+  divergence 2 is closed. The provider-shape question the table posed
+  ("whether the coupling earns a shared shape") is answered no — no consumer
+  needs one to compose, and an unused interface is a speculative
+  abstraction. No SEMANTIC-MODEL row moved.
+- **Debt budget**: gaps before — GAP-E (no recorded LSP responses),
+  divergence 2 (LSP-private acquisition), divergence 3 (MCP past-seam
+  import); gaps closed — GAP-E and divergence 2; gaps introduced — none; net
+  delta — negative (divergence 3 is the MCP unit's, in flight).
+- **Evidence**: the corpus is the differential — 4/4 golden cases
+  byte-identical across the collapse; LSP + provider suites 294 passed;
+  touched suites 79 passed; full package suite 5934/5934 (220 files); tsc,
+  eslint, prettier clean; this repository's own boundary check exit 0.
+- **Next**: Phase 7 close (MCP seam verdict, VS Code disposition, provider
+  re-measure), then Phase 8 under the maintainer's steering.
+
 ## Conventions maintained here
 
 - Phase completions append a CHK-n block above, never edit an old one.

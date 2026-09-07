@@ -640,3 +640,47 @@ exists). A record never restates the constitution — a field whose answer is
     and the doc gates — run without artificial saturation, #770's caveat
     referenced where timing appears.
   - _Supersedes_: nothing.
+- **PD-19 (2026-09-07) — the GAP-E golden-response scope (closes OQ-11).**
+  - _Question_ (OQ-11's, gate: Phase 7 entry): what is the minimal
+    recorded-response set that makes a language-server refactor provable —
+    enough that a change to what an editor sees cannot land silently, and
+    no larger?
+  - _Evidence_: the server's observable contract is exactly what it puts on
+    the stdio wire. The refactor 7-A moves is the acquisition behind
+    `publishDiagnostics`, so the differential must pin the diagnostic
+    records — including the EMPTY ones, because the invariant's silent
+    direction (an empty list where findings exist) is byte-identical to a
+    clean workspace and no value-level assertion can tell them apart. The
+    `initialize` result and watcher registration pin the two remaining
+    observable surfaces; the shutdown exit code is already asserted (L1) by
+    the lifecycle suite.
+  - _Decision_ (maintainer-delegated ruling, this session — the corpus PR
+    is the veto window): six recorded artifacts over one Nx-shaped fixture
+    tree — the shape whose private acquisition the collapse replaces: the
+    `initialize` result, the `client/registerCapability` watcher list, and
+    four `publishDiagnostics` records (two empty, one with violations, one
+    over an unparseable manifest). Comparison is canonical JSON — deep-sorted
+    keys, values exact — at validation level 2, with one level-3
+    normalization, `serverInfo.version` (release-coupled; the corpus's
+    `sampleTime` precedent), its reason recorded beside the comparator.
+    Human-gated regeneration via `ARCHKEEP_UPDATE_GOLDENS=1`. Recorded
+    BEFORE the 7-A collapse; the corpus is that collapse's differential.
+  - _Alternatives rejected_: a three-tree matrix (native/Moon fixtures too)
+    — the refactor moves only the Nx-static path, the other two branches
+    are untouched and already covered by their index and integration
+    suites, and every added golden is a re-bless owed on every intentional
+    server change; raw wire bytes (headers and key order included) — key
+    order is no contract, and pinning it would make object-construction
+    order a false finding; broader mutation of fixture content per record —
+    the four diagnostic records already span the loud and silent
+    directions.
+  - _Consequences_: every later server change lands as a reviewable golden
+    diff; intentional behavior changes re-bless on the pull request, and an
+    unintentional one cannot pass CI.
+  - _Compatibility impact_: none — test-only; nothing shipped moves.
+  - _Owner_: this record; the corpus and gate live in the Phase 7 PRs
+    tracking umbrella #725 (finding id 7-B corpus, then 7-A collapse).
+  - _Verification/acceptance evidence_: 4/4 golden cases byte-identical
+    across the collapse; the LSP/provider/full-package suites and the doc
+    gates green on both PRs.
+  - _Supersedes_: nothing.

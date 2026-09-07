@@ -8,7 +8,7 @@
  * manifest matching `projects.infer` (`project.json`, `package.json`, `go.mod`,
  * `Cargo.toml`, `pyproject.toml` unless the model says otherwise) contributes
  * one more UNLESS its directory is already a declared root. Name precedence
- * reproduces Nx's own exactly — `discoverProjects` in `../../lsp/workspace-index.mjs`
+ * reproduces Nx's own exactly — `../nx-static.mjs`'s `discoverProjects`
  * is the oracle: `config.name ?? packageName ?? directoryBasename` — so a tree
  * that used to run Nx and now runs `archkeep.json` names its projects the same
  * way it always did.
@@ -21,15 +21,16 @@
  * (`../../rules/tags.mjs`) only ever needs to know a project HAS a tag, never
  * where it came from.
  *
- * `nodeTypeOf` and `PROJECT_CONFIG_FILE` live here rather than in
+ * `nodeTypeOf` and `PROJECT_CONFIG_FILE` live here rather than beside their
+ * consumers — `../nx-static.mjs` (the static Nx acquisition) and
  * `../../lsp/workspace-index.mjs`, which used to define them: this module is
  * the promotion target (`../../../AGENTS.md`, "`src/providers/` is the layer
- * that supplies a graph to `evaluate()`"), and `../../lsp/workspace-index.mjs`
- * now imports both from here. Defining them there instead would mean
- * importing `../../lsp/workspace-index.mjs` from this module — which imports
- * `../../workspace.mjs`, which loads the TypeScript compiler at module scope
- * (`../../process.mjs`'s header) — for two functions that need nothing beyond
- * a string.
+ * that supplies a graph to `evaluate()`"), and both consumers import them
+ * from here. Defining them in the acquisition instead would point this
+ * module at its own consumer for two functions that need nothing beyond a
+ * string; defining them in `../../lsp/workspace-index.mjs` would be worse —
+ * that module imports `../../workspace.mjs`, which loads the TypeScript
+ * compiler at module scope (`../../process.mjs`'s header).
  */
 import { basenameMatches } from "../../analysis/manifest-util.mjs";
 import { fileFailure } from "../../analysis/source-util.mjs";
@@ -80,7 +81,7 @@ const basenameOf = (root) => (root === "" ? "" : root.slice(root.lastIndexOf("/"
 /**
  * `project.json` at `projectRoot`, parsed the same JSONC-tolerant way
  * `../../nx-json.mjs` reads every other config this package trusts —
- * `../../lsp/workspace-index.mjs` reads its own copy of `project.json` the
+ * `../nx-static.mjs` reads its copy of `project.json` the
  * same way, so a trailing comma or a comment that Nx itself accepts is not a
  * reason for this provider to disagree with it.
  *
@@ -146,7 +147,7 @@ function readProjectManifest(projectRoot, readFile, isTracked) {
  * `nx`, `dist/plugins/package-json.js`'s `createNodeFromPackageJson` reads
  * every tracked `package.json` that way, the same `jsonc-parser` Nx reads
  * `nx.json` and `project.json` with — even though `npm install` itself is
- * strict JSON about the same file. `../../lsp/workspace-index.mjs`'s
+ * strict JSON about the same file. `../nx-static.mjs`'s
  * `discoverProjects`, the oracle this module's own header cites for name
  * precedence, reads `package.json` through that same reader
  * (`parseProjectJson`, its local name for `parseNxJson`) for exactly that
@@ -355,7 +356,7 @@ export function discoverNativeProjects({ root, files, readFile, model }) {
     // gating this read on `manifest` being falsy skipped `package.json`
     // entirely for that project, landing straight on the directory basename
     // and skipping the middle rung of the precedence chain below.
-    // `../../lsp/workspace-index.mjs`'s `discoverProjects` — the oracle this
+    // `../nx-static.mjs`'s `discoverProjects` — the oracle this
     // module's own header names for this exact precedence — reads
     // `package.json` the same unconditional way for the same reason.
     const { name: packageName, failure: packageFailure } = readPackageName(
@@ -364,7 +365,7 @@ export function discoverNativeProjects({ root, files, readFile, model }) {
       isTracked,
     );
     if (packageFailure) failures.push(packageFailure);
-    // Nx's own precedence, reproduced exactly (`../../lsp/workspace-index.mjs`,
+    // Nx's own precedence, reproduced exactly (`../nx-static.mjs`,
     // `discoverProjects`): a declared name, then `project.json`'s, then
     // `package.json`'s, then the directory basename.
     const name = declared?.name ?? manifest?.name ?? packageName ?? basenameOf(projectRoot);

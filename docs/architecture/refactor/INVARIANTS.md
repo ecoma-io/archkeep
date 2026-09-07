@@ -100,8 +100,9 @@ because they share one function.
 - Witness: Contract-K source guard (no `Date.now`/`Math.random`/`localeCompare`
   in shipped `src/`, one exempt clock site); all-command sortedness;
   `check` 4-run byte-identity; e2e determinism legs.
-- Gap: byte-identity covers `check` only (GAP-B); no cross-version output
-  baseline (GAP-D).
+- Gap: no cross-version output baseline (GAP-D); byte-identity itself now
+  covers every read-only verb (GAP-B closed —
+  [VALIDATION-MATRIX.md](VALIDATION-MATRIX.md#differential-gaps)).
 
 ## INV-8 — Proposals never decide
 
