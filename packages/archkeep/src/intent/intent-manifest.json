@@ -84,7 +84,7 @@
           "type": "source-evidence",
           "path": "AGENTS.md",
           "assertion": "src/graph/ is a lossy view of analysis, on purpose; src/analysis/ never judges",
-          "sha256": "3209154935cc1463127721203da74dc8bf8ba40258b182c5faa7345946611e38"
+          "sha256": "552b54c1956370f024ffeecec95c0e0941a0c66d4a14094045b444a25a27f913"
         }
       ],
       "status": "proven"
