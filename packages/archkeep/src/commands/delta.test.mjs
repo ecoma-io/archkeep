@@ -274,6 +274,7 @@ describe("deltaCommand", () => {
     });
     expect(result.delta.summary.introduced).toBe(0);
     expect(result.status).toBe("ok");
+    expect(result.exitCode).toBe(0);
   });
 
   it("classifies a head-only violation as introduced and folds it into exit 1", async () => {
@@ -289,6 +290,7 @@ describe("deltaCommand", () => {
     );
 
     expect(result.status).toBe("findings");
+    expect(result.exitCode).toBe(1);
     expect(result.delta.summary.introduced).toBe(1);
     const envelope = JSON.parse(result.report.json);
     expect(envelope.status).toBe("findings");
@@ -377,6 +379,7 @@ describe("deltaCommand", () => {
 
     expect(result.delta.summary.unresolvable.unknown).toBe(1);
     expect(result.status).toBe("no-verdict");
+    expect(result.exitCode).toBe(3);
     const envelope = JSON.parse(result.report.json);
     expect(envelope.exitCode).toBe(3);
     expect(envelope.decision.verdict).toBe("unknown");
@@ -408,6 +411,7 @@ describe("deltaCommand", () => {
     // The verdict is withheld through the structured no-verdict envelope, the
     // same machine contract the graph family speaks — never a clean delta.
     expect(result.status).toBe("no-verdict");
+    expect(result.exitCode).toBe(3);
     const envelope = JSON.parse(result.report.json);
     expect(envelope.status).toBe("no-verdict");
     expect(envelope.exitCode).toBe(3);
@@ -612,6 +616,7 @@ describe("deltaCommand with custom rules", () => {
     });
 
     expect(result.status).toBe("no-verdict");
+    expect(result.exitCode).toBe(3);
     expect(result.delta.customRules.skipped[0].reason).toContain("re-capture the baseline");
     expect(result.report.text).toContain("re-capture the baseline");
   });

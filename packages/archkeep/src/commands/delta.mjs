@@ -604,8 +604,8 @@ const short = (fingerprint) =>
  *   `loadIntent`; absent intent ⇒ no ids, an in-band note says so), and the
  *   custom-rule host's two injectable seams, passed through to
  *   `customRulesForDelta`.
- * @returns {Promise<{status: "ok"|"findings"|"no-verdict", delta?: object,
- *   coverage: object,
+ * @returns {Promise<{status: "ok"|"findings"|"no-verdict",
+ *   exitCode: 0|1|3, delta?: object, coverage: object,
  *   eventWrite?: {id: string, duplicate: boolean}|null,
  *   report: {text: string, json: string, sarif?: string}}>} `delta` carries
  *   the additive `classifications`/`affected` fields (design §1); `eventWrite`
@@ -866,6 +866,7 @@ export async function deltaCommand(
     };
     return {
       status: fold.status,
+      exitCode: fold.exitCode,
       coverage: refusalCoverage,
       report: {
         text: `delta: no verdict — ${fold.refused}\n`,
@@ -1106,6 +1107,7 @@ export async function deltaCommand(
 
   return {
     status,
+    exitCode,
     eventWrite,
     delta: result,
     coverage,

@@ -1298,6 +1298,7 @@ export async function check(
         });
 
   return {
+    exitCode: verdict.exitCode,
     report,
     violations: violations.length,
     waived,
@@ -1320,10 +1321,9 @@ export async function check(
     customRulesDeclared: customRules !== null,
     analyzed,
     unchecked,
-    // The site-level count `verdictFor` needs: `cli.mjs` reads these count
-    // fields into its own `verdictFor` call for the process's exit code, so a
-    // count the envelope saw but the exit code did not would let the two
-    // disagree.
+    // The exit authority is `verdict` above, surfaced on this return: the
+    // process exit code comes straight from this field, so a count the
+    // envelope saw but the exit code did not would let the two disagree.
     blindSpots: blindSpotCount,
   };
 }

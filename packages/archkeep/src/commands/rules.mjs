@@ -341,7 +341,8 @@ export async function rulesInfoCommand(options, { cwd, ruleName }) {
  *
  * @param {{catalog?: string}} options The parsed command options.
  * @param {{cwd: string}} runContext The command context.
- * @returns {Promise<{status: "ok"|"findings"|"no-verdict", catalog: object, report: {text: string, json: string}}>}
+ * @returns {Promise<{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3,
+ *   catalog: object, report: {text: string, json: string}}>}
  */
 export async function rulesVerifyCommand(options, { cwd }) {
   const catalogPath = resolveCatalogPath(options, cwd);
@@ -473,6 +474,7 @@ export async function rulesVerifyCommand(options, { cwd }) {
 
   return {
     status,
+    exitCode,
     catalog,
     report: {
       text,

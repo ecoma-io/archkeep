@@ -158,7 +158,7 @@ import {
 import { INTENT_FILE, loadIntentIfTracked } from "./src/architecture-intent/model.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { readPluginOptions } from "./src/options.mjs";
-import { EXIT, verdictFor } from "./src/verdict.mjs";
+import { EXIT } from "./src/verdict.mjs";
 
 import { ARCHKEEP_MODEL_FILE, loadNativeModel } from "./src/providers/native/model.mjs";
 import { findWorkspaceRoot, listTrackedFiles } from "./src/workspace.mjs";
@@ -788,9 +788,9 @@ async function runCheck(options, { cwd, env }) {
         (result.intentFindings > 0
           ? `, ${result.intentFindings} architecture-intent finding${result.intentFindings === 1 ? "" : "s"}`
           : "") +
-        // Fitness drives the exit code exactly like every count above it
-        // (`verdictFor`) — omitting it here is what let a fitness-only
-        // failure log "0 violations …" beside a non-zero exit.
+        // Fitness drives the exit code exactly like every count above it —
+        // omitting it here is what let a fitness-only failure log "0
+        // violations …" beside a non-zero exit.
         (result.fitnessFail > 0
           ? `, ${result.fitnessFail} fitness function${result.fitnessFail === 1 ? "" : "s"} failed`
           : "") +
@@ -798,9 +798,9 @@ async function runCheck(options, { cwd, env }) {
           ? `, ${result.fitnessUnknown} fitness function${result.fitnessUnknown === 1 ? "" : "s"} undetermined`
           : "") +
         // Custom rules drive the exit code exactly like every count above
-        // them (`verdictFor`), so they are named here for the same reason
-        // fitness is: a custom-rule-only failure would otherwise log
-        // "0 violations …" beside a non-zero exit.
+        // them, so they are named here for the same reason fitness is: a
+        // custom-rule-only failure would otherwise log "0 violations …"
+        // beside a non-zero exit.
         (result.customRuleFail > 0
           ? `, ${result.customRuleFail} custom rule${result.customRuleFail === 1 ? "" : "s"} failed`
           : "") +
@@ -816,29 +816,11 @@ async function runCheck(options, { cwd, env }) {
     env.out(result.report);
   }
 
-  // The counts literal, not `check`'s whole return: `verdictFor`'s input latch
-  // refuses any key outside its 14-count roster, so a misspelled count key
-  // here is a no-verdict exit rather than a silently-defaulted zero — and
-  // `check`'s return carries non-count fields (`report`, `waived`, the custom-
-  // rule evidence) the fold must not be handed. The same 14 fields `check`'s
-  // own envelope fold spells (`./src/commands/check.mjs`): one counts
-  // vocabulary, two call sites, both validated.
-  return verdictFor({
-    violations: result.violations,
-    declaredEdgeFindings: result.declaredEdgeFindings,
-    goWorkDrift: result.goWorkDrift,
-    tsconfigPathsDead: result.tsconfigPathsDead,
-    intentFindings: result.intentFindings,
-    intentUnresolved: result.intentUnresolved,
-    intentUnresolvedDecisionRefs: result.intentUnresolvedDecisionRefs,
-    unchecked: result.unchecked,
-    analyzed: result.analyzed,
-    blindSpots: result.blindSpots,
-    fitnessFail: result.fitnessFail,
-    fitnessUnknown: result.fitnessUnknown,
-    customRuleFail: result.customRuleFail,
-    customRuleUnknown: result.customRuleUnknown,
-  }).exitCode;
+  // `check`'s own verdict rides its return (`./src/commands/check.mjs`): the
+  // command computes the one exit authority, and the process returns it
+  // unmodified — a second fold here would be a second chance for the printed
+  // verdict and the process exit to disagree.
+  return result.exitCode;
 }
 
 /**
@@ -1092,13 +1074,10 @@ async function runDelta(options, { cwd, env }) {
     );
   }
 
-  // The exit fold `deltaCommand` computed: a non-waived introduced violation
-  // is a finding, an unclassifiable item is a no-verdict, anything else is
-  // clean — mapped here the same way `fitness`'s status is.
-  return (
-    { ok: EXIT.ok, findings: EXIT.violations, "no-verdict": EXIT.error }[result.status] ??
-    EXIT.error
-  );
+  // The exit `deltaCommand` computed: a non-waived introduced violation is a
+  // finding, an unclassifiable item is a no-verdict, anything else is clean —
+  // the command's return carries the pair, the process returns it as is.
+  return result.exitCode;
 }
 
 /**
@@ -1412,12 +1391,9 @@ async function runChange(options, { cwd, env }) {
     env.out(report);
   }
 
-  // The verdict fold `changeCommand` computed, mapped here the way `delta`'s
-  // and `fitness`' are.
-  return (
-    { ok: EXIT.ok, findings: EXIT.violations, "no-verdict": EXIT.error }[result.status] ??
-    EXIT.error
-  );
+  // The verdict fold `changeCommand` computed, returned as the command
+  // carries it.
+  return result.exitCode;
 }
 
 /**
@@ -1574,13 +1550,10 @@ async function runFitness(options, { cwd, env }) {
   }
 
   // `fitness` is a verdict, not a print job (D-09): `fail` exits 1, `unknown`
-  // exits 3, and a run that completed with everything `pass` (or not
-  // applicable) exits 0. The command's own status carries the pair, and the
-  // JSON envelope asserts it; this mapping is the one process-level exit.
-  return (
-    { ok: EXIT.ok, findings: EXIT.violations, "no-verdict": EXIT.error }[result.status] ??
-    EXIT.error
-  );
+  // exits 3, a run whose every function is `pass` (or not applicable) exits 0.
+  // The command's return carries the pair the envelope asserts; this return
+  // is that verdict, unmodified.
+  return result.exitCode;
 }
 
 /**
@@ -2054,7 +2027,12 @@ async function runRules(options, { cwd, env }) {
     env.out(report);
   }
 
-  // Exit codes: 0 for ok, 1 for findings (verify only), 3 for no-verdict
+  // Exit codes: `verify`'s return carries the pair its status asserts (0 ok,
+  // 1 findings, 3 could-not-look). The descriptive subcommands (`list`,
+  // `info`, `add`) expose no exit field — their statuses are `ok` or a
+  // no-verdict class only, never findings — so this ladder keeps their exits
+  // exactly as they were.
+  if (subcommand === "verify") return result.exitCode;
   if (result.status === "ok") return EXIT.ok;
   if (result.status === "findings") return EXIT.violations;
   return EXIT.error;

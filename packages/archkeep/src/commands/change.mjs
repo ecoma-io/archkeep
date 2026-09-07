@@ -657,7 +657,7 @@ function judgeDeclaredConstraints(intent, io) {
  *   architecture-intent seam `drift` uses (defaults to `loadIntent`); the
  *   change event's `debt` diff judges the intent over this run's base and
  *   head graphs and would be untestable without it.
- * @returns {Promise<{status: "ok"|"findings"|"no-verdict",
+ * @returns {Promise<{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3,
  *   changeIntent?: object, coverage: object, report: {text: string, json: string}}>}
  *   `status: "no-verdict"` from the coverage refusal (#608) carries no
  *   `changeIntent` payload — the reconciliation was withheld, and the
@@ -919,6 +919,7 @@ export async function changeCommand(
     const refusalCoverage = { ...coverage, notes: [...notes, fold.refused] };
     return {
       status: fold.status,
+      exitCode: fold.exitCode,
       coverage: refusalCoverage,
       report: {
         text: `change: no verdict — ${fold.refused}\n`,
@@ -1156,6 +1157,7 @@ export async function changeCommand(
 
   return {
     status,
+    exitCode,
     changeIntent: result,
     coverage,
     report: {

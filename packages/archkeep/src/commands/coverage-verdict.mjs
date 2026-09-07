@@ -135,7 +135,7 @@ export function coverageVerdict(commandContext, { acceptedFiles } = {}) {
  *   command was asking (the text face's one free clause), `acceptedFiles`
  *   forwards to `coverageVerdict` (see above), and `decision: true` attaches
  *   the canonical `unknown` decision.
- * @returns {{status: "no-verdict", coverage: object,
+ * @returns {{status: "no-verdict", exitCode: 3, coverage: object,
  *   report: {text: string, json: string}}}
  */
 export function coverageRefusal({ command, commandContext, what, acceptedFiles, decision }) {
@@ -190,6 +190,7 @@ export function coverageRefusal({ command, commandContext, what, acceptedFiles, 
   });
   return {
     status,
+    exitCode: verdict.exitCode,
     coverage,
     report: {
       text:

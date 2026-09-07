@@ -123,6 +123,7 @@ describe("rulesVerifyCommand", () => {
     // catalog could not be read" are different facts for every script that
     // branches on the exit code.
     expect(result.status).toBe("findings");
+    expect(result.exitCode).toBe(1);
     expect(JSON.parse(result.report.json).exitCode).toBe(1);
     expect(result.report.text).toContain("FAILED");
 
@@ -181,6 +182,7 @@ describe("rulesVerifyCommand", () => {
     const result = await rulesVerifyCommand({ catalog: catalogPath }, { cwd: tempCatalogDir });
 
     expect(result.status).toBe("ok");
+    expect(result.exitCode).toBe(0);
     expect(JSON.parse(result.report.json).exitCode).toBe(0);
     expect(result.report.text).toContain("OK");
     expect(result.report.text).not.toContain("FAILED");

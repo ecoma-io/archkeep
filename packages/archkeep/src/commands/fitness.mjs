@@ -167,8 +167,8 @@ export function fitnessFold(overall) {
  *
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{config?: object|null}} [io] The loaded policy, injectable for tests.
- * @returns {Promise<{status: "ok"|"findings"|"no-verdict", fitness?: object,
- *   coverage: object, report: {text: string, json: string}}>}
+ * @returns {Promise<{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3,
+ *   fitness?: object, coverage: object, report: {text: string, json: string}}>}
  *   `status: "no-verdict"` from the coverage refusal carries no `fitness`
  *   payload — the verdict was withheld, and the envelope's `coverage` block is
  *   the whole answer (#608).
@@ -266,6 +266,7 @@ export async function fitnessCommand(commandContext, io = {}) {
   if (fold.refused !== undefined) {
     return {
       status: fold.status,
+      exitCode: fold.exitCode,
       coverage: { ...coverage, notes: [...coverage.notes, fold.refused] },
       report: {
         text: `fitness: no verdict — ${fold.refused}\n`,
@@ -301,5 +302,5 @@ export async function fitnessCommand(commandContext, io = {}) {
     ),
   };
 
-  return { status, fitness: result, coverage, report };
+  return { status, exitCode, fitness: result, coverage, report };
 }
