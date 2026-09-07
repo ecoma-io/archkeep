@@ -52,7 +52,7 @@
           "type": "source-evidence",
           "path": "cli.mjs",
           "assertion": "Exit codes 0/1/3 distinguish clean/findings/cannot-look",
-          "sha256": "7ecf2225480b1de732534b07ebb3295aaa955930142262a2986b1a40200ce128"
+          "sha256": "ec728078725a183e0a86ed12e0c674e52ad25b73464935f387b07102176fc46e"
         }
       ],
       "status": "proven"
@@ -104,7 +104,7 @@
           "type": "source-evidence",
           "path": "src/commands/graph.mjs",
           "assertion": "Plain string comparison, never localeCompare; INTERNAL_DATA_FIELDS stripped",
-          "sha256": "436902ab3ca994c233318437a896630f969a2c8a22b0f93e598d309faed39d49"
+          "sha256": "4f493421e11b012ce7b9c1b111155c8ebdbca6ab4ad3fa37221fbe1a465bef46"
         },
         {
           "type": "source-evidence",
@@ -116,7 +116,7 @@
           "type": "source-evidence",
           "path": "src/commands/graph.mjs",
           "assertion": "computePolicyFingerprint produces SHA-256 of canonicalized policy",
-          "sha256": "436902ab3ca994c233318437a896630f969a2c8a22b0f93e598d309faed39d49"
+          "sha256": "4f493421e11b012ce7b9c1b111155c8ebdbca6ab4ad3fa37221fbe1a465bef46"
         }
       ],
       "status": "proven"
@@ -136,7 +136,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "parseBaseline validates schemaVersion; refuses unknown versions",
-          "sha256": "92db6da416cd0229ba059bb4751d1bc4a1502af364d39ed182c7a3e3b1b63996"
+          "sha256": "4d44eea475cd4b06122a405718203d2e0018a163c1d42b17324400e7e4de5eea"
         }
       ],
       "status": "proven"
@@ -156,7 +156,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "computeDiff returns structural diff; policyMismatch detected via fingerprint; computeRuleImpact for depConstraints-only context",
-          "sha256": "92db6da416cd0229ba059bb4751d1bc4a1502af364d39ed182c7a3e3b1b63996"
+          "sha256": "4d44eea475cd4b06122a405718203d2e0018a163c1d42b17324400e7e4de5eea"
         }
       ],
       "status": "proven"
@@ -254,19 +254,19 @@
           "type": "source-evidence",
           "path": "src/commands/context-command.mjs",
           "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)",
-          "sha256": "f906671ff4a5720d80ea5a3dab2779f1cfd3648fbc1e6a1f3a6d0e6efef21feb"
+          "sha256": "2d8a17dce1a5f4075ee02a7a8c1bdff94e70afe5cd609f63fe3cf6324f78aaf3"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/impact.mjs",
           "assertion": "coverage.notes warns that per-edge violations cover only depConstraints (3 of 15 violation types)",
-          "sha256": "152a53a0010d8cbd51d11e3ce6268fa50d1e2bcacab3d7bcb38dbd53fc120bbf"
+          "sha256": "440f20017cceae4b13c6bc5c653c7a8b99511e0c062dcc7abfb18859f3f0520c"
         },
         {
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "coverage.notes warns when ruleImpact is computed (depConstraints only, 3 of 15)",
-          "sha256": "92db6da416cd0229ba059bb4751d1bc4a1502af364d39ed182c7a3e3b1b63996"
+          "sha256": "4d44eea475cd4b06122a405718203d2e0018a163c1d42b17324400e7e4de5eea"
         },
         {
           "type": "documentation",
@@ -292,7 +292,7 @@
           "type": "source-evidence",
           "path": "src/commands/graph.mjs",
           "assertion": "Plain string comparison throughout; never localeCompare",
-          "sha256": "436902ab3ca994c233318437a896630f969a2c8a22b0f93e598d309faed39d49"
+          "sha256": "4f493421e11b012ce7b9c1b111155c8ebdbca6ab4ad3fa37221fbe1a465bef46"
         }
       ],
       "status": "proven"
