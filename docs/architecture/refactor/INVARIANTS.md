@@ -30,15 +30,16 @@ The root invariant. An empty diagnostic list means "no violation", never
   `jsonEnvelope`'s status↔exitCode refusal (`src/report/json.mjs:93` —
   every carrier eagerly builds its envelope); `exit-matrix.integration.test.mjs`
   pins per-verb sides.
-- Gap: exit 1/3 also appear at the four sibling folds as keyed-object
-  lookups (`{ ok: EXIT.ok, findings: EXIT.violations, "no-verdict":
-EXIT.error }[result.status] ?? EXIT.error` — `cli.mjs:1082/1399/1560`) and
-  the rules-verify if-chain (`cli.mjs:2040-2042`) — shapes the object-literal
-  scan cannot see; the envelope latch and exit-matrix pin them behaviorally.
-  "One table" is true of the spelling, not of every fold site. (Shape
-  re-measured after Phase 1-A replaced the branch/ternary folds;
-  [PD-6](DECISIONS.md#program-decisions) keeps these spellings as the pinned
-  baseline.)
+- Gap: the four sibling folds and the rules-verify fold spell their own
+  status→exit mappings — shapes the object-literal scan cannot see. Phase 6
+  (WI-1) moved them out of `cli.mjs` into the command modules that own the
+  verbs: every fold lane carries its `exitCode` (`delta.mjs:506-558`,
+  `change.mjs:506-548`, `fitness.mjs:143-158`, `rules.mjs:449`) and the
+  drivers reduced to `return result.exitCode` (`cli.mjs:801`, `:1004`,
+  `:1251`, `:1376`, `:1797`). "One table" is true of the spelling, not of
+  every fold site; the envelope latch and exit-matrix pin them behaviorally.
+  ([PD-6](DECISIONS.md#program-decisions) keeps these spellings as the pinned
+  baseline — Phase 6 carried the lanes, never unified the folds.)
 
 ## INV-3 — One envelope shape
 
@@ -52,13 +53,15 @@ EXIT.error }[result.status] ?? EXIT.error` — `cli.mjs:1082/1399/1560`) and
 
 Enforcement semantics are singular — one `EXIT` table, one status vocabulary,
 one `buildDecision` — and the verdict-bearing verbs fold status→exit over
-that shared vocabulary at **five fold sites**: `verdictFor` for `check`
-(`src/verdict.mjs:201-333`, callers `cli.mjs:809` + `check.mjs:1066`);
-`cli.mjs:1082` (delta, over `deltaFold` at `delta.mjs:486`), `:1399` (change,
-over `changeFold` at `change.mjs:498`), `:1560-1563` (fitness, over
-`fitnessFold` at `fitness.mjs:137`) — the three siblings evaluate the same
-architecture law (intent J) — and `:2040-2042` (rules verify, over
-`rules.mjs:445-448`),
+that shared vocabulary at **five fold sites**, each inside the command module
+that owns the verb (Phase 6, WI-1, moved them out of `cli.mjs`; the drivers
+now only `return result.exitCode`): `verdictFor` for `check`
+(`src/verdict.mjs:201-333`, judged at `check.mjs:1075`); the delta fold
+(`deltaFold` at `delta.mjs:486`, lanes `delta.mjs:506-558`), the change fold
+(`changeFold` at `change.mjs:501`, lanes `change.mjs:506-548`), the fitness
+fold (`fitnessFold` at `fitness.mjs:137`, lanes `fitness.mjs:143-158`) — the
+three siblings evaluate the same architecture law (intent J) — and the
+rules-verify fold (`rules.mjs:449`),
 whose fold is the **artifact-integrity** contract's — the same vocabulary and
 table, a different law, outside the lane ([PD-8](DECISIONS.md#program-decisions)).
 The enforcement carriers agree because they evaluate the same law, not
