@@ -1187,12 +1187,17 @@ dispositions), and PR #766 (the Phase 3 exit checkpoint), and PR #767
      Phase 6's exit criterion "no driver imports an analyzer or provider
      directly" is **not** satisfied today and VALIDATION-MATRIX's G-4
      "holds today" clause is true only for rules/analysis/report; five
-     driver-side status→exit folds that re-derive exit codes the command
-     modules already return (check `:826-844`, delta `:1098-1101`, change
-     `:1417-1421`, fitness `:1580-1583`, rules verify `:2058-2060` — three
-     spellings of one mapping in one file, each duplicating a command-side
-     fold: `delta.mjs:1100-1101`, `change.mjs:1150-1151`,
-     `fitness.mjs:294-300`, `rules.mjs:448`); exit-matrix findings-mode
+     driver-side status→exit folds that re-derive, in the driver, exit
+     codes each command already computes for its JSON envelope — and
+     which delta's own fold object already carries
+     (`delta.mjs:489-558`) — but that no command's returned result
+     object exposes. The driver sites are check `:826-844`, delta
+     `:1098-1101`, change `:1417-1421`, fitness `:1580-1583`, rules
+     verify `:2058-2060`; three of them spell the same
+     `{ok, findings, "no-verdict"}` literal in one file, and the
+     command-side computations they duplicate sit at
+     `delta.mjs:1100-1101`, `change.mjs:1150-1151`,
+     `fitness.mjs:294-300`, `rules.mjs:448`. Exit-matrix findings-mode
      exit-1 pins cover 3 of the 5 exit-1 verbs (delta --compare and change
      findings sides live outside the matrix — `cli.integration.test.mjs:9095-9352`,
      `change.test.mjs:904-924`); `--help` byte stability has **no
@@ -1213,8 +1218,17 @@ dispositions), and PR #766 (the Phase 3 exit checkpoint), and PR #767
   unless the battery proves otherwise.
 - **Work items** (each named in the PR body per
   [PD-17](DECISIONS.md#program-decisions)): **WI-1** fold elimination —
-  each of the five drivers returns the command-computed `exitCode`; the
-  command-side folds are untouched; INV-2/INV-4 citation refresh lands
+  each of the five verdict-bearing commands (`check`, `delta` compare,
+  `change`, `fitness`, `rules verify`) surfaces its already-computed
+  `exitCode` on its returned result object — an additive internal field
+  present on every lane: success, findings, and refusal/no-verdict
+  (`delta`'s coverage refusal and `fitness`'s fold refusal both return
+  it) — and then each of the five drivers returns that field instead of
+  re-deriving it; `rules`' descriptive subcommands (`list`, `info`,
+  `add`) gain no field and keep their driver-side exits, so `runRules`
+  reads `exitCode` only on the verify lane. The command-side mappings
+  are untouched (PD-6); command-level tests pin the return contract per
+  lane before any driver flips; INV-2/INV-4 citation refresh lands
   same-PR. **WI-2** provider-edge elimination — re-home the help-time
   native read and the `ARCHKEEP_MODEL_FILE` constant so `cli.mjs` imports
   no `src/providers/**`; a candidate home that adds a new cross-layer edge
@@ -1233,11 +1247,11 @@ dispositions), and PR #766 (the Phase 3 exit checkpoint), and PR #767
   unrostered only once WI-2 has removed the provider edge, otherwise
   rostered G-5-style with two-way checking. **WI-5** exit-matrix
   findings-mode pins for `delta --compare` and `change` (seam-injected
-  worlds like the existing rows). **WI-6** `--help` byte goldens (top-level
-  - per-verb help over the deterministic corpus fixture; a level-2
-    contract pin). **WI-7** same-PR docs: INV-2/INV-4 citations,
-    VALIDATION-MATRIX's G-4 row moves to scanned, differential row 10
-    wording, and SEMANTIC-MODEL/BOUNDARIES rows only if one actually moves.
+  worlds like the existing rows). **WI-6** `--help` byte goldens —
+  top-level and per-verb help over the deterministic corpus fixture; a
+  level-2 contract pin. **WI-7** same-PR docs: INV-2/INV-4 citations,
+  VALIDATION-MATRIX's G-4 row moves to scanned, differential row 10
+  wording, and SEMANTIC-MODEL/BOUNDARIES rows only if one actually moves.
 - **Non-goals**: no verb/flag/exit/envelope change; no facade content
   change; no command-side fold unification; no change to the documented
   walks; no `src/lsp/**` or MCP work (Phase 7).
