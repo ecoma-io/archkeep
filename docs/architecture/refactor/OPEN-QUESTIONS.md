@@ -17,6 +17,14 @@ alternatives, consequences, compatibility impact, owner, acceptance evidence —
 lives in [DECISIONS.md](DECISIONS.md#program-decisions); this section states
 each closure in one line and links it.
 
+- **OQ-11 — LSP golden-response scope (GAP-E).** CLOSED by
+  [PD-19](DECISIONS.md#program-decisions): six recorded wire artifacts over
+  one Nx-shaped fixture — the `initialize` result, the watcher list, and
+  four `publishDiagnostics` records with the EMPTY direction pinned as
+  bytes — compared as canonical JSON at level 2 with one release-coupled
+  normalization; recorded BEFORE the Phase 7 collapse, whose differential it
+  is. Closes GAP-E
+  ([VALIDATION-MATRIX.md](VALIDATION-MATRIX.md#differential-gaps)).
 - **OQ-13 — `rules verify`'s place in the authority map.** CLOSED by
   [PD-8](DECISIONS.md#program-decisions): a bounded **artifact-integrity
   verification authority** — outside the architecture enforcement lane; it
@@ -125,7 +133,6 @@ decided here, and nothing is decided before its gate.
 
 | ID    | Question                                | Gate                     | What the maintainer decides                                                                                               | What closes it                                                                                                                             |
 | ----- | --------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| OQ-11 | LSP golden-response scope (GAP-E)       | Phase 7 entry            | The minimal recorded-response set for a server-refactor differential                                                      | The approved scope recorded at Phase 7's entry                                                                                             |
 | OQ-14 | INV-23's semantic-compatibility witness | Phase 9's GAP-D decision | Whether a cross-version semantic-baseline differential is owed, or the corpus + differentials + review discipline suffice | Adoption, or the reasoned no-fix per budget honesty ([CON-0](CONSTITUTION.md#con-0--do-not-trade-semantic-maturity-for-structural-purity)) |
 
 ## Doctrine-gap register (DG-\*)

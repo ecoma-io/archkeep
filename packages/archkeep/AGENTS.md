@@ -117,14 +117,17 @@ graph --file=` for it — the only place the package resolves and spawns the
   normalising Moon's integer-indexed format into the same project-model shape.
   It resolves the `moon` binary from the workspace's `node_modules/.bin`,
   adding that directory to PATH so the CLI and language server find it without
-  `pnpm exec`. `src/lsp/workspace-index.mjs` is a **consumer** of the native
-  provider rather than a second implementation of it: on a tree whose
+  `pnpm exec`. `src/lsp/workspace-index.mjs` is a **consumer** of the
+  provider layer rather than a second implementation of it: on a tree whose
   tracked files include `archkeep.json` it indexes through
   `nativeProvider.discover`/`buildGraph` (a model that will not load becomes
   a named, self-clearing index gap, never a silently empty index), on an Nx
-  tree it discovers from tracked `project.json` files (`discoverProjects`,
-  `buildNodes`), and in both shapes `nodeTypeOf` and `buildDependencies`
-  come from `src/providers/native/`, not defined a second time. `lsp.mjs` itself holds only the stdio wiring.
+  tree it composes `src/providers/nx-static.mjs`'s `readStaticProjectGraph`
+  — the static acquisition the index used to hold inline is the provider
+  layer's since the Phase 7 collapse, so discovery is a provider's on every
+  shape — and in both shapes `nodeTypeOf` and `buildDependencies` come from
+  `src/providers/native/`, not defined a second time. `lsp.mjs` itself holds
+  only the stdio wiring.
 - **`src/report/` renders, and decides nothing.** A formatter that filtered
   would be a rule wearing a formatter's name.
 - **`src/options.mjs` is the only layer allowed to know what a workspace named

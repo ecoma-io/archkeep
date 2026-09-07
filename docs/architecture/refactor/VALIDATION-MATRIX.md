@@ -132,6 +132,22 @@ For the verbs its diff touches, over pinned fixture trees, old path vs new:
 - **GAP-D — no cross-version baseline**: nothing diffs engine output at
   version N vs N+1 over the same tree.
 - **GAP-E — LSP has no recorded golden responses** for a server refactor.
+  CLOSED. The corpus lives at `packages/archkeep/src/corpus/goldens-lsp/` —
+  six recorded artifacts over one Nx-shaped fixture tree (the shape whose
+  private acquisition the collapse replaces): the `initialize` result, the
+  `client/registerCapability` watcher list, and four `publishDiagnostics`
+  records — two EMPTY ones (the invariant's silent direction, pinned as
+  bytes), one with violations, one over an unparseable manifest. It is gated
+  by `packages/archkeep/src/corpus/lsp-golden.integration.test.mjs`, which
+  spawns the real server over stdio and re-plays the records canonically
+  (deep-sorted JSON, values exact; human-gated regen via
+  `ARCHKEEP_UPDATE_GOLDENS=1`). Per the test's own validation-level table:
+  L2 for the capabilities, watcher list, and every publish record; L1 for the
+  shutdown exit contract; one L3-normalized field with its reason recorded
+  beside the comparator — `serverInfo.version`, release-coupled like GAP-A's
+  `sampleTime`. The corpus was recorded BEFORE the Phase 7 collapse of the
+  LSP's private Nx acquisition ([BOUNDARIES.md](BOUNDARIES.md#provider-seam))
+  and is the differential that proved the collapse behavior-identical.
 
 ## Architectural test gaps
 
