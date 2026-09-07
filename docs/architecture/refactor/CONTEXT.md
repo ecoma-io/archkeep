@@ -60,7 +60,7 @@ A missing field is a review defect, not a style preference.
 | 6 — CLI recomposition                               | **complete** (PR #775)                                                                            | CHK-7 below              |
 | 7 — Additional surfaces                             | **complete** — all four units landed (PRs #776, #777, #786, #787)                                 | CHK-9 close below        |
 | 8 — Federation readiness                            | **recorded** — runway record landed, no machinery (PR #791)                                       | CHK-10 below             |
-| 9 — Final hardening                                 | not started                                                                                       | blocked by 8 (or waiver) |
+| 9 — Final hardening                                 | **recorded** — maturity gate scored, GAP-C/D disposed (PR #792)                                   | CHK-11 below             |
 
 Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
 #729 (Phase 0.5), PRs #730–#734 (Phase 1 units A, B, E, F, C), PR #736
@@ -82,7 +82,8 @@ checkpoint), and PR #776 (Phase 7 adjacent hardening: the spawn-budget and
 help-roster fixes), PR #777 (GAP-E: the LSP golden-response corpus), PR
 #787 (the MCP seam: `adr` preamble into the commands layer), and PR #786
 (the 7-A LSP provider convergence, stacked on #777), and PR #791 (Phase 8:
-the federation-readiness runway record).
+the federation-readiness runway record), and PR #792 (Phase 9: the scored
+maturity gate, the GAP-C/GAP-D dispositions, and the final program close).
 
 ## Checkpoints
 
@@ -1484,6 +1485,127 @@ the federation-readiness runway record).
   identity ADR before a consumer proves it needs to address a remote tree;
   do not make provenance a post-hoc-stamped field. The objective of the next
   PR: Phase 9's final audits + falsifiable gate (GAP-C/GAP-D dispositions).
+
+### CHK-11 — Phase 9 close: final hardening and the scored maturity gate (2026-09-08)
+
+- **ID**: CHK-11. **Phase**: 9 (close). **Status**: recorded — the full
+  matrix ran, the maturity gate is scored, and both remaining gaps are
+  disposed. PR #792.
+- **Units**: one — the Phase 9 close record: the full validation-matrix
+  sweep (below), the REFRACTOR MATURITY GATE scored 11/11
+  ([MIGRATION-PLAN.md](MIGRATION-PLAN.md#refractor-maturity-gate)), the
+  GAP-C/GAP-D dispositions, and the final program close.
+- **Canonical ownership changes**: none — no ownership moved.
+- **Dependency-boundary changes**: none — [BOUNDARIES.md](BOUNDARIES.md)
+  unchanged.
+- **Contracts and compatibility**: class 3 (docs-only) — the record states
+  no new API, config, identity, serialization, CLI/`./commands` surface, or
+  verdict vocabulary. Nothing a consumer imports or runs moves; the
+  5940-suite and gates it cites are the unchanged baseline, not a claim of
+  change.
+- **Differential evidence / the full matrix**:
+  - Full package suite 5940/5940 (221 files) pass on merged `main`
+    (measured; matches post-#790).
+  - Authority witnesses: `verdict-layering`, `layer-direction-imports`,
+    `refusal-contract`, `coverage-loudness` — 74/74 pass (rows 1, 4, 7).
+  - Determinism: `check-repeat-byte-identity` + `deterministic-ordering`
+    - the 23-verb byte-identity corpus gate — green (row 5).
+  - Packed artifact: `verify-package` 55/55 `ok` across Nx/Moon, Maven,
+    Gradle, LSP-through-symlink, exit-contract lanes (row 8).
+  - Gate scripts: `check-packages`, `check-skills`, `check-docs-links`,
+    `check-cli-docs-roster`, `check-installation-prereqs`,
+    `check-contributing-parity` — all green. `tsc --noEmit` (archkeep +
+    gate-scripts), eslint (0 warnings), prettier — green.
+  - This repository's own boundary check (`cli.mjs check`) exit 0.
+- **The scored maturity gate** — the 11 rows of
+  [REFRACTOR MATURITY GATE](MIGRATION-PLAN.md#refractor-maturity-gate),
+  each with the evidence that satisfies it:
+  1. _One enforcement authority_ — **HOLD**. INV-25 count stays one:
+     the five-role vocabulary + the four folds + the integrity fold
+     unchanged; `verdict-layering` green; per-PR adversarial review named
+     the count (this record names it: still one).
+  2. _Semantic flow one-way_ — **HOLD**. Intra-`src/` DAG stated and
+     scanned (G-2/layer-direction, Phase 3); no cycle, no re-derivation.
+  3. _Canonical models single-owned_ — **HOLD**. SEMANTIC-MODEL rows with
+     zero unresolved hazards; every equivalent representation sits at a
+     projection/adapter with its conversion named.
+  4. _Providers observe only_ — **HOLD**. G-1 scan green; Moon policy
+     adjudicated (Phase 1), contract tested.
+  5. _Determinism_ — **HOLD**. 23-verb byte-identity corpus gate +
+     `check-repeat-byte-identity` + `deterministic-ordering` green in the
+     5940 suite.
+  6. _Differential safety_ — **HOLD**. Every structural PR's differential
+     recorded (CHK-2…CHK-10); corpus diff closed (GAP-A/B/E).
+  7. _Empty-result invariant_ — **HOLD**. `refusal-contract` +
+     `coverage-loudness` + LSP two-site green (74/74 witness group);
+     red-twin direction exercised.
+  8. _Contract stability_ — **HOLD**. Exit matrix, envelope roster, SARIF,
+     LSP protocol, MCP surface, exports all green and unchanged; class-1/2/3
+     only, changelog would name any class-4/5.
+  9. _Docs precede and follow code_ — **HOLD**. Every PR's doc updates
+     landed same-PR; docs-links + prereq + roster + parity gates green.
+  10. _Review independence_ — **HOLD**. Independent adversarial review per
+      architectural PR recorded (each CHK-n cites its review; implementer
+      never final reviewer).
+  11. _Extraction honesty_ — **HOLD**. Every landed extraction recorded as
+      either its demonstrated gain or "no proven extraction" (CHK-5); package
+      counts never used as progress evidence.
+      Result: **11/11 HOLD**, zero unresolved rows — the gate is satisfied.
+- **Debt budget**: gaps before — GAP-C (differential breadth), GAP-D
+  (cross-version baseline), OQ-14 (INV-23's witness, Phase 9-gated);
+  gaps closed — GAP-C and GAP-D (dispositions below); gaps introduced —
+  none; net delta — negative; the two open gaps close here.
+- **GAP-C disposition — differential breadth (decided: no-fix)**. GAP-C is
+  "governance/provenance/report values have no differential, only
+  relationship pins". The measure shows the values ARE guarded: the
+  report/ and governance/ surfaces hold 1089/1089 tests across 48 files
+  (every text renderer has a `.test.mjs`; envelope + SARIF have
+  byte-identity integration pins; the governance rows assert exact values
+  via `.toEqual`). The relationship pins plus the byte-identity corpus
+  (GAP-A, the 23-verb goldens) plus the unit suites ARE the differential;
+  a separate "value differential" harness would duplicate what the corpus
+  already proves byte-for-byte on the report surface and what the unit
+  suites already pin on the governance surface. Adopt no new harness —
+  recorded no-fix per [CON-0](CONSTITUTION.md#con-0--do-not-trade-semantic-maturity-for-structural-purity).
+- **GAP-D / OQ-14 disposition — cross-version baseline (decided: no-fix
+  now, recommendation for a future tag-adjacent differential)**. GAP-D is
+  "nothing diffs engine output at version N vs N+1 over the same tree".
+  The corpus + differentials + release-lane discipline are strong: the
+  golden corpus is pinned byte-for-byte and gated; the release lane re-runs
+  the conformance differential against the TAGGED bytes
+  (`release.yml` `verify-conformance`, `--exit-class-of`), which is
+  version-adjacent (tag N against real trees). What is genuinely missing —
+  engine N vs N+1 on the SAME tree — is the `readiness` script's own
+  "quiet-stretch" signal: the last 50 commits include 12 that touched the
+  output-contract
+  surface without a breaking marker, so the stretch has not held. That is
+  not a refactor defect (every one was a class-1/2/3 byte-identical change
+  proven against the corpus) but it IS the one honesty gap the corpus
+  cannot close: a future release that shifts a verdict without a marker
+  would read clean here. OQ-14 closes with the no-fix now (corpus +
+  differentials + review discipline suffice), and the recommendation that
+  the release lane add a same-tree N-vs-N+1 diff — the exact adoption
+  OQ-14's "What closes it" names, when the maintainer authorizes it.
+- **Unresolved / open decisions**: none remain — GAP-C, GAP-D, and OQ-14
+  are all disposed in this record. The federation runway (Phase 8) stays
+  uninstantiated by decision (CON-8); nothing here changes that.
+- **Rejected approaches**: a separate value-differential harness for
+  GAP-C (rejected — duplicates what the corpus + unit values already
+  prove); a mandatory cross-version baseline in the release lane now
+  (rejected — without an existing marker discipline it would fail on the
+  refactor's own non-breaking commits; recorded as a recommendation, not a
+  mandate); any change to VERIFY/analysis-gate scope (rejected — untouched,
+  gates stay as CI).
+- **Forbidden next moves / traps**: do not invent a new value-differential
+  or cross-version harness without the maintainer; do not re-open GAP-C/D
+  without new evidence; do not build a federation framework (Phase 8's gate
+  still holds). The program's next move is the maintainer's: absorb this
+  record, and act on the GAP-D recommendation.
+
+The program is closed in the sense this control plane can close it: Phases
+0–9 all recorded, the maturity gate scored 11/11, and every gap either
+closed or dispositioned. What remains is the federation runway (by CON-8,
+intentionally unbuilt until a concrete requirement).
 
 ## Conventions maintained here
 
