@@ -58,7 +58,7 @@ A missing field is a review defect, not a style preference.
 | 4 — Internal extraction                             | **complete** — GAP-A + GAP-B closed (PR #767); no proven extraction (CHK-5)                       | CHK-4, CHK-5 below       |
 | 5 — Capability facades                              | **complete** (PR #772 merged as 60f0e7d2)                                                         | PD-18, CHK-6             |
 | 6 — CLI recomposition                               | **complete** (PR #775)                                                                            | CHK-7 below              |
-| 7 — Additional surfaces                             | not started                                                                                       | blocked by 6             |
+| 7 — Additional surfaces                             | **complete** — all four units landed (PRs #776, #777, #786, #787)                                 | CHK-9 close below        |
 | 8 — Federation readiness                            | not started                                                                                       | maintainer-gated         |
 | 9 — Final hardening                                 | not started                                                                                       | blocked by 8 (or waiver) |
 
@@ -78,7 +78,10 @@ roster, the intra-`src/` DAG statement, the G-3/G-4/G-6/G-8
 dispositions), and PR #766 (the Phase 3 exit checkpoint), and PR #767
 (Phase 4 entry gate: golden-output corpus + GAP-A/B), PR #772 (Phase 5:
 capability facades), PR #774 (CHK-6), and PR #775 (Phase 6's units + exit
-checkpoint).
+checkpoint), and PR #776 (Phase 7 adjacent hardening: the spawn-budget and
+help-roster fixes), PR #777 (GAP-E: the LSP golden-response corpus), PR
+#787 (the MCP seam: `adr` preamble into the commands layer), and PR #786
+(the 7-A LSP provider convergence, stacked on #777).
 
 ## Checkpoints
 
@@ -1384,6 +1387,69 @@ checkpoint).
   eslint, prettier clean; this repository's own boundary check exit 0.
 - **Next**: Phase 7 close (MCP seam verdict, VS Code disposition, provider
   re-measure), then Phase 8 under the maintainer's steering.
+
+### CHK-9 — Phase 7 close: additional surfaces (2026-09-08)
+
+- **ID**: CHK-9. **Phase**: 7 (close). **Status**: complete — all four units
+  landed through the merge queue: #776 (`4b9435f6`, deflake + roster),
+  #777 (`d68abb38`, GAP-E corpus), #787 (`00384b51`, MCP seam), #786
+  (`407f8080`, 7-A LSP convergence, stacked on #777, retargeted `main` after
+  #777 merged).
+- **Units**: 7-A — the LSP-private Nx acquisition in `workspace-index.mjs`
+  collapsed into `src/providers/nx-static.mjs` (ownership move, static
+  strategy kept; records-not-throws retained; the `workspaceLayout`-read
+  catch moved verbatim). 7-B — the LSP golden-response corpus (GAP-E):
+  six recorded artifacts incl. the two empty `publishDiagnostics` (the
+  invariant's silent direction pinned as bytes) over an Nx-shaped fixture,
+  byte-gated by `src/corpus/lsp-golden.integration.test.mjs`. MCP seam — the
+  `adr` preamble imported past the `./commands` subpath collapsed into a
+  commands-layer driver (`src/commands/adr-for-workspace.mjs`); the MCP
+  package now composes the command layer, not the engine's root entry.
+  Adjacent hardening (#776): the `custom-rules` wasm budget race, the
+  `engines-edge` spawn-budget deflake, and deriving the `--help` roster from
+  `COMMAND_NAMES`.
+- **Canonical ownership changes**: two. (1) Nx static acquisition now lives
+  in `src/providers/` (the provider-seam table's fourth row;
+  [BOUNDARIES.md](BOUNDARIES.md#provider-seam)); the shared-shape question
+  the table posed is answered **no** — no consumer needs one to compose.
+  (2) The MCP `adr` preamble moved beside its command; `engine.mjs` reaches
+  past the `./commands` subpath no more. No SEMANTIC-MODEL row moved.
+- **Dependency-boundary changes**: none — [BOUNDARIES.md](BOUNDARIES.md)
+  gained the fourth provider row but no declared boundary moved; the MCP
+  seam's past-seam import (divergence 3) is closed.
+- **Contracts and compatibility**: class 1 (ownership moves) internally;
+  class 3 (performance/internal) on the wire — the LSP collapse is
+  byte-for-byte identical, proven against the GAP-E goldens recorded before
+  the change. One additive surface: the `./commands` subpath grew
+  `adrForWorkspace` (class 2, new export, nothing removed). No CLI surface,
+  config schema, or JSON/SARIF contract moved.
+- **Differential evidence**: GAP-E goldens byte-identical across the
+  collapse (all 4 cases); LSP + provider suites 294 passed; touched suites
+  79 passed; full package suite 5940/5940 (221 files) on the merged `main`;
+  `tsc --noEmit`, eslint (0 warnings), prettier, `check-packages`,
+  `check-docs-links`, `check-skills`, commitlint green; this repository's
+  own boundary check exit 0.
+- **Debt budget**: gaps before — GAP-E, divergence 2 (LSP-private
+  acquisition), divergence 3 (MCP past-seam import); gaps closed — all
+  three; gaps introduced — none; net delta — negative.
+- **Unresolved / open decisions**: OQ-14 (GAP-D, the MCP propose-decision
+  seam) and GAP-C stay open — recorded for Phase 9. VS Code is deliberately
+  untouched (a client whose decisions are pure functions; no analysis
+  changed). Phase 8 (federation readiness) is **runway only** — no
+  speculative federation framework; the maintainer gates any implementation
+  (OQ-14/GAP-D).
+- **Rejected approaches**: a shared provider shape (answered no — unused
+  interface is speculative); LSP/MCP independent evaluation (rejected — the
+  engine's own command layer is the one authority); a static-vs-CLI strategy
+  change in the LSP (static kept, no spawn per file save); VS Code analysis
+  (rejected — it ships to a marketplace and deliberately does not bundle the
+  server).
+- **Forbidden next moves / traps**: do not expand the provider seam further
+  (no new shared shape); do not re-introduce LSP/MCP independent evaluation;
+  do not build a federation framework before the maintainer authorizes it;
+  do not touch VS Code analysis. The objective of the next PR: Phase 8's
+  runway record (the seven adversarial questions + the OQ-14/GAP-D gate),
+  then Phase 9's final audits + falsifiable gate.
 
 ## Conventions maintained here
 
