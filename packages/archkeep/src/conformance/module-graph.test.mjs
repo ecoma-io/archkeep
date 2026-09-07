@@ -11,7 +11,10 @@
  * `../../../../AGENTS.md` is written against, and it forces the three modules
  * to load together with no dependency-order reasoning left. This guard walks
  * the static runtime import graph of the shipped surface and fails, naming the
- * cycle, the moment one forms again.
+ * cycle, the moment one forms again. The same file holds the reverse guarantee
+ * (G-7): every non-test module under `src/` is reachable from a published
+ * entry — the orphan scan fails, naming the orphan, the moment a module ships
+ * that no entry can load.
  *
  * Scope, and why each boundary sits where it sits:
  *
@@ -28,6 +31,23 @@
  *    a different fix; folding it in here would also make this verdict depend
  *    on which spellings of `import(` happen to appear. Bare specifiers are
  *    outside the package and owned by `./boundary.test.mjs`'s allow-list.
+ *  - **Reach, for the orphan scan, is wider than edge.** The same file also
+ *    grows the entry-rooted closure and asserts it covers `src/`, and that
+ *    walk follows one spelling the edge walk refuses: a literal dynamic
+ *    `import("./x.mjs")` is a runtime reach even though it is no cycle edge,
+ *    because a lazily-loaded module is loaded really — `src/commands/debt.mjs`
+ *    is reached only through `src/commands/plan-context-command.mjs`'s
+ *    deferred `import()`, and an orphan walk that ignored the laziness
+ *    mechanism would name it a false orphan. Dynamic imports are out of scope
+ *    as violations in both scans — a lazily-loaded module is a legal runtime
+ *    reach — but only the reach walk reads them. A non-literal
+ *    `import(somePath)` names no target a walk can read; the shipped tree
+ *    uses those spellings to load consumer-provided files, never its own
+ *    modules, so they stay outside both scans. And the modules deliberately
+ *    outside the entry-rooted runtime — the conformance and fixture helpers
+ *    the test tiers load — are rostered by name with the reason, a live
+ *    contract the G-7 block checks in both directions: rotten names fail,
+ *    stale excuses fail, unrostered orphans fail naming themselves.
  *  - **Comments and strings do not produce edges.** The issue that found the
  *    real cycle also found a near-miss: a JSDoc type annotation in
  *    `src/analysis/typescript.mjs` names `./analyze.mjs` without importing it,
@@ -40,10 +60,23 @@
  *
  * The guard proves its own teeth before it proves the tree: the first two
  * tests run the detector and the extractor over synthetic input with a known
- * answer, so a detector that silently stopped detecting (the guard's own
- * silent direction) cannot sit green under a clean tree.
+ * answer, and the orphan scan runs against a synthetic package with a planted
+ * orphan and names it, so a detector that silently stopped detecting (the
+ * guard's own silent direction) cannot sit green under a clean tree. The
+ * synthetic trees live under the OS temp directory, outside this repository —
+ * proving teeth plants no violation file in the real tree.
  */
-import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -68,6 +101,14 @@ const STATIC_IMPORT_PATTERNS = [
   /\bexport\s*\*\s*from\s*["']([^"']+)["']/g,
   /\bexport\s*\*\s*as\s+[\w$]+\s*from\s*["']([^"']+)["']/g,
 ];
+/**
+ * Dynamic-`import()` spellings that name a target a walk can read: a literal
+ * relative specifier. Reach edges for the orphan scan, never edges of the
+ * cycle graph — the scope note above records why the two walks disagree here.
+ *
+ * @type {RegExp}
+ */
+const DYNAMIC_REACH_PATTERN = /\bimport\s*\(\s*["'](\.[^"']+)["']\s*\)/g;
 
 /**
  * The static relative import specifiers of one module's source text, comments,
@@ -98,6 +139,26 @@ export function staticRelativeImports(raw) {
   found.sort((a, b) => a.offset - b.offset);
   return found;
 }
+/**
+ * The literal relative specifiers of one module's dynamic `import()` calls,
+ * comments, strings, template literals and regex literals excluded — the
+ * same mask discipline as `staticRelativeImports`, which matters twice over
+ * here: a JSDoc type position spells `import("./x.mjs")` too
+ * (`@param {import("./x.mjs").T}`), and a specifier spelled in prose is a
+ * citation, not a runtime reach.
+ *
+ * @param {string} raw Module source text.
+ * @returns {string[]} Relative specifiers in source order.
+ */
+export function dynamicRelativeImports(raw) {
+  const masked = maskNonCode(raw);
+  const found = [];
+  for (const match of raw.matchAll(DYNAMIC_REACH_PATTERN)) {
+    if (masked[match.index] !== raw[match.index]) continue;
+    found.push(match[1]);
+  }
+  return found;
+}
 
 /**
  * Resolves one relative specifier to a package-root-relative posix key.
@@ -108,6 +169,22 @@ export function staticRelativeImports(raw) {
  */
 function resolveKey(fromKey, specifier) {
   return posix.normalize(posix.join(posix.dirname(fromKey), specifier));
+}
+/**
+ * Whether a package-root-relative key names a shipped runtime module: `.mjs`
+ * source, not a test (`*.test.mjs`, which subsumes `*.integration.test.mjs`),
+ * not an `e2e/` harness module, and a file that really exists. The edge walk
+ * and the reach walk must agree on this, or the two directions would scan two
+ * different packages.
+ *
+ * @param {string} root Package root directory.
+ * @param {string} key
+ * @returns {boolean}
+ */
+function isShippedModule(root, key) {
+  if (key.startsWith("e2e/") || /\.test\.mjs$/.test(key) || !key.endsWith(".mjs")) return false;
+  const path = join(root, key);
+  return existsSync(path) && statSync(path).isFile();
 }
 
 /**
@@ -127,12 +204,8 @@ export function collectModuleGraph() {
   const pkg = JSON.parse(readFileSync(join(PACKAGE_ROOT, "package.json"), "utf8"));
   /** @type {string[]} */
   const nodes = [];
-  const isTest = (key) => /\.test\.mjs$/.test(key);
-  /** @param {string} key */
   const seed = (key) => {
-    if (key.startsWith("e2e/") || isTest(key) || !key.endsWith(".mjs")) return;
-    const path = join(PACKAGE_ROOT, key);
-    if (!existsSync(path) || !statSync(path).isFile()) return;
+    if (!isShippedModule(PACKAGE_ROOT, key)) return;
     if (!nodes.includes(key)) nodes.push(key);
   };
   for (const value of Object.values(pkg.exports ?? {})) {
@@ -166,6 +239,82 @@ export function collectModuleGraph() {
     edges.set(key, [...targets].sort());
   }
   return { nodes, edges, dangling };
+}
+/**
+ * Every non-test `.mjs` under `src/`, as package-root-relative posix keys —
+ * the demand side of G-7, in the same key space the walks speak.
+ *
+ * @param {string} root Package root directory.
+ * @returns {string[]} Sorted keys.
+ */
+export function gatherSrcModules(root = PACKAGE_ROOT) {
+  /** @type {string[]} */
+  const keys = [];
+  for (const entry of readdirSync(join(root, "src"), { recursive: true })) {
+    const key = posix.join("src", String(entry));
+    if (isShippedModule(root, key)) keys.push(key);
+  }
+  return keys.sort();
+}
+
+/**
+ * Grows the closure from the published entries and bins only — the string
+ * values of `package.json`'s `exports` and `bin`, the same derivation
+ * `collectModuleGraph` reads — and returns every module the closure reaches,
+ * sorted.
+ *
+ * The direction is the point. `collectModuleGraph` seeds its walk with every
+ * `src/` module, so its node set cannot observe an orphan — an orphan is
+ * precisely a module that walk never needed. This walk grows from the entries
+ * alone, so what it covers is exactly the shipped runtime's reach.
+ *
+ * Reach is wider than edge, on the one spelling the scope note above records:
+ * a literal dynamic `import("./x.mjs")` is followed as a runtime reach (this
+ * is what keeps `src/commands/debt.mjs`, reached only through
+ * `src/commands/plan-context-command.mjs`'s deferred `import()`, out of the
+ * orphan report) while staying no cycle edge.
+ *
+ * @param {string} root Package root directory.
+ * @returns {string[]} Sorted package-root-relative keys reachable from an entry.
+ */
+export function reachableFromPublishedEntries(root = PACKAGE_ROOT) {
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  /** @type {Set<string>} */
+  const reached = new Set();
+  /** @type {string[]} */
+  const queue = [];
+  const reach = (key) => {
+    if (!isShippedModule(root, key) || reached.has(key)) return;
+    reached.add(key);
+    queue.push(key);
+  };
+  for (const value of Object.values(pkg.exports ?? {})) {
+    if (typeof value === "string") reach(posix.normalize(value));
+  }
+  for (const value of Object.values(pkg.bin ?? {})) reach(posix.normalize(value));
+  for (let i = 0; i < queue.length; i++) {
+    const raw = readFileSync(join(root, queue[i]), "utf8");
+    for (const { specifier } of staticRelativeImports(raw)) {
+      reach(resolveKey(queue[i], specifier));
+    }
+    for (const specifier of dynamicRelativeImports(raw)) {
+      reach(resolveKey(queue[i], specifier));
+    }
+  }
+  return [...reached].sort();
+}
+
+/**
+ * The orphan report: shipped `src/` modules no published entry reaches. The
+ * raw finding — the G-7 block decides which of these are rostered
+ * test-support modules and which are regressions.
+ *
+ * @param {string} root Package root directory.
+ * @returns {string[]} Sorted orphan keys; empty means the closure is complete.
+ */
+export function orphanModules(root = PACKAGE_ROOT) {
+  const reached = new Set(reachableFromPublishedEntries(root));
+  return gatherSrcModules(root).filter((key) => !reached.has(key));
 }
 
 /**
@@ -359,6 +508,18 @@ describe("module graph guard — the extractor", () => {
     const raw = ['const load = () => import("./lazy.mjs");', "export { load };"].join("\n");
     expect(staticRelativeImports(raw)).toEqual([]);
   });
+
+  it("reads a literal dynamic import() as a reach — and not one spelled in prose", () => {
+    const raw = [
+      'const load = () => import("./lazy.mjs");',
+      '// import("./commented.mjs");',
+      'const cited = "import(\\"./quoted.mjs\\")";',
+      'const typed = /** @type {import("./type-position.mjs").T} */ (null);',
+      'const external = () => import("node:fs");',
+      "export { load, cited, typed, external };",
+    ].join("\n");
+    expect(dynamicRelativeImports(raw)).toEqual(["./lazy.mjs"]);
+  });
 });
 
 describe("module graph guard — the shipped tree", () => {
@@ -387,6 +548,141 @@ describe("module graph guard — the shipped tree", () => {
     const report = [
       ...selfLoops.map((key) => `${key} imports itself`),
       ...cyclic.map((c) => cyclePathThrough(c, edges).join(" -> ")),
+    ];
+    expect(report).toEqual([]);
+  });
+});
+
+/**
+ * Modules the orphan scan knows about and excuses, each with the reason no
+ * published entry reaches it. A test-support module lives beside the source
+ * it serves and is loaded by the test tier only, so the entry-rooted runtime
+ * cannot see it — deliberate, not drift. Most are also excluded from the npm
+ * tarball by `package.json`'s `files` negations (`!src/conformance/`,
+ * `!src/custom-rules/wasm-fixture.mjs`); the rest ride along in the artifact
+ * as helpers the runtime never loads, and are named here so that weight
+ * stays a reviewed decision.
+ *
+ * The roster is a live contract, checked in both directions by the G-7 block
+ * below: a name that stops existing fails as rotten, a name a published
+ * entry starts reaching fails as a stale excuse, and an orphan missing from
+ * the roster fails naming itself. Nothing here can rot silently.
+ *
+ * @type {Map<string, string>} Package-root-relative key → why it is legal.
+ */
+const TEST_SUPPORT_MODULES = new Map([
+  // The conformance suites' shared infrastructure — the corpus and its
+  // fixture builders, the engine runners, the differential helpers. The npm
+  // tarball excludes the whole directory (`!src/conformance/` in
+  // `package.json`'s `files`), so these are not shipped at all.
+  ["src/conformance/cases.mjs", "conformance case list (tarball-excluded)"],
+  ["src/conformance/corpus-engine.mjs", "conformance corpus engine (tarball-excluded)"],
+  ["src/conformance/corpus-fixture.mjs", "conformance corpus fixture (tarball-excluded)"],
+  ["src/conformance/corpus.mjs", "the architecture corpus (tarball-excluded)"],
+  ["src/conformance/differential.mjs", "conformance differential helpers (tarball-excluded)"],
+  ["src/conformance/engines.mjs", "conformance engine runners (tarball-excluded)"],
+  ["src/conformance/fixture.mjs", "conformance fixture helpers (tarball-excluded)"],
+  [
+    "src/conformance/layer-edges.mjs",
+    "layer edge extractor for the G-1/G-5/G-2 scans (tarball-excluded)",
+  ],
+  ["src/conformance/official-rules.mjs", "official rules catalog loader (tarball-excluded)"],
+  ["src/conformance/rule-sdks.mjs", "rule SDK artifact loaders (tarball-excluded)"],
+  // Excluded from the tarball by name.
+  [
+    "src/custom-rules/wasm-fixture.mjs",
+    "WASM rule builder for the custom-rules suites (tarball-excluded)",
+  ],
+  // Shipped in the artifact, loaded by the test tiers only.
+  ["src/fixtures/evolution-lifecycle/workspace.mjs", "evolution-lifecycle suite fixture workspace"],
+  ["src/intent/mask-non-code.mjs", "the conformance scanners' comment/string masker"],
+  ["src/providers/native/differential.fixtures.mjs", "native differential fixture writer"],
+  ["src/report/envelope-shape.mjs", "envelope-shape measurer for the e2e tier"],
+]);
+
+describe("G-7 — no orphan modules", () => {
+  /**
+   * Writes a synthetic package — `package.json` plus `src/` files — into a
+   * temp directory and returns the root. The tree lives under the OS temp
+   * directory, outside this repository: proving the detector's teeth plants
+   * no violation file in the real tree.
+   *
+   * @param {Record<string, string>} files Package-root-relative file contents.
+   * @returns {string} The package root.
+   */
+  function syntheticPackage(files) {
+    const root = mkdtempSync(join(tmpdir(), "archkeep-g7-"));
+    for (const [key, raw] of Object.entries(files)) {
+      mkdirSync(dirname(join(root, key)), { recursive: true });
+      writeFileSync(join(root, key), raw);
+    }
+    return root;
+  }
+
+  it("names the orphan of a synthetic tree — the detector's teeth", () => {
+    const root = syntheticPackage({
+      "package.json": JSON.stringify({ exports: { ".": "./src/entry.mjs" } }),
+      "src/entry.mjs": 'import "./reachable.mjs";\nexport const entry = 1;\n',
+      "src/reachable.mjs": "export const reachable = 1;\n",
+      "src/orphan.mjs": "export const orphan = 1;\n",
+    });
+    try {
+      // The assertion is the teeth proof: it holds only while the detector
+      // still detects, so a detector that stopped reporting orphans — any
+      // walk that silently covered nothing — fails here and not just under
+      // the real tree.
+      expect(orphanModules(root)).toEqual(["src/orphan.mjs"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("passes a synthetic tree whose closure is complete", () => {
+    const root = syntheticPackage({
+      "package.json": JSON.stringify({ exports: { ".": "./src/entry.mjs" } }),
+      "src/entry.mjs": 'import "./reachable.mjs";\nexport const entry = 1;\n',
+      "src/reachable.mjs": "export const reachable = 1;\n",
+    });
+    try {
+      // The complement of the teeth test: a detector with inverted logic —
+      // one that named every reachable module — fails here.
+      expect(orphanModules(root)).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not flag a module a literal dynamic import() reaches — laziness is a legal runtime reach", () => {
+    const root = syntheticPackage({
+      "package.json": JSON.stringify({ exports: { ".": "./src/entry.mjs" } }),
+      "src/entry.mjs": 'export const load = () => import("./lazy.mjs");\nexport const entry = 1;\n',
+      "src/lazy.mjs": "export const lazy = 1;\n",
+    });
+    try {
+      expect(orphanModules(root)).toEqual([]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reaches every src module from a published entry, or finds it on the test-support roster", () => {
+    // An empty diagnostic is a claim, not a shrug: this passes only while
+    // every module the demand listing gathers is either entry-rooted or a
+    // rostered test-support module, and it fails naming anything else.
+    const unexcused = orphanModules().filter((key) => !TEST_SUPPORT_MODULES.has(key));
+    expect(unexcused).toEqual([]);
+  });
+
+  it("keeps the test-support roster honest — no rotten names, no stale excuses", () => {
+    const demand = new Set(gatherSrcModules());
+    const reached = new Set(reachableFromPublishedEntries());
+    const report = [
+      ...[...TEST_SUPPORT_MODULES.keys()]
+        .filter((key) => !demand.has(key))
+        .map((key) => `${key} is rostered but no longer exists under src/ — prune the roster`),
+      ...[...TEST_SUPPORT_MODULES.keys()]
+        .filter((key) => reached.has(key))
+        .map((key) => `${key} is rostered but an entry reaches it — prune the excuse`),
     ];
     expect(report).toEqual([]);
   });
