@@ -165,9 +165,11 @@ because they share one function.
 - Witness: injected `referenceTime()`; Contract-K guard naming "exactly one"
   exempt production site (the clock itself); waiver expiry threads one shared
   `now` through delta/change.
-- Gap: the exempt-site roster beyond the clock was not independently
-  enumerated by the audit (OQ-6 verifies against the guard's own test in
-  Phase 3).
+- Gap: none — verified in Phase 3 (PR #766): the exempt-site roster is
+  clock only — `WALL_CLOCK_ALLOWLIST` names exactly the injectable seam
+  (`governance/clock.mjs:27`, `intent.test.mjs:1296`), and the guard's
+  own test (`determinism-source-guard.test.mjs`) proves the exemption
+  load-bearing with an empty-allow-list negative control.
 
 ## INV-17 — Report conservation
 
