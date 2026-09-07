@@ -1,0 +1,104 @@
+archkeep — module-boundary enforcement across every language in the workspace
+
+Usage:
+  archkeep check [<path>...]   Check imports against the boundary rules
+  archkeep graph    Print the project graph as a deterministic snapshot
+  archkeep diff <baseline>   Compare two graph snapshots edge by edge
+  archkeep delta <baseline> | --capture   Classify how boundary violations moved between a captured baseline and head
+  archkeep change <baseline> --intent <file>   Reconcile a declared change intent against the architectural delta
+  archkeep discover [--propose]   Report observed facts, and optionally propose candidate architecture
+  archkeep drift    Compare the observed architecture against the declared intent
+  archkeep reconcile    Compare the declared intent against the observed architecture
+  archkeep waivers    List the boundary waivers and permanent suppressions on the table
+  archkeep fitness    Judge every declared fitness function against the workspace
+  archkeep history <dir>   Describe how the architecture evolved across snapshots
+  archkeep trajectory <dir>   Aggregate the deterministic drift trajectory across snapshots
+  archkeep evolution    Describe how the architecture evolved across a Git revision range
+  archkeep health [<snapshot-dir>]   Describe architecture health metrics and trends
+  archkeep report [<snapshot-dir>]   One governance document: how healthy the architecture is, and why
+  archkeep debt <dir>   Print the architecture-debt ledger across snapshots
+  archkeep impact <project>   List projects that depend on the named project
+  archkeep scenario <project>   Evaluate a hypothetical change against the current workspace
+  archkeep explain <file:line:column>   Explain the judgment for one import site
+  archkeep context <project> [--plan [<path>...]]   Show the architecture constraints that apply to a project
+  archkeep provenance    Describe where this run's facts came from and which rows carry an origin
+  archkeep decisions <id>   Walk the full chain behind one recorded decision — decision to bound rows, projects, findings, and its verification level
+  archkeep adr [<id>]   List recorded architecture decisions and what each binds
+  archkeep rules <list|info|verify|add> [<rule-name>]   List official rules, show details, verify catalog integrity, or add a rule
+  archkeep --help              Show this message
+
+Options:
+  --format text|sarif|json   Terminal report (default), SARIF 2.1.0 for GitHub
+                        code scanning, or the versioned JSON envelope
+                        docs/reference/json-output.md documents
+  --output <file>       Write the report to a file instead of stdout
+  --config <file>       Read the boundary law from here instead of
+                        <workspace root>/module-boundaries.config.mjs
+  --evidence-out <dir>   Also write each custom rule's evidence bundle
+                        into this existing directory, as <rule>.json —
+                        the exact document the rule was judged over
+  --capture             Print an evidence snapshot of the current tree
+                        (raw import records, graph, coverage, policy
+                        fingerprint) for a later delta run to compare against.
+                        Without --output, the snapshot goes to stdout.
+  --event-out <dir>     Append the delta's evolution event to this directory
+                        (one canonical record per transition; idempotent — a
+                        rerun over the same transition writes nothing new).
+                        Absent: no event file is written
+  --intent <file>       The change-intent manifest declaring the material
+                        architectural consequences this change expects
+                        (required; see docs/usage/change.md)
+  --propose             Also derive candidate components, boundaries, tags and rules from
+                        the observed facts — every candidate marked proposed and not
+                        authoritative; nothing is ever written
+  --write-intent <file>   Write the proposed components and rules to a valid
+                        architecture-intent.json file. Only valid with --propose;
+                        refuses to overwrite a file that already exists — the file
+                        is a candidate for drift/reconcile and must be reviewed
+                        before use
+  --base <rev>          The baseline revision — a commit, branch, tag,
+                        or HEAD~n; the first revision analyzed
+  --head <rev>          The tip revision (default HEAD); must be a
+                        linear descendant of --base with no merges between
+  --events <dir>        Link the evolution event store in <dir> so debt entries carry
+                        introducedBy/resolvedBy refs and a resolved list
+  --scenario-file <file>   Path to the scenario JSON file describing the
+                        hypothetical changes to evaluate
+  --plan                Request the agent planning context: current
+                        architecture, applicable policy (with Intent),
+                        impact, current violations, drift, coverage, and
+                        the commands that verify the change. Trailing
+                        paths scope the change; deterministic and
+                        never an LLM plan — Archkeep produces facts,
+                        agents produce plans.
+  --history-dir <dir>   Path to the workspace's history directory. When given and
+                        the directory holds archived snapshots, the planning context
+                        includes the architecture-debt snapshot: current violations,
+                        exemptions, and gaps aged across the history. Used only with
+                        `--plan`; ignored otherwise.
+  --catalog <path>      Path to the catalog file
+                        (default: node_modules/@ecoma-io/archkeep-rules/catalog.json)
+  --to <dir>            Target directory for the .wasm file
+                        (default: tools/rules/)
+
+Projects and tags come from the project graph (archkeep.json or Nx); the rules come from
+module-boundaries.config.mjs at the workspace root — the same table ESLint
+reads, so both enforcers answer from one source. That filename is a
+convention and can be changed per workspace: through archkeep.json's
+`boundaryConfig` field, or the integration's `boundaryConfig` option in nx.json.
+
+Naming paths scopes the run to those files. That is a fast local pre-check and
+not the gate: the cycle and lazy-load rules judge the file graph as a whole, so
+a scoped run can miss what a whole-workspace run would find.
+
+A workspace with a go.work at its root also has its use list compared against
+every project's go.mod, whatever paths scope the run — a module in one list
+and not the other means a developer's go build and CI build different trees.
+
+A workspace whose tsconfig declares a paths table also has each alias judged
+for life: an alias whose every target points into directories that do not
+exist resolves no import, so it fails the run the way a violation does. The
+table itself is never re-resolved — the check reads the same parsed tsconfig
+the import resolver uses.
+
+Exit codes: 0 clean · 1 findings (violations, go.work drift, dead path aliases) · 2 usage error · 3 no verdict (a file could not be analyzed, or the run could not start)

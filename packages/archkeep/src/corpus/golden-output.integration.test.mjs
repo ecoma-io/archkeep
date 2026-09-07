@@ -31,6 +31,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { EXIT } from "../verdict.mjs";
 import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../../spawn-budget.mjs";
+import { COMMAND_NAMES } from "../../cli.mjs";
 import { determinismSweepFiles, sweepIntents } from "../../e2e/fixtures/determinism-sweep.mjs";
 
 vi.setConfig({ testTimeout: SPAWN_TEST_BUDGET_MS });
@@ -434,6 +435,79 @@ for (const verb of VERB_PLAN) {
     }
   });
 }
+
+// ---------------------------------------------------------------------------
+// The --help lane — byte-identity for the usage surface (Phase 6, WI-6)
+// ---------------------------------------------------------------------------
+// `archkeep --help` and `<verb> --help` both print the one usage template to
+// stdout and exit 0 — the template interpolates no workspace facts, so its
+// bytes are pinned verbatim. A bare invocation prints the same template plus
+// the `archkeep: no command given.` line to STDERR and exits 2 — the
+// usage-error lane the migration plan promises to leave untouched, pinned the
+// same way so a template edit cannot land without a matching golden.
+
+const HELP_GOLDEN = join(GOLDEN_DIR, "help.text");
+const USAGE_ERROR_GOLDEN = join(GOLDEN_DIR, "usage-error.text");
+
+describe("the --help lane — byte-identical usage output", () => {
+  it("archkeep --help produces byte-identical stdout and exits 0", () => {
+    const result = run(["--help"]);
+
+    if (UPDATING) {
+      writeFileSync(HELP_GOLDEN, result.stdout);
+      return;
+    }
+
+    let golden;
+    try {
+      golden = readFileSync(HELP_GOLDEN);
+    } catch {
+      throw new Error(
+        `Golden file missing: ${HELP_GOLDEN}\n` +
+          `Regenerate with: ARCHKEEP_UPDATE_GOLDENS=1 npx vitest run src/corpus/golden-output.integration.test.mjs`,
+      );
+    }
+
+    expect(result.status).toBe(0);
+    byteIdentityComparator(result.stdout, golden);
+  });
+
+  for (const verb of COMMAND_NAMES) {
+    it(`${verb} --help prints the same usage bytes and exits 0`, () => {
+      const result = run([verb, "--help"]);
+
+      if (UPDATING) {
+        return; // the entry row above owns the golden
+      }
+
+      expect(result.status).toBe(0);
+      byteIdentityComparator(result.stdout, readFileSync(HELP_GOLDEN));
+    });
+  }
+
+  it("a bare invocation prints the usage error to stderr and exits 2", () => {
+    const result = run([]);
+
+    if (UPDATING) {
+      writeFileSync(USAGE_ERROR_GOLDEN, result.stderr);
+      return;
+    }
+
+    let golden;
+    try {
+      golden = readFileSync(USAGE_ERROR_GOLDEN);
+    } catch {
+      throw new Error(
+        `Golden file missing: ${USAGE_ERROR_GOLDEN}\n` +
+          `Regenerate with: ARCHKEEP_UPDATE_GOLDENS=1 npx vitest run src/corpus/golden-output.integration.test.mjs`,
+      );
+    }
+
+    expect(result.status).toBe(2);
+    expect(result.stdout.length).toBe(0);
+    byteIdentityComparator(result.stderr, golden);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // GAP-B — byte-identity across repeated cold starts
