@@ -582,6 +582,10 @@ const TEST_SUPPORT_MODULES = new Map([
   ["src/conformance/differential.mjs", "conformance differential helpers (tarball-excluded)"],
   ["src/conformance/engines.mjs", "conformance engine runners (tarball-excluded)"],
   ["src/conformance/fixture.mjs", "conformance fixture helpers (tarball-excluded)"],
+  [
+    "src/conformance/layer-edges.mjs",
+    "layer edge extractor for the G-1/G-5/G-2 scans (tarball-excluded)",
+  ],
   ["src/conformance/official-rules.mjs", "official rules catalog loader (tarball-excluded)"],
   ["src/conformance/rule-sdks.mjs", "rule SDK artifact loaders (tarball-excluded)"],
   // Excluded from the tarball by name.
