@@ -31,7 +31,6 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { EXIT } from "../verdict.mjs";
 import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../../spawn-budget.mjs";
-import { environmentForTree } from "../workspace.mjs";
 import { determinismSweepFiles, sweepIntents } from "../../e2e/fixtures/determinism-sweep.mjs";
 
 vi.setConfig({ testTimeout: SPAWN_TEST_BUDGET_MS });
