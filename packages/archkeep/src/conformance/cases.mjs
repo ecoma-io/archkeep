@@ -1166,7 +1166,14 @@ export const CONFORMANCE_CASES = [
         file: "libs/nested-source/src/collides.ts",
         upstream: ["nestedBannedExternalImportsViolation"],
       },
-      { file: "libs/nested-source/src/differs.ts", upstream: [] },
+      // Since nx 23.2.0 the nested ban is judged against the transitive
+      // package's own name (`@nested/apart` resolves through `nested-apart`,
+      // which reaches the banned `nested-shared`), so this file reports too —
+      // the case no longer demonstrates an alias-collision gap.
+      {
+        file: "libs/nested-source/src/differs.ts",
+        upstream: ["nestedBannedExternalImportsViolation"],
+      },
     ],
   },
   {

@@ -165,14 +165,10 @@ export function getTargetProjectBasedOnRelativeImport(imp, sourceFile, projectRo
  * Does this constraint ban this external import? Port of
  * `isConstraintBanningProject`, whose three steps each hide something:
  *
- * 1. The constraint only speaks about imports OF THIS PACKAGE. `imp` must be
- *    the package name itself or a path under it, otherwise the row is silent —
- *    which is what makes `nestedBannedExternalImportsViolation` so hard to
- *    trigger (see `hasBannedDependencies`).
- * 2. `bannedExternalImports` is matched with `mapGlobToRegExp` against the FULL
- *    specifier, so `@scope/pkg/*` bans the deep paths while leaving the entry
- *    point importable, and `@scope/pkg*` bans both.
- * 3. `allowedExternalImports` is an allowlist evaluated with `.every()`: an
+ * 1. `bannedExternalImports` is matched with `mapGlobToRegExp` against the
+ *    given specifier, so `@scope/pkg/*` bans the deep paths while leaving the
+ *    entry point importable, and `@scope/pkg*` bans both.
+ * 2. `allowedExternalImports` is an allowlist evaluated with `.every()`: an
  *    import is banned when it matches NONE of the entries. Two consequences —
  *    an absent list bans nothing (`undefined?.every` short-circuits), and an
  *    EMPTY list `[]` bans every import of the package, because `[].every()` is
@@ -196,6 +192,10 @@ export function isConstraintBanningProject(externalProject, constraint, imp) {
   assertMatchableSpecifier(imp, "import specifier judged against the constraint table");
   const { allowedExternalImports, bannedExternalImports } = constraint;
   const { packageName } = externalProject.data;
+  // The guard is unchanged from upstream (nx 23.x): a constraint only speaks
+  // about imports OF this package. If `imp` — the specifier being judged,
+  // which for a nested-ban check callers set to the node's own `packageName`
+  // — is neither that package nor a path under it, the row is silent.
   if (imp !== packageName && !imp.startsWith(`${packageName}/`)) return false;
   if (bannedExternalImports?.some((definition) => mapGlobToRegExp(definition).test(imp))) {
     return true;
@@ -262,18 +262,15 @@ export function findTransitiveExternalDependencies(graph, reach, source) {
  * The nested external dependencies this constraint bans, as
  * `[externalNode, violatingSourceNode, constraint]` triples.
  *
- * **Read the `imp` argument carefully.** It is the specifier of the import
- * being judged — which, at this point in the pipeline, resolves to a PROJECT,
- * not to any of the external packages being scanned. `isConstraintBanningProject`
- * returns false immediately unless that specifier is the nested package's name
- * or a path under it, so this fires only where a project's import alias and a
- * transitively-reachable package name coincide. That is upstream's behaviour in
- * `@nx/eslint-plugin` 23.1.1, reproduced rather than corrected: this engine's
- * contract is to agree with ESLint's verdict, and a "fixed" version here would
- * report violations ESLint does not, breaking the parity that makes the two
- * comparable. It is recorded as a finding instead.
+ * No `imp` argument: the predicate judges the external NODE itself —
+ * `isConstraintBanningProject` is called with the node's own `packageName` as
+ * the specifier, exactly as upstream does in `runtime-lint-utils.js` since nx
+ * 23.2.0 (a change that made this check a pure ban-list predicate rather than
+ * one gated on the site's alias coinciding with the package name). This
+ * engine's contract is to agree with ESLint's verdict, so the port reproduces
+ * that behavior rather than keeping the pre-23.2.0 gate.
  */
-export function hasBannedDependencies(externalDependencies, graph, constraint, imp) {
+export function hasBannedDependencies(externalDependencies, graph, constraint) {
   // Exported, so it is reachable with a list this module did not build — the
   // membership guard belongs here too, not only in
   // `findTransitiveExternalDependencies` above. Same failure either way: an
@@ -296,7 +293,11 @@ export function hasBannedDependencies(externalDependencies, graph, constraint, i
       (dependency) =>
         Object.hasOwn(externalNodes, dependency.target) &&
         Object.hasOwn(nodes, dependency.source) &&
-        isConstraintBanningProject(externalNodes[dependency.target], constraint, imp),
+        isConstraintBanningProject(
+          externalNodes[dependency.target],
+          constraint,
+          externalNodes[dependency.target].data.packageName,
+        ),
     )
     .map((dep) => [externalNodes[dep.target], nodes[dep.source], constraint]);
 }

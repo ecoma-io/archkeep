@@ -1040,11 +1040,11 @@ describe("evaluate", () => {
 
   describe("nestedBannedExternalImportsViolation", () => {
     /**
-     * Upstream matches the ban against the CURRENT specifier, not against the
-     * nested package's name, so the rule can only fire where a project's import
-     * alias and a transitively reachable package name are the same string. That
-     * is `@nx/eslint-plugin` 23.1.1's behaviour, reproduced rather than
-     * corrected: this engine's job is to agree with ESLint's verdict.
+     * Since nx 23.2.0 upstream judges the nested ban against the transitive
+     * package's OWN name, not the site's specifier, so the rule fires wherever
+     * a reachable package matches the ban regardless of the import alias at
+     * the site. Reproduced rather than corrected: this engine's job is to
+     * agree with ESLint's verdict.
      */
     const nested = () =>
       graphOf([project("alpha", { tags: ["zone:x"] }), project("beta", { tags: ["zone:y"] })], {
@@ -1080,16 +1080,56 @@ describe("evaluate", () => {
         config(banning, { checkNestedExternalImports: true }),
       );
       expect(idsOf(violations)).toEqual(["nestedBannedExternalImportsViolation"]);
-      expect(violations[0].message).toContain("Nested import found at beta");
+      // Upstream 23.2.0 names the offending package in the message — the
+      // packageName read off the external node's `data` must survive the emit.
+      expect(violations[0].message).toContain('Nested import of "@vendor/shell" found at beta');
     });
 
     it("stays silent while checkNestedExternalImports is off", () => {
       expect(evaluate([aliasCollision()], nested(), config(banning))).toEqual([]);
     });
 
-    it("stays silent when the specifier is not the banned package's own name", () => {
+    it("fires even when the site's specifier does not name the banned package", () => {
+      // Upstream 23.2.0 judges the nested ban against the transitive package's
+      // OWN name, no longer gated on the site's alias coinciding with it — so a
+      // site importing something unrelated still reports when a reachable child
+      // project imports the banned package.
+      const violations = evaluate(
+        [site()],
+        nested(),
+        config(banning, { checkNestedExternalImports: true }),
+      );
+      expect(idsOf(violations)).toEqual(["nestedBannedExternalImportsViolation"]);
+      expect(violations[0].message).toContain('Nested import of "@vendor/shell" found at beta');
+    });
+
+    it("stays silent when the transitive package is not banned", () => {
+      // The silent direction under 23.2.0: the site aliasing a banned name is
+      // not enough — the transitive package itself must match the ban. A site
+      // spelling `@vendor/shell/sub` whose child imports a different package
+      // reports nothing, because the nested check speaks about what the child
+      // actually pulls in.
+      const graph = graphOf(
+        [project("alpha", { tags: ["zone:x"] }), project("beta", { tags: ["zone:y"] })],
+        {
+          externalNodes: {
+            "npm:@vendor/other": {
+              name: "npm:@vendor/other",
+              type: "npm",
+              data: { packageName: "@vendor/other" },
+            },
+          },
+          dependencies: {
+            beta: [{ source: "beta", target: "npm:@vendor/other", type: "static" }],
+          },
+        },
+      );
       expect(
-        evaluate([site()], nested(), config(banning, { checkNestedExternalImports: true })),
+        evaluate(
+          [site({ specifier: "@vendor/shell/sub" })],
+          graph,
+          config(banning, { checkNestedExternalImports: true }),
+        ),
       ).toEqual([]);
     });
   });

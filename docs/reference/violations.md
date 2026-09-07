@@ -146,11 +146,12 @@ but other regex metacharacters survive — `.` still means any character. See
 
 ### 5. `nestedBannedExternalImportsViolation`
 
-> A project tagged with "…" is not allowed to import "…". Nested import found at …
+> A project tagged with "…" is not allowed to import "…". Nested import of "…" found at …
 
 The same ban, matched against something a **dependency** drags in rather than
 something this project imports directly. Only fires under
-`checkNestedExternalImports: true`.
+`checkNestedExternalImports: true`. The message names the offending package
+itself and the child project that pulls it in.
 
 This is the one check that reports **once per offending package**, so a single
 import site can produce several lines.

@@ -111,7 +111,10 @@ const require = createRequire(import.meta.url);
  * @returns {Record<string, unknown>}
  */
 function installedModuleBoundaryDefaults() {
-  const plugin = require("@nx/eslint-plugin");
+  // The cast past the plugin's declared `RuleModule<string, unknown[]>`, whose
+  // typing does not describe `defaultOptions`' real shape (see
+  // `./conformance/engines.mjs`'s read of the same rule).
+  const plugin = /** @type {any} */ (require("@nx/eslint-plugin"));
   const { depConstraints: _pluginDepConstraintsDefault, ...defaults } =
     plugin.rules["enforce-module-boundaries"].defaultOptions[0];
   return defaults;

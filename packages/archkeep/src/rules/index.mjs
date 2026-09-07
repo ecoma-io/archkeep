@@ -522,19 +522,19 @@ function* constraintGroupsFor(site, sourceProject, targetProject, ctx) {
 
     if (
       options.checkNestedExternalImports &&
-      constraint.bannedExternalImports &&
-      constraint.bannedExternalImports.length
+      (constraint.bannedExternalImports?.length || constraint.allowedExternalImports)
     ) {
-      const matches = hasBannedDependencies(
-        transitiveExternalDeps,
-        graph,
-        constraint,
-        site.specifier,
-      );
+      const matches = hasBannedDependencies(transitiveExternalDeps, graph, constraint);
       // One violation per offending package — the only check in the engine that
       // reports more than once for a single import site.
       if (matches.length > 0) {
-        yield matches.map(([, violatingSource, matchedConstraint]) =>
+        // `packageName` is the field upstream's own report reads off the
+        // external node (`target.data.packageName`, measured against
+        // @nx/eslint-plugin 23.2.0) — the template's placeholder names it. The
+        // optional chain is the rule layer's never-throw contract: an external
+        // node without `data` renders the literal placeholder instead of
+        // aborting the run.
+        yield matches.map(([externalNode, violatingSource, matchedConstraint]) =>
           violationOf(
             site,
             sourceProject,
@@ -544,6 +544,7 @@ function* constraintGroupsFor(site, sourceProject, targetProject, ctx) {
               sourceTag: constraintSourceTagLabel(matchedConstraint),
               childProjectName: violatingSource.name,
               imp: site.specifier,
+              packageName: externalNode.data?.packageName,
             },
             matchedConstraint,
           ),

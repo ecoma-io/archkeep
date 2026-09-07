@@ -171,10 +171,10 @@
               "id": "nestedBannedExternalImportsViolation",
               "name": "nestedBannedExternalImportsViolation",
               "shortDescription": {
-                "text": "A project tagged with \"{{sourceTag}}\" is not allowed to import \"{{imp}}\". Nested import found at {{childProjectName}}"
+                "text": "A project tagged with \"{{sourceTag}}\" is not allowed to import \"{{imp}}\". Nested import of \"{{packageName}}\" found at {{childProjectName}}"
               },
               "fullDescription": {
-                "text": "A project tagged with \"{{sourceTag}}\" is not allowed to import \"{{imp}}\". Nested import found at {{childProjectName}}"
+                "text": "A project tagged with \"{{sourceTag}}\" is not allowed to import \"{{imp}}\". Nested import of \"{{packageName}}\" found at {{childProjectName}}"
               },
               "defaultConfiguration": {
                 "level": "error"
