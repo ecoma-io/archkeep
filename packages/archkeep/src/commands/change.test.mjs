@@ -231,6 +231,7 @@ describe("the reconciliation verdicts", () => {
       }),
     });
     expect(result.status).toBe("ok");
+    expect(result.exitCode).toBe(0);
     expect(result.changeIntent.reconciliation.verdict).toBe("matched");
     expect(result.changeIntent.reconciliation.unexpected).toEqual([]);
     expect(result.changeIntent.reconciliation.missingExpected).toEqual([]);
@@ -256,6 +257,7 @@ describe("the reconciliation verdicts", () => {
     ];
     const result = await run({ ctx: contextOf({ graph: head }), baseline, intent: manifest() });
     expect(result.status).toBe("findings");
+    expect(result.exitCode).toBe(1);
     expect(result.changeIntent.reconciliation.verdict).toBe("undeclared");
     expect(result.changeIntent.reconciliation.matched).toHaveLength(2);
     expect(result.changeIntent.reconciliation.unexpected).toEqual([
@@ -462,6 +464,7 @@ describe("the base identity", () => {
       intent: manifest({}, other),
     });
     expect(result.status).toBe("no-verdict");
+    expect(result.exitCode).toBe(3);
     expect(result.changeIntent.reconciliation.verdict).toBe("unproven");
     expect(result.changeIntent.reconciliation.reasons[0]).toContain(other.slice(0, 8));
     expect(result.changeIntent.reconciliation.reasons[0]).toContain(
@@ -598,6 +601,7 @@ describe("refusals — every could-not-look path says so", () => {
     // but it now arrives as the structured no-verdict envelope, the same
     // machine contract the graph family speaks, not a bare throw.
     expect(result.status).toBe("no-verdict");
+    expect(result.exitCode).toBe(3);
     const envelope = JSON.parse(result.report.json);
     expect(envelope.status).toBe("no-verdict");
     expect(envelope.exitCode).toBe(3);

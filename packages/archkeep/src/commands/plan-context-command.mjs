@@ -61,6 +61,7 @@
  * reporting set. This makes the plan's verdict correct on every provider.
  */
 import { statSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import { join } from "node:path";
 
 import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
@@ -82,6 +83,8 @@ import { buildDependencies, buildProjects, computePolicyFingerprint } from "./gr
 import { resolveProvenance } from "./provenance.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { declaresFitness, fitnessForCheck } from "./fitness.mjs";
+import { resolveCommandContext } from "./context.mjs";
+import { resolvePolicy } from "./policy.mjs";
 import { computeWaivers } from "./waivers.mjs";
 import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
 import { formatPlanContextReport } from "../report/plan-context-text.mjs";
@@ -666,4 +669,36 @@ function goWorkResult(goWork) {
 /** The drift section, spelled the way `check` spells it, plus `null` for absent. */
 function tsconfigPathsResult(tsconfigPaths) {
   return tsconfigPaths === null ? null : { checked: true, findings: tsconfigPaths.findings };
+}
+
+/**
+ * `context --plan` as the CLI drives it: the shared preamble — command
+ * context, then the boundary law — resolved here, plus the plan's own
+ * arguments (the project, the change's scope paths, the optional history
+ * directory), so `../../cli.mjs`'s driver only wires options, IO seams, and
+ * where output lands (`./README.md`). The engine this returns from is
+ * `planContextCommand` above, unchanged.
+ *
+ * @param {{config: string|null, historyDir: string|null, paths: string[]}} options
+ *   This run's parsed flags; `paths[0]` is the project name, the rest are
+ *   the change's scope.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `planContextCommand`'s result, unmodified.
+ */
+export async function planContext(options, { cwd, readGraph, listFiles }) {
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  const { config } = await resolvePolicy(options, commandContext, cwd);
+  const historyDir = options.historyDir
+    ? isAbsolute(options.historyDir)
+      ? options.historyDir
+      : resolve(cwd, options.historyDir)
+    : null;
+  return planContextCommand(
+    options.paths[0],
+    options.paths.slice(1),
+    commandContext,
+    config,
+    historyDir,
+  );
 }

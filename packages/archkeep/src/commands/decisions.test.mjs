@@ -401,6 +401,7 @@ describe("decisionsCommand — the chain", () => {
     // The `fitness` face: the row both faces must derive identically.
     const fitness = await fitnessCommand(ctx, { config: law });
     expect(fitness.status).toBe("ok");
+    expect(fitness.exitCode).toBe(0);
     expect(fitness.fitness.functions).toMatchObject([{ name: "intent-matches", verdict: "pass" }]);
 
     // The `decisions` face: the same row, projected through the bound gate —

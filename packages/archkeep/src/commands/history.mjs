@@ -72,7 +72,7 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 import {
   blindSpotRows,
@@ -85,9 +85,11 @@ import { classifyEvolution } from "../governance/evolution-event.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatHistoryReport } from "../report/history-text.mjs";
 import { computeDiff, parseBaseline } from "./diff.mjs";
-import { buildDependencies, buildProjects } from "./graph.mjs";
+import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
+import { resolveCommandContext } from "./context.mjs";
+import { resolvePolicy } from "./policy.mjs";
 
 /**
  * A graph envelope's architecture identity: the part that determines whether
@@ -765,4 +767,85 @@ function envelopeToSnapshot(envelope, path, id) {
     },
     id,
   };
+}
+
+/**
+ * The history directory, resolved once from the single positional argument —
+ * shared by the CLI entry and the output guard below.
+ *
+ * @param {{paths: string[]}} options This run's parsed flags.
+ * @param {string} cwd The run's working directory.
+ * @returns {string}
+ */
+function historyDirFrom(options, cwd) {
+  return isAbsolute(options.paths[0]) ? resolve(options.paths[0]) : resolve(cwd, options.paths[0]);
+}
+
+/**
+ * `history`'s self-footgun guard: writing the history report back into the
+ * very directory `history` reads would poison every later run (the report
+ * envelope is a `history` envelope, which `parseBaseline` refuses as a
+ * non-`graph` snapshot). Declared by the command that owns the law and
+ * enforced by the driver's write door; `null` means no refusal.
+ *
+ * @param {{output: string|null, paths: string[]}} options This run's parsed
+ *   flags.
+ * @param {string} cwd The run's working directory, for relative flag
+ *   resolution.
+ * @returns {string|null} The refusal message, or `null` when the output is
+ *   safe.
+ */
+export function historyOutputRefusal(options, cwd) {
+  if (!options.output) return null;
+  // `resolve()` on the absolute branch too — not just the raw path — the
+  // same normalization `writeOutputReport` applies, so an absolute
+  // `--output` carrying a `..` segment that resolves INTO the history
+  // directory cannot slip past this guard unnormalized.
+  const outputAbs = isAbsolute(options.output)
+    ? resolve(options.output)
+    : resolve(cwd, options.output);
+  const dir = historyDirFrom(options, cwd);
+  if (dirname(outputAbs) === dir) {
+    return (
+      `archkeep: --output '${options.output}' is inside the history directory '${dir}' — ` +
+      `writing the report there would be read back as a snapshot on the next run. ` +
+      `Write it somewhere else.`
+    );
+  }
+  return null;
+}
+
+/**
+ * `history` as the CLI drives it: the history directory resolved from the
+ * single positional argument, then the shared preamble — command context,
+ * and under `--capture` the boundary law whose fingerprint the snapshot
+ * records — so `../../cli.mjs`'s driver only wires options, IO seams, and
+ * where output lands (`./README.md`). The engine this returns from is
+ * `historyCommand` above, unchanged.
+ *
+ * @param {{capture: boolean, config: string|null, paths: string[]}} options
+ *   This run's parsed flags.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `historyCommand`'s result, unmodified.
+ */
+export async function history(options, { cwd, readGraph, listFiles }) {
+  const dir = historyDirFrom(options, cwd);
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // The boundary law's fingerprint when the workspace declares one, so a
+  // captured snapshot records the policy it was taken under — the same
+  // config loading `graph` uses (`resolvePolicy`, profile-aware the same
+  // way `check` is), kept in one place so a capture and a standalone
+  // `graph` never disagree about the current policy.
+  let fingerprint = null;
+  if (options.capture) {
+    const { config } = await resolvePolicy(options, commandContext, cwd);
+    if (config) {
+      fingerprint = computePolicyFingerprint(config);
+    }
+  }
+  return historyCommand(dir, commandContext, {
+    capture: options.capture,
+    policyFingerprint: fingerprint,
+  });
 }

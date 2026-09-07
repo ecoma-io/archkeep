@@ -57,7 +57,7 @@ A missing field is a review defect, not a style preference.
 | 3 — Boundary enforcement                            | **complete** — all units + the exit checkpoint landed (PRs #762–#765, #766)                       | CHK-3 below              |
 | 4 — Internal extraction                             | **complete** — GAP-A + GAP-B closed (PR #767); no proven extraction (CHK-5)                       | CHK-4, CHK-5 below       |
 | 5 — Capability facades                              | **complete** (PR #772 merged as 60f0e7d2)                                                         | PD-18, CHK-6             |
-| 6 — CLI recomposition                               | **in progress** — entry baseline recorded (CHK-6)                                                 | CHK-6                    |
+| 6 — CLI recomposition                               | **complete** (PR #775)                                                                            | CHK-7 below              |
 | 7 — Additional surfaces                             | not started                                                                                       | blocked by 6             |
 | 8 — Federation readiness                            | not started                                                                                       | maintainer-gated         |
 | 9 — Final hardening                                 | not started                                                                                       | blocked by 8 (or waiver) |
@@ -76,7 +76,9 @@ fold-decision record — Phase 2's exit), PRs #762–#765 (Phase 3's units:
 the G-1/G-5/G-2 scans, the G-7 orphan detector and its test-support
 roster, the intra-`src/` DAG statement, the G-3/G-4/G-6/G-8
 dispositions), and PR #766 (the Phase 3 exit checkpoint), and PR #767
-(Phase 4 entry gate: golden-output corpus + GAP-A/B).
+(Phase 4 entry gate: golden-output corpus + GAP-A/B), PR #772 (Phase 5:
+capability facades), PR #774 (CHK-6), and PR #775 (Phase 6's units + exit
+checkpoint).
 
 ## Checkpoints
 
@@ -1289,6 +1291,56 @@ dispositions), and PR #766 (the Phase 3 exit checkpoint), and PR #767
   before this phase's exit checkpoint lands.
 - **Next**: implement WI-1..WI-7 in the Phase 6 PR; adversarial review;
   land; checkpoint the Phase 6 close.
+
+### CHK-7 — Phase 6 close: CLI recomposition (2026-09-07)
+
+- **ID**: CHK-7. **Phase**: 6 (close). **Status**: complete — PR #775.
+  Maintainer-delegated execution (the PD-18 precedent; the PR is the veto
+  window).
+- **Units**: WI-1 `181ae814` — every verdict-bearing command's result carries
+  `exitCode` on all lanes (success, findings, no-verdict/refusal) and the five
+  drivers return it (`cli.mjs` return sites; `verdictFor` gone from the CLI,
+  the one copy lives at `src/commands/check.mjs`); WI-2 `eebbdcab` — the
+  native-model read the help lane carried moved to
+  `src/commands/policy.mjs` (`nativePolicyOptions(root, { readFile })`);
+  WI-3 `2ac7a956` — additive `(options, io)` wrappers in all 19 command
+  modules, drivers collapsed to wiring, facades pure re-exports (PD-18);
+  WI-3 tail `7ea9856a` — the `--write-intent` clobber-refusal DECISION moved
+  to `src/commands/discover.mjs` (`intentWriteRefusal`), the CLI keeping the
+  write mechanics only, matching `historyOutputRefusal`'s precedent;
+  INV-18 re-certification `e84d1f62` and again at `7ea9856a` (the `cli.mjs`
+  digest `92427d87…`); WI-4 `bd349f10` — the G-4 entry-surface import scan
+  (`src/conformance/entry-surface-imports.test.mjs`); WI-5 `055853af` — the
+  findings pins for `delta --compare` and `change` over a real import-record
+  delta; WI-6 `03c09a55` — `--help` byte goldens (`help.text`,
+  `usage-error.text`) in the corpus gate; WI-7 `50abdc41` — control-plane
+  sync (G-4 row, INV-2/INV-4 geography, GAP-A counts, the Phase 6 exit
+  wording in MIGRATION-PLAN).
+- **Canonical ownership changes**: two, both down the pipeline. (1) The
+  help-time native read is a command-layer preamble now — the
+  `commands → providers` direction `check` and `context` already hold
+  (providers observe; policy resolution evaluates); `ARCHKEEP_MODEL_FILE` is
+  still defined once, in `src/options.mjs` (G-6 intact — `model.mjs`
+  re-exports it). (2) The write-intent refusal decision belongs to
+  `discover` beside the proposal it protects. No SEMANTIC-MODEL row moved;
+  no BOUNDARIES row changed — no declared boundary moved.
+- **Debt budget**: gaps before — the four named at entry (G-4 unimplemented,
+  findings pins 3/5, no help golden, the `cli.mjs` provider edge); gaps
+  closed — all four, plus the write-intent guard's CLI ownership (a gap the
+  close audit found, not the entry list); gaps introduced — none; net delta —
+  negative.
+- **Evidence**: full battery `archkeep:test` 218 files / 5930/5930
+  (`/tmp/phase6-full-test-3.log`; one load-flake timeout in
+  `engines-edge.test.mjs` on an earlier run — green isolated in 3.3 s and in
+  the final clean run); exit-matrix 27/27; corpus gate 124/124 including the
+  help lane; intent gate 58/58 + G-4 scan 7/7; `archkeep-mcp:test` 51/51;
+  gate scripts exit 0; the repository boundary check exit 0 (2601 imports);
+  lint, format, typecheck, check-packages, check-docs-links, check-skills
+  green; the adversarial review's verdict on the unit tree was correct with
+  no blocker/major/minor, and the WI-3 tail commit re-ran its own lanes
+  (discover unit + CLI integration 35/35, intent + G-4 65/65).
+- **Next**: Phase 7 (additional surfaces) starts only through its own gate —
+  the maintainer's steering governs when.
 
 ## Conventions maintained here
 

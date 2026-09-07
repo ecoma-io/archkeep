@@ -77,6 +77,8 @@
  * intent produce byte-identical text and JSON.
  */
 import { blindSpotRows } from "../analysis/source-util.mjs";
+import { resolveCommandContext } from "./context.mjs";
+import { resolvePolicy } from "./policy.mjs";
 import { buildDependencies, buildProjects } from "./graph.mjs";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
@@ -470,4 +472,47 @@ export async function driftCommand(commandContext, io = {}) {
       json: renderJson(envelope),
     },
   };
+}
+
+/**
+ * `drift` as the CLI drives it: the shared preamble — command context, then
+ * the boundary law — resolved here so `../../cli.mjs`'s driver only wires
+ * options, IO seams, and where output lands (`./README.md`). The engine this
+ * returns from is `driftCommand` above, unchanged.
+ *
+ * The loaded policy — profile-aware the same way `check` is
+ * (`resolvePolicy`), `null` when the workspace declares none. Drift reads
+ * the intent's rows, and the fitness half of a row's `decisionRef` resolves
+ * against the ids THIS policy declares (F04), so the same policy that made
+ * the boundary law answerable to the model must answer here. `drift` has no
+ * `--config` (`DRIFT_FLAG_HELP`), so `config` is always the workspace's own
+ * default — resolvePolicy reads `options.config` as the override, hence
+ * `null` here, which selects the workspace's configured boundary law (or a
+ * profile, when one is registered).
+ *
+ * The failure is DEFERRED rather than thrown here. `drift`'s only reader of
+ * this policy is the non-verdict decisionRef axis, and only for rows that
+ * carry one, so a workspace with an intent and no boundary config was
+ * exiting 3 over a law drift would never have opened — a fifth refusal
+ * neither `docs/usage/drift.md` nor `reconcile`, which makes the same four,
+ * ever had. `driftCommand` rethrows it, unchanged, at the one site that
+ * reads the policy, so every workspace whose intent cites anything keeps the
+ * exact exit-3 it had.
+ *
+ * @param {{format: string, output: string|null, paths: string[]}} options
+ *   This run's parsed flags.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `driftCommand`'s result, unmodified.
+ */
+export async function drift(options, { cwd, readGraph, listFiles }) {
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  let config = null;
+  let configError = null;
+  try {
+    ({ config } = await resolvePolicy({ ...options, config: null }, commandContext, cwd));
+  } catch (error) {
+    configError = /** @type {Error} */ (error);
+  }
+  return driftCommand(commandContext, { config, configError });
 }

@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { buildObserved, discoverCommand, proposalToIntent } from "./discover.mjs";
+import {
+  buildObserved,
+  discoverCommand,
+  intentWriteRefusal,
+  proposalToIntent,
+} from "./discover.mjs";
 import { formatDiscoverReport } from "../report/discover-text.mjs";
 
 vi.mock("./provenance.mjs", () => ({ resolveProvenance: vi.fn(() => "mock-provenance") }));
@@ -419,5 +424,18 @@ describe("proposalToIntent", () => {
     expect(intent).toHaveProperty("forbidden");
     expect(intent.boundaries).toHaveLength(2);
     expect(intent.forbidden).toHaveLength(1);
+  });
+});
+
+describe("intentWriteRefusal", () => {
+  it("refuses a target that already holds a file — the message names the target and the way out", () => {
+    const refusal = intentWriteRefusal("architecture-intent.json", { exists: () => true });
+    expect(refusal).toContain("architecture-intent.json");
+    expect(refusal).toContain("already exists");
+    expect(refusal).toContain("Move or delete the file first");
+  });
+
+  it("allows a fresh target — null, not an empty message", () => {
+    expect(intentWriteRefusal("architecture-intent.json", { exists: () => false })).toBeNull();
   });
 });

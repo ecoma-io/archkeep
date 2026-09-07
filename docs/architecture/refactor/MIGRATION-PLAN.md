@@ -536,8 +536,10 @@ moves down a layer, not sideways.
 **Exit**: exit-matrix green per verb side (ok/refused plus the suite's named
 extras), findings-mode pinned for the five exit-1 verbs
 (`check`, `fitness`, `delta --compare`, `change`, `rules verify`), over the corpus;
-`cli.integration` spawned-binary suite green; `--help` byte-stable; no
-driver imports an analyzer or provider directly (scan if Phase 3 built one).
+`cli.integration` spawned-binary suite green; `--help` byte-stable (pinned
+to goldens in the corpus gate); no driver imports an analyzer or provider
+directly — gated by the Phase 6 scan
+`conformance/entry-surface-imports.test.mjs`, which closed G-4.
 
 ## Phase 7 — Additional surfaces (LSP, MCP, VS Code)
 

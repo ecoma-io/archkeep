@@ -49,10 +49,12 @@ import {
   unresolvableLiteralCount,
 } from "../analysis/source-util.mjs";
 import { buildDependencies, buildProjects } from "./graph.mjs";
+import { isAbsolute, resolve } from "node:path";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatHealthReport } from "../report/health-text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { readSnapshots } from "./history.mjs";
+import { resolveCommandContext } from "./context.mjs";
 import {
   boundaryMetrics,
   couplingMetrics,
@@ -61,6 +63,8 @@ import {
   structuralMetrics,
 } from "../governance/metrics.mjs";
 import { judgeIntent } from "../architecture-intent/judge.mjs";
+import { loadIntentIfTracked } from "../architecture-intent/model.mjs";
+import { resolvePolicy } from "./policy.mjs";
 
 /**
  * Computes the intent verdict the fitness metric reads — the same `judgeIntent`
@@ -221,4 +225,34 @@ export function healthCommand(commandContext, io = {}) {
       json: renderJson(envelope),
     },
   };
+}
+
+/**
+ * `health` as the CLI drives it: the shared preamble — command context, the
+ * boundary law, the tracked intent — resolved here, so `../../cli.mjs`'s
+ * driver only wires options, IO seams, and where output lands
+ * (`./README.md`). The engine this returns from is `healthCommand` above,
+ * unchanged.
+ *
+ * @param {{config: string|null, paths: string[]}} options This run's parsed
+ *   flags; at most one positional, the snapshot directory for trends.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `healthCommand`'s result, unmodified.
+ */
+export async function health(options, { cwd, readGraph, listFiles }) {
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // The boundary law and the intent, the same loading every command does
+  // (`resolvePolicy`) — a `--config` overrides the workspace's own
+  // `boundaryConfig`, profile-aware the same way `check` is, and the
+  // intent is the tracked root `architecture-intent.json` (or absent).
+  const { config } = await resolvePolicy(options, commandContext, cwd);
+  const intent = await loadIntentIfTracked(commandContext.root, commandContext.tracked);
+  const trendDir =
+    options.paths.length === 1
+      ? isAbsolute(options.paths[0])
+        ? options.paths[0]
+        : resolve(cwd, options.paths[0])
+      : null;
+  return healthCommand(commandContext, { config, intent, trendDir });
 }

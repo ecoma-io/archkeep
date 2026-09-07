@@ -11,9 +11,11 @@
  */
 import { resolveProvenance } from "./provenance.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
+import { resolveCommandContext } from "./context.mjs";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { evaluateScenario, parseScenarioInput } from "./scenario-evaluation.mjs";
 export { parseScenarioInput } from "./scenario-evaluation.mjs";
+import { resolvePolicy } from "./policy.mjs";
 
 /**
  * Runs the `scenario` command: parses the scenario input, evaluates it, and
@@ -194,4 +196,25 @@ function formatScenarioReport(scenario, coverage) {
   }
 
   return lines.join("\n");
+}
+
+/**
+ * `scenario` as the CLI drives it: the shared preamble — command context,
+ * then the boundary law — resolved here so `../../cli.mjs`'s driver only
+ * wires options, IO seams, and where output lands (`./README.md`). The
+ * engine this returns from is `scenarioCommand` above, unchanged. The
+ * scenario file itself is read by the driver, because a file the CLI cannot
+ * read is a usage error (exit 2), not a run failure (exit 3).
+ *
+ * @param {string} projectName The target project.
+ * @param {string} scenarioJson The scenario description, read by the driver.
+ * @param {{config: string|null}} options This run's parsed flags.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `scenarioCommand`'s result, unmodified.
+ */
+export async function scenario(projectName, scenarioJson, options, { cwd, readGraph, listFiles }) {
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  const { config } = await resolvePolicy(options, commandContext, cwd);
+  return scenarioCommand(projectName, scenarioJson, commandContext, config);
 }

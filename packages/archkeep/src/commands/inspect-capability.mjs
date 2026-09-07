@@ -1,6 +1,7 @@
 /**
  * `inspect` capability facade — the word's verb roster as explicit named
- * re-exports: `graph`, `impact`, `context`, `health`.
+ * re-exports: `graph`, `impact`, `context` (the non-plan read; `--plan`
+ * dispatches to `planContext`), `health`.
  *
  * Pure surface module: no judgment, no defaults, no logic — every export is
  * a re-export of a command module. `cli.mjs` routes its verb imports through
@@ -8,8 +9,8 @@
  * graph, not just to a comment (PD-18,
  * ../../../../docs/architecture/refactor/DECISIONS.md).
  */
-export { computePolicyFingerprint, graphCommand } from "./graph.mjs";
-export { impactCommand } from "./impact.mjs";
-export { contextCommand } from "./context-command.mjs";
-export { planContextCommand } from "./plan-context-command.mjs";
-export { healthCommand } from "./health.mjs";
+export { graph } from "./graph.mjs";
+export { impact } from "./impact.mjs";
+export { context } from "./context-command.mjs";
+export { planContext } from "./plan-context-command.mjs";
+export { health } from "./health.mjs";

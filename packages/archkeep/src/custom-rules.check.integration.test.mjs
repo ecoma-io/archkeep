@@ -202,6 +202,7 @@ describe("a custom rule that passes", () => {
     const result = await check({ format: "text", config: null, paths: [] }, w.context);
     expect(result.customRuleFail).toBe(0);
     expect(result.customRuleUnknown).toBe(0);
+    expect(result.exitCode).toBe(EXIT.ok);
     expect(await runCli(["check"], w.env())).toBe(EXIT.ok);
     expect(result.report).toContain(`✔ ${RULE}  judged this workspace and reported no finding`);
     expect(result.report).toContain(`reason      ${REASON}`);
@@ -290,10 +291,11 @@ describe("a custom rule that fails", () => {
 
   it("carries the same two findings in the JSON envelope, namespaced identically", async () => {
     const w = workspace({ rule: { verdictJson: FAILING_VERDICT } });
-    const { report } = await check({ format: "json", config: null, paths: [] }, w.context);
-    const envelope = JSON.parse(report);
+    const result = await check({ format: "json", config: null, paths: [] }, w.context);
+    const envelope = JSON.parse(result.report);
     expect(envelope.status).toBe("findings");
     expect(envelope.exitCode).toBe(1);
+    expect(result.exitCode).toBe(1);
     expect(envelope.decision).toEqual({ verdict: "fail" });
     expect(envelope.result.customRules.verdict).toBe("fail");
     expect(envelope.result.customRules.rules[0].findings).toEqual([
@@ -332,10 +334,11 @@ describe("a custom rule that could not judge", () => {
 
   it("names the could-not-look condition in the envelope's decision reason", async () => {
     const w = workspace({ rule: { evaluateBehavior: "trap" } });
-    const { report } = await check({ format: "json", config: null, paths: [] }, w.context);
-    const envelope = JSON.parse(report);
+    const result = await check({ format: "json", config: null, paths: [] }, w.context);
+    const envelope = JSON.parse(result.report);
     expect(envelope.status).toBe("no-verdict");
     expect(envelope.exitCode).toBe(3);
+    expect(result.exitCode).toBe(3);
     expect(envelope.decision.verdict).toBe("unknown");
     expect(envelope.decision.reason).toContain("1 custom rule could not be judged");
     expect(envelope.result.customRules.verdict).toBe("unknown");

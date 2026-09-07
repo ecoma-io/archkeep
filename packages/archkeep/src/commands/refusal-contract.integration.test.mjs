@@ -254,7 +254,9 @@ describe("fitness", () => {
   const law = { ...LAW, fitness: [{ name: "always-applies", condition: { type: "always" } }] };
 
   it("returns the no-verdict envelope instead of throwing over incomplete coverage", async () => {
-    expectRefusal(await fitnessCommand(incompleteContext(), { config: law }), "fitness");
+    const refused = await fitnessCommand(incompleteContext(), { config: law });
+    expectRefusal(refused, "fitness");
+    expect(refused.exitCode).toBe(3);
   });
 });
 
@@ -455,7 +457,9 @@ describe("the gates that refused only whole-file failures (#608)", () => {
 
   it("fitness refuses instead of crashing over a blind-spot-only tree", async () => {
     const law = { ...LAW, fitness: [{ name: "always-applies", condition: { type: "always" } }] };
-    expectBlindSpotRefusal(await fitnessCommand(blindSpotOnly(), { config: law }), "fitness");
+    const refused = await fitnessCommand(blindSpotOnly(), { config: law });
+    expectBlindSpotRefusal(refused, "fitness");
+    expect(refused.exitCode).toBe(3);
   });
 });
 

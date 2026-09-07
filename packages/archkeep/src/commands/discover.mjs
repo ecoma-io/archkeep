@@ -123,6 +123,43 @@ export function proposalToIntent(proposal) {
 }
 
 /**
+ * Serialize a proposal into the exact bytes `--write-intent` plants at the
+ * target path — `proposalToIntent` rendered as stable, two-space JSON with a
+ * trailing newline, so the file a human reviews as a diff is the file
+ * `check` would read. Owned here, beside the conversion it renders, so the
+ * CLI's write door can never re-derive a second spelling of it.
+ *
+ * @param {object} proposal The proposal from `discoverCommand`'s result.
+ * @returns {string} The serialized intent document.
+ */
+export function intentJsonFromProposal(proposal) {
+  return JSON.stringify(proposalToIntent(proposal), null, 2) + "\n";
+}
+
+/**
+ * The `--write-intent` self-footgun refusal, decided beside the proposal it
+ * protects. A proposal is a suggestion; a file already at the target is a law
+ * (or a candidate someone holds), and silently overwriting it with a proposal
+ * is the adoption this command must never perform by itself — the same
+ * posture `--output`'s fixed-name table holds at the write door, specialized
+ * to the one target `discover` itself names. The CLI keeps the mechanics
+ * (the `wx` write, the stderr wording around it); the DECISION to refuse
+ * travels with the verb, the way `historyOutputRefusal` does for history.
+ *
+ * @param {string} target The `--write-intent` path as the user wrote it.
+ * @param {{exists: (path: string) => boolean}} io Injectable existence read —
+ *   the same seam style `loadNativeModel`'s `{readFile}` keeps.
+ * @returns {string|null} The refusal message, or `null` when the write may
+ *   proceed.
+ */
+export function intentWriteRefusal(target, { exists }) {
+  return exists(target)
+    ? `archkeep: ${target} already exists, and a proposal must never ` +
+        `silently replace what is there. Move or delete the file first, then run this again.`
+    : null;
+}
+
+/**
  * Runs the `discover` command: observes the workspace, optionally proposes the
  * candidate architecture over it, and returns the report.
  *

@@ -42,12 +42,15 @@ import { readFileSync } from "node:fs";
 
 import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
 import { computeRuleImpact } from "../rules/edge-constraints.mjs";
+import { isAbsolute, resolve } from "node:path";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { SCHEMA_VERSION } from "../report/json.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatDiffReport } from "../report/diff-text.mjs";
 import { compareSnapshotMetadata, dirtyBaselineNote, dirtyHeadNote } from "./snapshot-meta.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import { resolveCommandContext } from "./context.mjs";
+import { resolvePolicy } from "./policy.mjs";
 
 /**
  * Reads and validates a baseline snapshot from `path`.
@@ -571,4 +574,32 @@ export function diffCommand(
       json: renderJson(envelope),
     },
   };
+}
+
+/**
+ * `diff` as the CLI drives it: the baseline path resolved from the single
+ * positional argument, then the shared preamble — command context, boundary
+ * law — so `../../cli.mjs`'s driver only wires options, IO seams, and where
+ * output lands (`./README.md`). The engine this returns from is
+ * `diffCommand` above, unchanged.
+ *
+ * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
+ *   This run's parsed flags; `paths[0]` is the baseline file.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `diffCommand`'s result, unmodified.
+ */
+export async function diff(options, { cwd, readGraph, listFiles }) {
+  const baselinePath = isAbsolute(options.paths[0])
+    ? options.paths[0]
+    : resolve(cwd, options.paths[0]);
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // Load the boundary config when --config is given or when the workspace
+  // declares one, so rule-impact analysis is computed. Without a config,
+  // the diff reports only structural changes — same as before. A
+  // profile-selected workspace resolves the same way `check` does
+  // (`resolvePolicy`), so a policy edit under an unchanged profile NAME is
+  // still visible as a fingerprint change here.
+  const { config } = await resolvePolicy(options, commandContext, cwd);
+  return diffCommand(baselinePath, commandContext, { config });
 }

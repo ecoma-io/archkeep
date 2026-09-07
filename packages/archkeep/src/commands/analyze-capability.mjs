@@ -1,6 +1,8 @@
 /**
  * `analyze` capability facade — the word's verb roster as explicit named
- * re-exports: `discover`.
+ * re-exports: `discover`, with the two proposal→intent steps the
+ * `--write-intent` lane drives — the serialized bytes and the target
+ * refusal.
  *
  * Pure surface module: no judgment, no defaults, no logic — every export is
  * a re-export of a command module. `cli.mjs` routes its verb imports through
@@ -8,4 +10,4 @@
  * graph, not just to a comment (PD-18,
  * ../../../../docs/architecture/refactor/DECISIONS.md).
  */
-export { discoverCommand, proposalToIntent } from "./discover.mjs";
+export { discoverCommand, intentJsonFromProposal, intentWriteRefusal } from "./discover.mjs";

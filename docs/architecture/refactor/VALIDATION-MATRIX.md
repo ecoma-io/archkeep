@@ -105,15 +105,20 @@ For the verbs its diff touches, over pinned fixture trees, old path vs new:
 9. `trajectory` classification vs `history`'s classifier.
 10. Exit-code matrix per verb — the real exit-matrix shape (ok/refused sides
     plus the suite's named extras; findings sides pinned for the five exit-1
-    verbs: `check`, `fitness`, `delta --compare`, `change`, `rules verify`).
+    verbs: `check`, `fitness`, `delta --compare`, `change`, `rules verify` —
+    the delta/change findings sides classify a strict-forbidden introduced
+    import record, evidence-level, over a committed fixture whose disk the
+    choreography edits between capture and run).
 11. `rules verify` tamper → exit 1.
 12. Envelope byte stability per verb — level 2; the envelope is contract.
 
 ## Differential gaps (what the harness cannot prove today)
 
 - **GAP-A — golden-output corpus (load-bearing).** CLOSED. The corpus lives at
-  `packages/archkeep/src/corpus/goldens/` — 50 files for 24 verbs across all
-  output formats — and is gated by
+  `packages/archkeep/src/corpus/goldens/` — 52 files: 24 verbs across all
+  output formats plus the two help-lane goldens (`help.text` for the
+  `--help` surface every verb shares, `usage-error.text` for the bare
+  invocation's stderr; Phase 6, WI-6) — and is gated by
   `packages/archkeep/src/corpus/golden-output.integration.test.mjs` (human-gated
   regen via `ARCHKEEP_UPDATE_GOLDENS=1`). Every read-only verb is covered: 23
   verbs at byte-identity (GAP-A level 3); `debt` at levels 1+2 only (wall-clock
@@ -167,6 +172,15 @@ one-direction static-import assertion over the shipped tree, same mechanics as
   literal claim is false for `cli.mjs`, which owns the process surface —
   argv parsing, help rendering, `--output`/evidence writes, run drivers —
   so a literal scan would flag the executable's sanctioned duties.
+  Implemented (Phase 6, WI-4): `conformance/entry-surface-imports.test.mjs`
+  scans both entry files for resolved imports reaching into
+  `src/rules/`, `src/analysis/`, `src/report/` or `src/providers/`, named
+  rather than walked so the scan itself stays readable, with layer-direction
+  mechanics and floors shared with that scan. The executable's sanctioned
+  duties stay in-bounds: the scan bans only the analyzer/law imports, not
+  the process surface, and #762's lock is honored — the scan rides the
+  Phase 6 PR whose diff introduces it, as one file among this PR's
+  conformance additions.
 - **G-6** `options.mjs` the only filename-knowing layer.
   Decision (Phase 3): convention — the renameable names are defined once,
   in `src/options.mjs` (`DEFAULT_OPTIONS` at `options.mjs:104-107`,

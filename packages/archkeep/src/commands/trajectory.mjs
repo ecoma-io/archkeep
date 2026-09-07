@@ -92,6 +92,8 @@
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatTrajectoryReport } from "../report/trajectory-text.mjs";
 import { edgeIdentityKey } from "./diff.mjs";
+import { isAbsolute, resolve } from "node:path";
+import { dirname } from "node:path";
 import { classifyTransition, readSnapshots } from "./history.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 
@@ -521,4 +523,37 @@ export function trajectoryCommand(dir, commandContext, options = {}) {
       json: renderJson(envelope),
     },
   };
+}
+
+/**
+ * `trajectory`'s self-footgun guard, declared by the command that owns the
+ * law and enforced by the driver's write door: a report written into the
+ * directory being read would be read back as a snapshot on the next run
+ * (the envelope is not a `graph` snapshot, which `parseBaseline` refuses) —
+ * poison the record loudly refused rather than quietly planted. `null`
+ * means no refusal.
+ *
+ * @param {{output: string|null, paths: string[]}} options This run's parsed
+ *   flags; `paths[0]` is the history directory.
+ * @param {string} cwd The run's working directory, for relative flag
+ *   resolution.
+ * @returns {string|null} The refusal message, or `null` when the output is
+ *   safe.
+ */
+export function trajectoryOutputRefusal(options, cwd) {
+  if (!options.output) return null;
+  const dir = isAbsolute(options.paths[0])
+    ? resolve(options.paths[0])
+    : resolve(cwd, options.paths[0]);
+  const outputAbs = isAbsolute(options.output)
+    ? resolve(options.output)
+    : resolve(cwd, options.output);
+  if (dirname(outputAbs) === dir) {
+    return (
+      `archkeep: --output '${options.output}' is inside the history directory '${dir}' — ` +
+      `writing the report there would be read back as a snapshot on the next run. ` +
+      `Write it somewhere else.`
+    );
+  }
+  return null;
 }

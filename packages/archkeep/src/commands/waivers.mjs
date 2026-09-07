@@ -44,11 +44,13 @@ import { isWaiver, remainingMs, waiverStatus } from "../governance/waiver.mjs";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatWaiversReport } from "../report/waivers-text.mjs";
+import { resolveCommandContext } from "./context.mjs";
 import { partitionUnownedCoverage } from "./coverage-acceptance.mjs";
 import { unownedGapWithoutRunConfiguration } from "./context.mjs";
 import { refuseIncompleteGraph } from "./drift.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { evaluateRun } from "../rules/index.mjs";
+import { resolvePolicy } from "./policy.mjs";
 
 /**
  * The waivers verdict for a run: every waiver with its term and what it
@@ -295,4 +297,32 @@ export async function waiversCommand(commandContext, boundaryConfig, io = {}) {
       json: renderJson(envelope),
     },
   };
+}
+
+/**
+ * `waivers` as the CLI drives it: the shared preamble — command context,
+ * then the boundary law — resolved here so `../../cli.mjs`'s driver only
+ * wires options, IO seams, and where output lands (`./README.md`). The
+ * engine this returns from is `waiversCommand` above, unchanged.
+ *
+ * @param {{config: string|null, paths: string[]}} options This run's parsed
+ *   flags.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `waiversCommand`'s result, unmodified.
+ */
+export async function waivers(options, { cwd, readGraph, listFiles }) {
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // The waivers surface is part of the run's boundary law, so the law is
+  // loaded the same way `check` loads it (`resolvePolicy`) and `--config`
+  // wins the same way — resolved against the working directory, never
+  // against this tool's own location, and a `profiles` registry resolves
+  // `--config`/`boundaryConfig` as a profile NAME the same way `check`
+  // does. A malformed law throws here, exit 3, exactly as in `check`.
+  const { config, source } = await resolvePolicy(options, commandContext, cwd);
+  // `source` rides along for one job: `waiversCommand` subtracts the law's
+  // own file from the unowned-file set the `coverage.unowned` acceptances
+  // are matched against, exactly as `check` does — the law is not source
+  // judged by the law (`./context.mjs`'s `unownedGapWithoutRunConfiguration`).
+  return waiversCommand(commandContext, config, { policySource: source });
 }

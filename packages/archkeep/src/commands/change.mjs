@@ -101,6 +101,7 @@ import {
 } from "./delta.mjs";
 import { providerMismatch, readEvidenceSnapshot } from "./delta-snapshot.mjs";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
+import { isAbsolute, resolve } from "node:path";
 import { blindSpotRows } from "../analysis/source-util.mjs";
 import { cyclicProjects } from "../governance/fitness-rules.mjs";
 import { eventSnapshotSide } from "./history.mjs";
@@ -126,6 +127,8 @@ import { writeEvent } from "../governance/evolution-store.mjs";
 import { judgeIntent } from "../architecture-intent/judge.mjs";
 import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
 import { debtChangeDiff } from "../governance/debt-ledger.mjs";
+import { resolveCommandContext } from "./context.mjs";
+import { resolvePolicy } from "./policy.mjs";
 
 /**
  * One expected-fact row as the report and JSON carry it. Kept in one builder
@@ -657,7 +660,7 @@ function judgeDeclaredConstraints(intent, io) {
  *   architecture-intent seam `drift` uses (defaults to `loadIntent`); the
  *   change event's `debt` diff judges the intent over this run's base and
  *   head graphs and would be untestable without it.
- * @returns {Promise<{status: "ok"|"findings"|"no-verdict",
+ * @returns {Promise<{status: "ok"|"findings"|"no-verdict", exitCode: 0|1|3,
  *   changeIntent?: object, coverage: object, report: {text: string, json: string}}>}
  *   `status: "no-verdict"` from the coverage refusal (#608) carries no
  *   `changeIntent` payload — the reconciliation was withheld, and the
@@ -919,6 +922,7 @@ export async function changeCommand(
     const refusalCoverage = { ...coverage, notes: [...notes, fold.refused] };
     return {
       status: fold.status,
+      exitCode: fold.exitCode,
       coverage: refusalCoverage,
       report: {
         text: `change: no verdict — ${fold.refused}\n`,
@@ -1156,6 +1160,7 @@ export async function changeCommand(
 
   return {
     status,
+    exitCode,
     changeIntent: result,
     coverage,
     report: {
@@ -1169,4 +1174,86 @@ export async function changeCommand(
       json: renderJson(envelope),
     },
   };
+}
+
+/**
+ * The paths `change` runs over, resolved once and shared by the CLI entry
+ * and the output guard below — one spelling of "where does this flag point",
+ * the same relative-to-cwd resolution every path flag uses.
+ *
+ * @param {{intent: string, paths: string[]}} options This run's parsed flags.
+ * @param {string} cwd The run's working directory.
+ * @returns {{baselinePath: string, intentPath: string}}
+ */
+function changePaths(options, cwd) {
+  return {
+    baselinePath: isAbsolute(options.paths[0]) ? options.paths[0] : resolve(cwd, options.paths[0]),
+    intentPath: isAbsolute(options.intent) ? options.intent : resolve(cwd, options.intent),
+  };
+}
+
+/**
+ * `change`'s self-footgun guard, the same shape `history`'s holds: writing
+ * the reconciliation report over the very manifest this run just read would
+ * destroy the declaration it verified, with the loss surfacing only later —
+ * the first time someone tries to re-run the verification. Declared by the
+ * command that owns the law and enforced by the driver's write door; `null`
+ * means no refusal.
+ *
+ * @param {{output: string|null, intent: string, paths: string[]}} options
+ *   This run's parsed flags.
+ * @param {string} cwd The run's working directory, for relative flag
+ *   resolution.
+ * @returns {string|null} The refusal message, or `null` when the output is
+ *   safe.
+ */
+export function changeOutputRefusal(options, cwd) {
+  if (!options.output) return null;
+  const outputAbs = isAbsolute(options.output)
+    ? resolve(options.output)
+    : resolve(cwd, options.output);
+  if (outputAbs === changePaths(options, cwd).intentPath) {
+    return (
+      `archkeep: --output '${options.output}' resolves to the change-intent manifest itself — ` +
+      `overwriting the declaration with its own reconciliation report would destroy it. ` +
+      `Write the report somewhere else.`
+    );
+  }
+  return null;
+}
+
+/**
+ * `change` as the CLI drives it: the baseline and manifest paths resolved,
+ * then the shared preamble — command context, boundary law, the optional
+ * `--event-out` directory — so `../../cli.mjs`'s driver only wires options,
+ * IO seams, and where output lands (`./README.md`). The engine this returns
+ * from is `changeCommand` above, unchanged.
+ *
+ * @param {{config: string|null, eventOut?: string|null, intent: string, paths: string[]}} options
+ *   This run's parsed flags; `paths[0]` is the baseline evidence snapshot.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `changeCommand`'s result, unmodified.
+ */
+export async function change(options, { cwd, readGraph, listFiles }) {
+  const { baselinePath, intentPath } = changePaths(options, cwd);
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // Declared constraints are judged under whichever law THIS run resolves,
+  // and the envelope records that law's fingerprint beside the baseline's —
+  // the same loading every judging command does (`resolvePolicy`),
+  // profile-aware the same way `check` is.
+  const { config } = await resolvePolicy(options, commandContext, cwd);
+  // `--event-out` names the reconcile event store directory, resolved from
+  // cwd like the other path flags; `undefined` when absent, so a run
+  // without the flag writes no event and stays byte-identical.
+  const eventOut =
+    typeof options.eventOut === "string" && options.eventOut !== ""
+      ? isAbsolute(options.eventOut)
+        ? options.eventOut
+        : resolve(cwd, options.eventOut)
+      : undefined;
+  return changeCommand(baselinePath, intentPath, commandContext, {
+    config,
+    ...(eventOut === undefined ? {} : { eventOut }),
+  });
 }

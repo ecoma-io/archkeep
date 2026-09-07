@@ -46,10 +46,13 @@ import { computeDecisionFitness } from "../governance/decision-fitness.mjs";
 import { stripAdrPrefix, stripRuleFitnessPrefix } from "../governance/adr-registry.mjs";
 import { intentRows, configRows, rowLabel } from "./provenance-command.mjs";
 import { evaluateFitness, fitnessSnapshot } from "../governance/fitness-registry.mjs";
+import { resolveCommandContext } from "./context.mjs";
 import { driftForCheck } from "./drift.mjs";
 import { hasTag, isComboDepConstraint } from "../rules/tags.mjs";
 import { resolveMembers } from "../architecture-intent/selectors.mjs";
+import { loadIntentIfTracked } from "../architecture-intent/model.mjs";
 import { evaluate } from "../rules/index.mjs";
+import { resolvePolicy } from "./policy.mjs";
 
 /**
  * The projects whose tags satisfy a constraint row's source selector — the
@@ -312,4 +315,26 @@ export async function decisionsCommand(decisionId, commandContext, config, io = 
       json: renderJson(envelope),
     },
   };
+}
+
+/**
+ * `decisions` as the CLI drives it: the shared preamble — command context,
+ * the boundary law, the tracked intent — resolved here so `../../cli.mjs`'s
+ * driver only wires options, IO seams, and where output lands
+ * (`./README.md`). The engine this returns from is `decisionsCommand`
+ * above, unchanged.
+ *
+ * @param {{config: string|null, paths: string[]}} options This run's parsed
+ *   flags; `paths[0]` is the ADR id.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `decisionsCommand`'s result, unmodified.
+ */
+export async function decisions(options, { cwd, readGraph, listFiles }) {
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // ONE law for the chain, resolved exactly like `report` — the Fitness leg
+  // reads this law's declared gates, so a `--config` override must reach it.
+  const { config } = await resolvePolicy(options, commandContext, cwd);
+  const intent = await loadIntentIfTracked(commandContext.root, commandContext.tracked);
+  return decisionsCommand(options.paths[0], commandContext, config, { intent });
 }

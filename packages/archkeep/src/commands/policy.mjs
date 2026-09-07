@@ -14,7 +14,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { containmentViolation } from "../containment.mjs";
 import { loadBoundaryConfig, loadBoundaryConfigFile, policyFrom } from "../config.mjs";
 import { profilePolicy } from "../governance/profile-registry.mjs";
-import { ARCHKEEP_MODEL_FILE } from "../providers/native/model.mjs";
+import { ARCHKEEP_MODEL_FILE, loadNativeModel } from "../providers/native/model.mjs";
 
 /**
  * Whether the workspace's resolved options name a `profiles` registry — the
@@ -232,4 +232,40 @@ async function resolvePolicyArm(options, commandContext, cwd) {
     return { config, profile: null, source: ARCHKEEP_MODEL_FILE };
   }
   return { config: null, profile: null, source: null };
+}
+
+/**
+ * The options `--help` words itself with over a native-only workspace — the
+ * `loadNativeModel` read the entry file used to carry inline. Help names the
+ * boundary law a run would actually read, and on a native tree that law
+ * lives on `archkeep.json` itself: a string `boundaryConfig` is a filename,
+ * an object is the inline policy (there is no other channel).
+ *
+ * Throws exactly what `loadNativeModel` throws; the caller owns the
+ * best-effort posture (`--help` falls back to the defaults rather than
+ * refusing to print), this function owns only the reading and the wording
+ * shape.
+ *
+ * @param {string} root Absolute workspace root.
+ * @param {{readFile: (path: string) => string|null}} io Workspace-relative
+ *   read, injectable for the same reason `loadNativeModel`'s is.
+ * @returns {{boundaryConfig: string, tsConfig: string, inline?: boolean}}
+ *   `inline: true` marks the object-policy case: the boundaryConfig "name"
+ *   is then prose, not a file.
+ */
+export function nativePolicyOptions(root, { readFile }) {
+  const model = loadNativeModel(root, { readFile });
+  // An inline policy object has no filename to print — `${boundaryConfig}`
+  // would otherwise coerce it to the literal text "[object Object]", which
+  // reads as a real (and wrong) filename rather than as the "there is no
+  // file" it actually means. `inline: true` is what tells the usage text to
+  // print the paragraph that says so, instead of the one describing a named
+  // file.
+  return typeof model.boundaryConfig === "string"
+    ? { boundaryConfig: model.boundaryConfig, tsConfig: model.tsConfig }
+    : {
+        boundaryConfig: `an inline policy in ${ARCHKEEP_MODEL_FILE}`,
+        tsConfig: model.tsConfig,
+        inline: true,
+      };
 }
