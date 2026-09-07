@@ -56,8 +56,8 @@ A missing field is a review defect, not a style preference.
 | 2 — Canonical model hardening                       | **complete** — all units + the exit record (PD-15) landed (PRs #740–#749, #753, #754, #757, #759) | CHK-2-A–CHK-2-PD15 below |
 | 3 — Boundary enforcement                            | **complete** — all units + the exit checkpoint landed (PRs #762–#765, #766)                       | CHK-3 below              |
 | 4 — Internal extraction                             | **complete** — GAP-A + GAP-B closed (PR #767); no proven extraction (CHK-5)                       | CHK-4, CHK-5 below       |
-| 5 — Capability facades                              | **in progress** — entry accepted (PD-18, 2026-09-07; PR #772 is the veto window)                  | PD-18                    |
-| 6 — CLI recomposition                               | not started                                                                                       | blocked by 5             |
+| 5 — Capability facades                              | **complete** (PR #772 merged as 60f0e7d2)                                                         | PD-18, CHK-6             |
+| 6 — CLI recomposition                               | **in progress** — entry baseline recorded (CHK-6)                                                 | CHK-6                    |
 | 7 — Additional surfaces                             | not started                                                                                       | blocked by 6             |
 | 8 — Federation readiness                            | not started                                                                                       | maintainer-gated         |
 | 9 — Final hardening                                 | not started                                                                                       | blocked by 8 (or waiver) |
@@ -1143,6 +1143,138 @@ dispositions), and PR #766 (the Phase 3 exit checkpoint), and PR #767
   from a measured pressure edge; (3) start Phase 5 without maintainer
   approval of Phase 4's exit record.
 - **Next**: report Phase 4 exit to maintainer; Phase 5 entry awaits approval.
+
+### CHK-6 — Phase 5 closure & Phase 6 execution baseline (2026-09-07)
+
+- **ID**: CHK-6. **Phase**: 5 (close) + 6 (entry). **Status**: Phase 5
+  closed; Phase 6 in progress.
+- **Phase 5 closure evidence** (PR #772, merged as `60f0e7d2` on
+  2026-09-07T11:54:54Z; `ci-gate` + `analysis-gate` + Verify pass):
+  landed the seven pure re-export facades
+  `src/commands/{analyze,check,compare,explain,inspect,govern,rules}-capability.mjs`
+  (zero judgment by construction), the `loadIntentIfTracked` helper with
+  three contract pins, `cli.mjs` verb-import routing through the facades,
+  the two exit-1 prose corrections from [PD-18](DECISIONS.md#program-decisions)'s
+  scope, the INV-18 manifest digest regen, and the same-PR docs rows
+  (AUTHORITY-MAP facade row + DG-4 law, OPEN-QUESTIONS DG-4 annotation,
+  SEMANTIC-MODEL consumer column, concepts pointer). Validation battery
+  green before merge: `archkeep:test` 5895/5895 (includes the golden
+  corpus, exit matrix, envelope and refusal suites), `archkeep:integration`,
+  `archkeep-mcp:test` 51/51, `pnpm e2e` 293/293, gate scripts 445/445,
+  repository boundary check clean, lint/typecheck/format and the doc gates
+  green. Adversarial review APPROVE (round 2; round 1 REWORK — missing
+  roster — corrected in the PR). Differential: every verb's corpus output
+  identical at levels 1–2 across the facade rerouting; no observable
+  surface moved (internal, byte-stable). Defects filed out-of-unit:
+  [#770](https://github.com/ecoma-io/archkeep/issues/770) (timing-budget
+  flake under artificial CPU saturation; serial differential 35/35),
+  [#771](https://github.com/ecoma-io/archkeep/issues/771) (help pins do not
+  derive from the roster).
+- **Phase 6 entry baseline** (cold audit at `60f0e7d2`; the four
+  load-bearing facts re-verified line-by-line before this record):
+  1. `cli.mjs` (3984 lines, 24 run drivers + `runCli`) routes every verb
+     import through the seven facades (it is their only consumer);
+     sanctioned direct imports remain: `commands/policy.mjs` (16
+     `resolvePolicy`/`resolveDescribedPolicy` preamble sites),
+     `commands/context.mjs` (preamble + help-time reads), containment,
+     errors, `architecture-intent/model.mjs` (`INTENT_FILE` + three
+     `loadIntentIfTracked` gates), entry-point, options, verdict
+     (`EXIT` + `verdictFor`), `providers/native/model.mjs`, workspace.
+  2. **Baseline gaps the phase owes** (measured facts, unresolved):
+     a direct provider edge — `cli.mjs:163` imports
+     `ARCHKEEP_MODEL_FILE`/`loadNativeModel` (governance-target map
+     `:509`; the help-time native inline-policy read `~:357-367`), so
+     Phase 6's exit criterion "no driver imports an analyzer or provider
+     directly" is **not** satisfied today and VALIDATION-MATRIX's G-4
+     "holds today" clause is true only for rules/analysis/report; five
+     driver-side status→exit folds that re-derive exit codes the command
+     modules already return (check `:826-844`, delta `:1098-1101`, change
+     `:1417-1421`, fitness `:1580-1583`, rules verify `:2058-2060` — three
+     spellings of one mapping in one file, each duplicating a command-side
+     fold: `delta.mjs:1100-1101`, `change.mjs:1150-1151`,
+     `fitness.mjs:294-300`, `rules.mjs:448`); exit-matrix findings-mode
+     exit-1 pins cover 3 of the 5 exit-1 verbs (delta --compare and change
+     findings sides live outside the matrix — `cli.integration.test.mjs:9095-9352`,
+     `change.test.mjs:904-924`); `--help` byte stability has **no
+     enforcing gate** (containment assertions only; the corpus
+     `VERB_PLAN` carries no `--help` rows).
+  3. **Documented walks that must not fold**: `adr`'s own marker walk and
+     `rules`' synthetic context are documented preamble bypasses
+     ([DATA-FLOW.md](DATA-FLOW.md) stage 3); `evolution`'s root walk is a
+     documented root walk, not a bypass. The five command-side folds stay
+     five ([PD-6](DECISIONS.md#program-decisions),
+     [INV-25](INVARIANTS.md#inv-25--semantic-authority-count-is-one)) —
+     this phase removes only the driver-side duplicate spellings.
+- **Decision** (maintainer-delegated per the 2026-09-07 instruction
+  "Tiếp tục hoàn thiện các phase còn lại đi", PD-18 precedent; this PR is
+  the veto window): Phase 5's exit stands accepted; Phase 6 entry is
+  authorized with the work items below. Compatibility classification:
+  internal — every work item is byte-stable on the observable surface
+  unless the battery proves otherwise.
+- **Work items** (each named in the PR body per
+  [PD-17](DECISIONS.md#program-decisions)): **WI-1** fold elimination —
+  each of the five drivers returns the command-computed `exitCode`; the
+  command-side folds are untouched; INV-2/INV-4 citation refresh lands
+  same-PR. **WI-2** provider-edge elimination — re-home the help-time
+  native read and the `ARCHKEEP_MODEL_FILE` constant so `cli.mjs` imports
+  no `src/providers/**`; a candidate home that adds a new cross-layer edge
+  needs a [BOUNDARIES.md](BOUNDARIES.md) pressure-edge row, and G-6's
+  filename-knowing law is evaluated first. **WI-3** driver semantics move
+  down — the 16 policy-resolution preamble sites, the three
+  `loadIntentIfTracked` gates, runHistory's fingerprint capture, the
+  discover `--write-intent` payload composition (the `wx`-write mechanics
+  stay driver infrastructure), and the per-verb self-footgun target guards
+  move into command modules or become command-declared forbidden targets
+  enforced by the driver's write door. **WI-4** the G-4 scan — a new
+  conformance gate cloning the layer-direction mechanics (direct edges
+  only, teeth-first red twin, live floors) asserting `cli.mjs` + `lsp.mjs`
+  import no `src/rules/**`, `src/analysis/**`, `src/report/**`,
+  `src/providers/**`; entry files only (`src/lsp/**` is Phase 7's);
+  unrostered only once WI-2 has removed the provider edge, otherwise
+  rostered G-5-style with two-way checking. **WI-5** exit-matrix
+  findings-mode pins for `delta --compare` and `change` (seam-injected
+  worlds like the existing rows). **WI-6** `--help` byte goldens (top-level
+  - per-verb help over the deterministic corpus fixture; a level-2
+    contract pin). **WI-7** same-PR docs: INV-2/INV-4 citations,
+    VALIDATION-MATRIX's G-4 row moves to scanned, differential row 10
+    wording, and SEMANTIC-MODEL/BOUNDARIES rows only if one actually moves.
+- **Non-goals**: no verb/flag/exit/envelope change; no facade content
+  change; no command-side fold unification; no change to the documented
+  walks; no `src/lsp/**` or MCP work (Phase 7).
+- **Validation plan**: full battery — `archkeep:test` (corpus incl. the
+  new help goldens, exit matrix incl. the new findings rows,
+  `cli.integration`, envelope, refusal-contract, verdict-layering,
+  module-graph, layer-direction incl. the new G-4 gate),
+  `archkeep:integration`, `archkeep-mcp:test`, `pnpm e2e` (the
+  verify-package bin contract), gate scripts, lint/typecheck/format, the
+  repository boundary check, the doc gates; INV-18 digest regen for
+  `cli.mjs` same-PR. Differentials: rows 1, 10, 12 minimum, plus the
+  corpus at levels 1–2 for every touched verb.
+- **Canonical ownership changes**: none — no SEMANTIC-MODEL row moves in
+  the entry record; WI-7 updates rows only if an implementation actually
+  relocates one.
+- **Debt budget**: gaps before — the G-4 scan unimplemented (the Phase 3
+  follow-up), findings pins 3/5, no help golden, the provider edge
+  (baseline facts above); gaps closed by Phase 6 — all four named;
+  gaps introduced — none planned; net delta target — negative.
+- **Unresolved questions**: OQ-11 (LSP golden scope) and OQ-14 (GAP-D)
+  stay maintainer-gated at their own phase gates; Phase 8's CON-8 entry
+  records its delegated ruling at entry.
+- **Rejected approaches**: keeping the driver folds (they are second
+  spellings of `EXIT_FOR_STATUS` the commands already own; keeping them
+  keeps the duplication [INV-2](INVARIANTS.md#inv-2--one-exitstatus-table)
+  names); rostering the provider edge instead of eliminating it (the exit
+  criterion says the edge goes; a roster is the fallback, not the goal);
+  folding the documented walks into the shared preamble (documented
+  bypasses, DATA-FLOW stage 3); widening the G-4 scan to `src/lsp/**`
+  before Phase 7's seam decision (born-red against the current tree).
+- **Forbidden next moves**: (1) unify the five command-side folds or route
+  sibling carriers through `verdictFor` (PD-6); (2) fold the `adr`/`rules`/
+  `evolution` documented walks; (3) let a facade gain judgment; (4) widen
+  the G-4 scan past the entry files before Phase 7; (5) start Phase 7
+  before this phase's exit checkpoint lands.
+- **Next**: implement WI-1..WI-7 in the Phase 6 PR; adversarial review;
+  land; checkpoint the Phase 6 close.
 
 ## Conventions maintained here
 
