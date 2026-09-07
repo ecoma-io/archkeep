@@ -12,7 +12,7 @@ about Go, Rust and Python — and silence you know about beats a green light you
 cannot trust.
 
 **48 fixture workspaces, 125 probes, 100 projects.** Every one of upstream's
-fifteen message ids is triggered by at least one probe, and 84 of the 125 probes
+fifteen message ids is triggered by at least one probe, and 83 of the 125 probes
 are near-misses where ESLint must report nothing.
 
 ## How it runs

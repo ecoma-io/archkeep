@@ -72,7 +72,12 @@ export async function createUpstreamRunner(root) {
   const tseslint = (await import("typescript-eslint")).default;
   const vueParser = await import("vue-eslint-parser");
 
-  const rule = nxPlugin.rules["enforce-module-boundaries"];
+  // The plugin's declared `RuleModule<string, unknown[]>` does not type
+  // `defaultOptions` as the object it actually is (measured against
+  // @nx/eslint-plugin 23.2.0's .d.ts), while the value is read LIVE off the
+  // installed rule — the same cast past upstream's typing `eslint-config.mjs`
+  // makes at its own read of this rule.
+  const rule = /** @type {any} */ (nxPlugin).rules["enforce-module-boundaries"];
 
   /**
    * The eight option values and the fifteen message ids, read off the INSTALLED

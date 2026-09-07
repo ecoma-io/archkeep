@@ -289,7 +289,7 @@ describe("hasBannedDependencies", () => {
   const externalDependencies = [{ source: "alpha", target: "npm:@vendor/shell", type: "static" }];
 
   it("returns triples for transitively-reachable banned packages", () => {
-    const result = hasBannedDependencies(externalDependencies, graph, constraint, "@vendor/shell");
+    const result = hasBannedDependencies(externalDependencies, graph, constraint);
     expect(result).toHaveLength(1);
     expect(result[0][0]).toBe(graph.externalNodes["npm:@vendor/shell"]);
     expect(result[0][2]).toBe(constraint);
@@ -297,13 +297,11 @@ describe("hasBannedDependencies", () => {
 
   it("returns empty when no transitive dependency is banned", () => {
     const permissive = { sourceTag: "zone:a", allowedExternalImports: ["*"] };
-    expect(hasBannedDependencies(externalDependencies, graph, permissive, "@vendor/shell")).toEqual(
-      [],
-    );
+    expect(hasBannedDependencies(externalDependencies, graph, permissive)).toEqual([]);
   });
 
   it("returns empty when externalDependencies is empty", () => {
-    expect(hasBannedDependencies([], graph, constraint, "@vendor/shell")).toEqual([]);
+    expect(hasBannedDependencies([], graph, constraint)).toEqual([]);
   });
 
   // `externalNodes` is a plain object — `JSON.parse` of `nx graph --file=` — so
@@ -320,10 +318,8 @@ describe("hasBannedDependencies", () => {
     "ignores a dependency on %s, which is not an external package",
     (name) => {
       const dependencies = [{ source: "alpha", target: name, type: "static" }];
-      expect(() =>
-        hasBannedDependencies(dependencies, graph, constraint, "@vendor/shell"),
-      ).not.toThrow();
-      expect(hasBannedDependencies(dependencies, graph, constraint, "@vendor/shell")).toEqual([]);
+      expect(() => hasBannedDependencies(dependencies, graph, constraint)).not.toThrow();
+      expect(hasBannedDependencies(dependencies, graph, constraint)).toEqual([]);
     },
   );
 
@@ -337,7 +333,7 @@ describe("hasBannedDependencies", () => {
     "yields no project node for a dependency whose source is %s",
     (name) => {
       const dependencies = [{ source: name, target: "npm:@vendor/shell", type: "static" }];
-      const result = hasBannedDependencies(dependencies, graph, constraint, "@vendor/shell");
+      const result = hasBannedDependencies(dependencies, graph, constraint);
       // Not just "no throw": nothing in the result may be a `Function`, which
       // is what an inherited `Object.prototype` member reads back as.
       for (const [, violatingSource] of result) {
@@ -361,12 +357,7 @@ describe("hasBannedDependencies", () => {
     const nodes = { ...graph.nodes };
     nodes.constructor = { name: "constructor", type: "lib", data: { root: "area/constructor" } };
     const dependencies = [{ source: "constructor", target: "npm:@vendor/shell", type: "static" }];
-    const result = hasBannedDependencies(
-      dependencies,
-      { ...graph, nodes },
-      constraint,
-      "@vendor/shell",
-    );
+    const result = hasBannedDependencies(dependencies, { ...graph, nodes }, constraint);
     expect(result).toHaveLength(1);
     expect(result[0][1]).toBe(nodes.constructor);
   });
@@ -376,12 +367,8 @@ describe("hasBannedDependencies", () => {
     // absent `nodes` used to throw on the index, and a checker that throws
     // reports nothing at all — worse than a wrong answer.
     const nodeless = { externalNodes: graph.externalNodes, dependencies: {} };
-    expect(() =>
-      hasBannedDependencies(externalDependencies, nodeless, constraint, "@vendor/shell"),
-    ).not.toThrow();
-    expect(
-      hasBannedDependencies(externalDependencies, nodeless, constraint, "@vendor/shell"),
-    ).toEqual([]);
+    expect(() => hasBannedDependencies(externalDependencies, nodeless, constraint)).not.toThrow();
+    expect(hasBannedDependencies(externalDependencies, nodeless, constraint)).toEqual([]);
   });
 });
 
