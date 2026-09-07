@@ -546,3 +546,97 @@ exists). A record never restates the constitution — a field whose answer is
   - _Verification/acceptance evidence_: the reviewer's regenerated census
     and 478-test consumer sweep; the row edit in this PR.
     _Supersedes_: nothing.
+- **PD-18 (2026-09-07) — Phase 4 exit accepted, Phase 5 entered, and the
+  24-verb capability roster ratified for the facade mechanism (closes
+  DG-4).**
+  - _Question_: three-part, per the Phase 5 gate: is Phase 4's exit
+    accepted; does the maintainer's Phase 5–9 commission authorize entry;
+    and — the [PD-11](#program-decisions) regrouping record — which
+    explicit verb→word assignment do the Phase 5 facades instantiate,
+    given that `docs/concepts/architecture.md` carries no per-verb roster
+    (its own :134-135 disclaimer) and a facade layer creates the first
+    explicit one?
+  - _Evidence_: the Phase 5 entry baseline re-ran the full standalone
+    `archkeep:test` target green (5892/5892 across 217 files, moon exit 0)
+    at `c8aa86ce`; the two timing-budget failures seen only under
+    artificial CPU saturation are documented as defect #770 with a 35/35
+    serial differential, assertions untouched. A three-scout census
+    supplied the mechanism facts: the intent-load gate triplication is
+    byte-identical at `cli.mjs:1949-1951`, `:2503-2505`, `:2574-2576`
+    while every other intent site holds distinct semantics (refusal,
+    note, fallback, unconditional fold); the 24-verb tally against the
+    seven-word vocabulary and the exit-1 fold roster; the regression
+    oracle set and its roster-derived guards. Two adversarial review
+    rounds were run before recording: round 1 returned REWORK (the
+    package carried no roster and falsely claimed the concepts page held
+    one), round 2 returned APPROVE with a PD-8 wording note, adopted.
+  - _Decision_ (maintainer-delegated ruling, this session — this PR is
+    the veto window):
+    1. Phase 4's exit evidence stands accepted; Phase 5 entry authorized.
+    2. **The roster the facades implement** (first explicit assignment;
+       the nine two-word fits are ratified-with-flag and become a
+       follow-up for the concepts page's owner, not blockers):
+       analyze: `discover` · check: `check`, `fitness`, `scenario`* ·
+       inspect: `graph`_, `impact`, `context`, `health`_ · compare:
+       `diff`, `delta`_, `change`_, `drift`_, `reconcile`_, `history`,
+       `trajectory`, `evolution`* · explain: `explain` · govern:
+       `waivers`, `report`, `debt`, `provenance`, `decisions`*, `adr` ·
+       rules: `rules` — where * marks the flagged rows (graph, health
+       inspect/analyze; delta, change, drift compare/check; reconcile
+       compare/govern; scenario check/analyze; decisions govern/explain;
+       evolution compare/inspect).
+    3. Mechanism: seven pure re-export facades at
+       `src/commands/<word>-capability.mjs` (the suffix dodges the three
+       existing command-module names); `cli.mjs` routes verb imports
+       through them; no file moves, no new directory, no verb/flag/exit/
+       envelope change. Work item 3: `loadIntentIfTracked` lands beside
+       `loadIntent` in `src/architecture-intent/model.mjs`, the three
+       driver sites collapse to it, and new unit rows pin its contract
+       (untracked→null, tracked-ok→model, tracked-unreadable→throw) so a
+       future swallowing helper fails the suite. The other intent sites
+       stay untouched.
+    4. DG-4's general law — descriptive commands project canonical
+       evaluation; they never re-evaluate — is stated once, in
+       AUTHORITY-MAP; the register row in OPEN-QUESTIONS is annotated
+       closed-by-Phase-5.
+  - _Scope_: the facades; `cli.mjs`'s import block; the two stale exit-1
+    prose copies in `cli.mjs` (the module-header clause at :57-59 naming
+    four verbs and "every other verb in this table only ever reads" —
+    false for `rules verify`, whose exit 1 is the artifact-integrity fold
+    of [PD-8](#program-decisions), not a fifth architecture carrier; and
+    runFitness's docblock near :1502) corrected to
+    [exit-codes.md](../../reference/exit-codes.md)'s five-verb roster
+    with PD-8's split preserved; the helper + pins; the same-PR docs
+    list (AUTHORITY-MAP surface rows + DG-4, OPEN-QUESTIONS register
+    annotation, SEMANTIC-MODEL.md:39 consumer column gains
+    decisions/health/report, CONTEXT.md Phase 5 status row, one
+    pointer-sentence in the concepts page naming the facades — per
+    [PD-9](#program-decisions), a pointer, not a second roster). The
+    `cli.mjs` source-evidence digest in the intent manifest regenerates
+    in the same PR.
+  - _Alternatives rejected_: physical regrouping of `src/commands/` into
+    capability subdirectories (every evidence-named path under
+    `src/commands/` churns in the content-addressed manifest, for zero
+    semantic gain); comments-only grouping in `cli.mjs` (satisfies
+    neither sanctioned mechanism in MIGRATION-PLAN's Phase 5); unifying
+    the non-driver intent-gate sites (their semantics genuinely differ);
+    leaving the roster implicit (would leave PD-11's decision unmade
+    while shipping the assignment anyway).
+  - _Consequences_: the vocabulary gains a code referent a checker can
+    see; the triplication collapses behind one pinned helper; DG-4
+    closes; the flagged assignments are the concepts owner's queue.
+    Facades hold zero judgment by construction and by the AUTHORITY-MAP
+    row this PR adds.
+  - _Compatibility impact_: none — no observable surface moves; corpus
+    levels 1–2, the exit matrix, and the envelope roster are byte-stable
+    and re-verified as the PR's evidence.
+  - _Owner_: this record; the facades, helper, and docs rows land in the
+    Phase 5 PR tracking umbrella #725 (finding id: Phase 5 work items
+    1+3).
+  - _Verification/acceptance evidence_: the package v2 validation plan —
+    `moon run archkeep:test` (incl. the new helper pins and the
+    regenerated digest), `archkeep:integration`, `archkeep-mcp:test`,
+    `pnpm e2e`, lint/typecheck, gate-scripts suite, `cli.mjs check`,
+    and the doc gates — run without artificial saturation, #770's caveat
+    referenced where timing appears.
+  - _Supersedes_: nothing.

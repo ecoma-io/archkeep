@@ -56,7 +56,7 @@ A missing field is a review defect, not a style preference.
 | 2 — Canonical model hardening                       | **complete** — all units + the exit record (PD-15) landed (PRs #740–#749, #753, #754, #757, #759) | CHK-2-A–CHK-2-PD15 below |
 | 3 — Boundary enforcement                            | **complete** — all units + the exit checkpoint landed (PRs #762–#765, #766)                       | CHK-3 below              |
 | 4 — Internal extraction                             | **complete** — GAP-A + GAP-B closed (PR #767); no proven extraction (CHK-5)                       | CHK-4, CHK-5 below       |
-| 5 — Capability facades                              | not started                                                                                       | maintainer-gated         |
+| 5 — Capability facades                              | **in progress** — entry accepted (PD-18, 2026-09-07; PR #772 is the veto window)                  | PD-18                    |
 | 6 — CLI recomposition                               | not started                                                                                       | blocked by 5             |
 | 7 — Additional surfaces                             | not started                                                                                       | blocked by 6             |
 | 8 — Federation readiness                            | not started                                                                                       | maintainer-gated         |

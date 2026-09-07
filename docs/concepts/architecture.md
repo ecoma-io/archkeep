@@ -134,6 +134,11 @@ semantic model — and this page owns them. The table below is every verb
 today; the capability words are the vocabulary a verb's description uses,
 not a second command list.
 
+The implementation mirrors the vocabulary one-to-one: each capability word
+owns a facade module, `packages/archkeep/src/commands/<word>-capability.mjs`
+— an explicit re-export roster of that word's verbs and nothing else
+(PD-18, `docs/architecture/refactor/DECISIONS.md`).
+
 | command      | what it does                                                                                                       | finds violations |
 | ------------ | ------------------------------------------------------------------------------------------------------------------ | ---------------- |
 | `check`      | Judges every import site against the boundary law, plus the intent                                                 | yes — exits 1    |
