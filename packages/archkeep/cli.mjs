@@ -55,8 +55,10 @@
  *      classifies as introduced, or a change-intent reconciliation that found
  *      undeclared material changes, unfulfilled declarations, or a failed
  *      declared constraint. `check`, `fitness`, `delta` and `change` are the
- *      verbs whose verdicts carry this code — every other verb in this table
- *      only ever reads.
+ *      verbs whose verdicts carry this code, plus `rules verify` — the
+ *      artifact-integrity fold, a bounded verification surface, not a fifth
+ *      architecture carrier (PD-8; `docs/reference/exit-codes.md` owns the
+ *      roster). Every other verb only ever reads.
  *   2  usage error — unknown command, unknown flag, missing argument, path
  *      outside the tree
  *   3  no verdict — no workspace, malformed config, the graph provider or git
@@ -101,7 +103,51 @@ const { name: TOOL_NAME, version: TOOL_VERSION } = require("./package.json");
 
 import { containmentViolation } from "./src/containment.mjs";
 import { UsageError } from "./src/errors.mjs";
-import { check, sortViolations } from "./src/commands/check.mjs";
+// Verb imports route through the capability facades: each
+// `<word>-capability.mjs` module is its word's explicit verb roster — pure
+// re-exports, zero judgment (PD-18, docs/architecture/refactor/DECISIONS.md).
+// Non-verb helper modules keep their direct imports.
+import { discoverCommand, proposalToIntent } from "./src/commands/analyze-capability.mjs";
+import {
+  check,
+  fitnessCommand,
+  scenarioCommand,
+  sortViolations,
+} from "./src/commands/check-capability.mjs";
+import {
+  captureDelta,
+  changeCommand,
+  deltaCommand,
+  diffCommand,
+  driftCommand,
+  evolutionCommand,
+  historyCommand,
+  reconcileCommand,
+  trajectoryCommand,
+} from "./src/commands/compare-capability.mjs";
+import { explainCommand } from "./src/commands/explain-capability.mjs";
+import {
+  computePolicyFingerprint,
+  contextCommand,
+  graphCommand,
+  healthCommand,
+  impactCommand,
+  planContextCommand,
+} from "./src/commands/inspect-capability.mjs";
+import {
+  adrCommand,
+  debtCommand,
+  decisionsCommand,
+  provenanceCommand,
+  reportCommand,
+  waiversCommand,
+} from "./src/commands/govern-capability.mjs";
+import {
+  rulesAddCommand,
+  rulesInfoCommand,
+  rulesListCommand,
+  rulesVerifyCommand,
+} from "./src/commands/rules-capability.mjs";
 import { resolveDescribedPolicy, resolvePolicy } from "./src/commands/policy.mjs";
 import {
   DEFAULT_OPTIONS,
@@ -109,36 +155,7 @@ import {
   markersAt,
   resolveCommandContext,
 } from "./src/commands/context.mjs";
-import { contextCommand } from "./src/commands/context-command.mjs";
-import { planContextCommand } from "./src/commands/plan-context-command.mjs";
-import { adrCommand } from "./src/commands/adr.mjs";
-import { decisionsCommand } from "./src/commands/decisions.mjs";
-import { diffCommand } from "./src/commands/diff.mjs";
-import { captureDelta, deltaCommand } from "./src/commands/delta.mjs";
-import { discoverCommand, proposalToIntent } from "./src/commands/discover.mjs";
-import { driftCommand } from "./src/commands/drift.mjs";
-import { fitnessCommand } from "./src/commands/fitness.mjs";
-import { reconcileCommand } from "./src/commands/reconcile.mjs";
-import { changeCommand } from "./src/commands/change.mjs";
-import { computePolicyFingerprint, graphCommand } from "./src/commands/graph.mjs";
-import { historyCommand } from "./src/commands/history.mjs";
-import { trajectoryCommand } from "./src/commands/trajectory.mjs";
-import { evolutionCommand } from "./src/commands/evolution.mjs";
-import { healthCommand } from "./src/commands/health.mjs";
-import { reportCommand } from "./src/commands/report.mjs";
-import { debtCommand } from "./src/commands/debt.mjs";
-import { explainCommand } from "./src/commands/explain.mjs";
-import { impactCommand } from "./src/commands/impact.mjs";
-import { scenarioCommand } from "./src/commands/scenario.mjs";
-import { provenanceCommand } from "./src/commands/provenance-command.mjs";
-import {
-  rulesAddCommand,
-  rulesInfoCommand,
-  rulesListCommand,
-  rulesVerifyCommand,
-} from "./src/commands/rules.mjs";
-import { waiversCommand } from "./src/commands/waivers.mjs";
-import { INTENT_FILE, loadIntent } from "./src/architecture-intent/model.mjs";
+import { INTENT_FILE, loadIntentIfTracked } from "./src/architecture-intent/model.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { readPluginOptions } from "./src/options.mjs";
 import { EXIT, verdictFor } from "./src/verdict.mjs";
@@ -1495,8 +1512,9 @@ async function runWaivers(options, { cwd, env }) {
  * sits at the tail of this function, and `../src/commands/fitness.mjs` states
  * the posture — a failing fitness function is a finding, not a print job
  * (D-09). `check` folds the same `fail` into its own exit 1 by presence, so the
- * two faces agree; `check` and `fitness` are the only verbs whose verdict
- * carries that code.
+ * two faces agree; the verbs whose verdict carries that code are `check`,
+ * `fitness`, `delta` and `change`, plus the `rules verify` artifact-integrity
+ * fold (PD-8; `docs/reference/exit-codes.md` owns the roster).
  *
  * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
@@ -1946,9 +1964,7 @@ async function runDecisions(options, { cwd, env }) {
     // reads this law's declared gates, so a `--config` override must reach it.
     const { config } = await resolvePolicy(options, commandContext, cwd);
 
-    const intent = commandContext.tracked.includes(INTENT_FILE)
-      ? await loadIntent(commandContext.root, { tracked: commandContext.tracked })
-      : null;
+    const intent = await loadIntentIfTracked(commandContext.root, commandContext.tracked);
 
     result = await decisionsCommand(options.paths[0], commandContext, config, { intent });
   } catch (error) {
@@ -2500,9 +2516,7 @@ async function runHealth(options, { cwd, env }) {
     // intent is the tracked root `architecture-intent.json` (or absent).
     const { config } = await resolvePolicy(options, commandContext, cwd);
 
-    const intent = commandContext.tracked.includes(INTENT_FILE)
-      ? await loadIntent(commandContext.root, { tracked: commandContext.tracked })
-      : null;
+    const intent = await loadIntentIfTracked(commandContext.root, commandContext.tracked);
 
     result = healthCommand(commandContext, { config, intent, trendDir });
   } catch (error) {
@@ -2571,9 +2585,7 @@ async function runReport(options, { cwd, env }) {
     // composes, so no two sections can cite different laws.
     const { config, source } = await resolvePolicy(options, commandContext, cwd);
 
-    const intent = commandContext.tracked.includes(INTENT_FILE)
-      ? await loadIntent(commandContext.root, { tracked: commandContext.tracked })
-      : null;
+    const intent = await loadIntentIfTracked(commandContext.root, commandContext.tracked);
 
     result = await reportCommand(commandContext, {
       config,

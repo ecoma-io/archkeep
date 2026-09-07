@@ -52,7 +52,7 @@
           "type": "source-evidence",
           "path": "cli.mjs",
           "assertion": "Exit codes 0/1/3 distinguish clean/findings/cannot-look",
-          "sha256": "3532f790ae1ac4d08fe4bbb9a6cfe680ce1618c05757da42e982bf183fab2ac6"
+          "sha256": "7ecf2225480b1de732534b07ebb3295aaa955930142262a2986b1a40200ce128"
         }
       ],
       "status": "proven"

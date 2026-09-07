@@ -146,9 +146,10 @@ tracked, or a claim with no gate. Owners are phases or the maintainer.
 - **DG-3** snapshot/event family semantics beyond ADR-0008 live in code
   headers — [closed by PD-10](#closed--decided).
 - **DG-4** "descriptive commands project canonical evaluation; they never
-  re-evaluate" is pinned by contracts I/J but stated nowhere as a general law
-  — Phase 5's facade work states it once in
-  [AUTHORITY-MAP.md](AUTHORITY-MAP.md) or doctrine, not both.
+  re-evaluate" — closed by PD-18: the law is stated once in
+  [AUTHORITY-MAP.md](AUTHORITY-MAP.md), and the capability facades
+  (`src/commands/<word>-capability.mjs`) enforce it by construction
+  (PR #772).
 - **DG-5** capability-grouping vocabulary owner —
   [closed by PD-9](#closed--decided).
 - **DG-6** the determinism sweep's file roster lives in test code; file moves

@@ -707,3 +707,26 @@ export async function loadIntent(root, { read = readFileFromDisk, tracked } = {}
   }
   return normalizeIntent(raw);
 }
+
+/**
+ * The driver gate over `loadIntent`: load the workspace's declared law only
+ * when the tracked-file list names it, `null` otherwise.
+ *
+ * Three `cli.mjs` drivers (decisions, health, report) need the same answer:
+ * an intent file `git ls-files` does not list is absence — the callers render
+ * their no-intent face — while a tracked-but-unreadable file is a no-verdict
+ * throw that the shared catch folds to exit 3. The membership pre-test is a
+ * pure equivalence, not a containment guard: `loadIntent` early-returns for
+ * untracked input before any containment check, so this helper changes no
+ * verdict on any input.
+ *
+ * @param {string} root Absolute workspace root.
+ * @param {string[]} tracked The `git ls-files` list.
+ * @returns {Promise<object|null>} The normalized, validated model, or `null`
+ *   when the file is not tracked.
+ * @throws {Error} exactly what `loadIntent` throws — tracked-but-unreadable
+ *   stays a no-verdict, never absence.
+ */
+export async function loadIntentIfTracked(root, tracked) {
+  return tracked.includes(INTENT_FILE) ? loadIntent(root, { tracked }) : null;
+}
