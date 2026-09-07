@@ -148,7 +148,11 @@ import {
   rulesListCommand,
   rulesVerifyCommand,
 } from "./src/commands/rules-capability.mjs";
-import { resolveDescribedPolicy, resolvePolicy } from "./src/commands/policy.mjs";
+import {
+  nativePolicyOptions,
+  resolveDescribedPolicy,
+  resolvePolicy,
+} from "./src/commands/policy.mjs";
 import {
   DEFAULT_OPTIONS,
   WORKSPACE_MARKERS,
@@ -157,10 +161,9 @@ import {
 } from "./src/commands/context.mjs";
 import { INTENT_FILE, loadIntentIfTracked } from "./src/architecture-intent/model.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
-import { readPluginOptions } from "./src/options.mjs";
+import { ARCHKEEP_MODEL_FILE, readPluginOptions } from "./src/options.mjs";
 import { EXIT } from "./src/verdict.mjs";
 
-import { ARCHKEEP_MODEL_FILE, loadNativeModel } from "./src/providers/native/model.mjs";
 import { findWorkspaceRoot, listTrackedFiles } from "./src/workspace.mjs";
 
 /**
@@ -168,9 +171,10 @@ import { findWorkspaceRoot, listTrackedFiles } from "./src/workspace.mjs";
  * builds when no reader is injected (`./src/workspace.mjs`) — duplicated
  * rather than imported for the reason `./src/commands/context.mjs` carries its
  * own copy of the same helper: `optionsForUsage` below needs one BEFORE any
- * `Workspace` exists, to hand `loadNativeModel` a reader for `archkeep.json`
- * itself. `check` no longer needs a copy of its own — `resolveCommandContext`
- * owns that read now — which is why this is the only one left in this file.
+ * `Workspace` exists, to hand `nativePolicyOptions` a reader for
+ * `archkeep.json` itself. `check` no longer needs a copy of its own —
+ * `resolveCommandContext` owns that read now — which is why this is the only
+ * one left in this file.
  *
  * @param {string} root
  * @returns {(path: string) => string|null}
@@ -355,20 +359,7 @@ function optionsForUsage(cwd) {
     if (root === null) return DEFAULT_OPTIONS;
     const { hasNx, hasNative } = markersAt(root);
     if (hasNative && !hasNx) {
-      const model = loadNativeModel(root, { readFile: readWorkspaceRoot(root) });
-      // An inline policy object has no filename to print — `${boundaryConfig}`
-      // below would otherwise coerce it to the literal text "[object Object]",
-      // which reads as a real (and wrong) filename rather than as the "there
-      // is no file" it actually means. `inline: true` is what tells `usage()`
-      // to print the paragraph that says so, instead of the one describing a
-      // named file.
-      return typeof model.boundaryConfig === "string"
-        ? { boundaryConfig: model.boundaryConfig, tsConfig: model.tsConfig }
-        : {
-            boundaryConfig: "an inline policy in archkeep.json",
-            tsConfig: model.tsConfig,
-            inline: true,
-          };
+      return nativePolicyOptions(root, { readFile: readWorkspaceRoot(root) });
     }
     return readPluginOptions(root);
   } catch {

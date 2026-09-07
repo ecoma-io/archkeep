@@ -121,6 +121,16 @@ export const DEFAULT_OPTIONS = Object.freeze({
 export const NX_CONFIG_FILE = "nx.json";
 
 /**
+ * The native workspace's root marker and model file — `nx.json`'s
+ * counterpart for a tree with no Nx at all. The options layer owns every
+ * filename a workspace's declaration can be read from, so the name is
+ * defined here rather than beside the loader that parses it
+ * (`./providers/native/model.mjs`, which re-exports this binding): help
+ * text and `--output` guards need the name without importing the loader.
+ */
+export const ARCHKEEP_MODEL_FILE = "archkeep.json";
+
+/**
  * Merges a raw options object over the defaults, refusing anything it does not
  * recognise.
  *

@@ -44,12 +44,17 @@
  * shows the first is the slower way to get to a working config.
  */
 import { globComplexityError, projectPatternError, safeMatchesGlob } from "../../rules/match.mjs";
-import { resolveOptions } from "../../options.mjs";
+import { ARCHKEEP_MODEL_FILE, resolveOptions } from "../../options.mjs";
 import { findBoundaryConfigViolations, policyKeyViolations } from "../../config.mjs";
 import { describe, isPlainObject, isStringArray } from "../../values.mjs";
 
-/** The file this provider treats as a workspace root marker and its model. */
-export const ARCHKEEP_MODEL_FILE = "archkeep.json";
+/**
+ * The file this provider treats as a workspace root marker and its model —
+ * defined once in `../../options.mjs`, the filename-knowing layer, and
+ * re-exported here under the same binding this module and every provider
+ * consumer already import.
+ */
+export { ARCHKEEP_MODEL_FILE };
 
 /**
  * Copies every character of `text` to `out` up to and including the closing
