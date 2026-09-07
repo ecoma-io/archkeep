@@ -105,12 +105,15 @@ import {
   serializeEvidenceSnapshot,
 } from "./delta-snapshot.mjs";
 import { computeDiff } from "./diff.mjs";
+import { isAbsolute, resolve } from "node:path";
 import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
 import { eventSnapshotSide } from "./history.mjs";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import { resolveCommandContext } from "./context.mjs";
 import { compareSnapshotMetadata, dirtyBaselineNote, dirtyHeadNote } from "./snapshot-meta.mjs";
 import { describe } from "../values.mjs";
+import { resolvePolicy } from "./policy.mjs";
 
 const require = createRequire(import.meta.url);
 /** @type {{name: string, version: string}} */
@@ -1120,4 +1123,55 @@ export async function deltaCommand(
       sarif: formatDeltaSarif({ delta: result, coverage, customCatalogue }),
     },
   };
+}
+
+/**
+ * `delta --capture` as the CLI drives it: the shared preamble — command
+ * context, then the boundary law — resolved here, so `../../cli.mjs`'s
+ * driver only wires where the evidence text lands. The engine this returns
+ * from is `captureDelta` above, unchanged; the driver owns the write door.
+ *
+ * @param {{config: string|null}} options This run's parsed flags.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `captureDelta`'s result (`snapshot`, `text`),
+ *   unmodified.
+ */
+export async function captureBaseline(options, { cwd, readGraph, listFiles }) {
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // The snapshot's policy fingerprint needs the boundary config — the
+  // workspace's own `boundaryConfig` (profile-aware the same way `check` is,
+  // `resolvePolicy`), so the stored fingerprint agrees with a standalone
+  // `graph` fingerprint over the same workspace, kept in one place so a
+  // capture and a `graph` never disagree about the current policy.
+  const { config } = await resolvePolicy(options, commandContext, cwd);
+  return captureDelta(commandContext, { config });
+}
+
+/**
+ * `delta` (compare) as the CLI drives it: the baseline path resolved from
+ * the single positional argument, then the shared preamble — command
+ * context, boundary law — so `../../cli.mjs`'s driver only wires options,
+ * IO seams, and where output lands. The engine this returns from is
+ * `deltaCommand` above, unchanged.
+ *
+ * @param {{config: string|null, eventOut: string|null, paths: string[]}} options
+ *   This run's parsed flags; `paths[0]` is the baseline file.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `deltaCommand`'s result, unmodified.
+ */
+export async function delta(options, { cwd, readGraph, listFiles }) {
+  const baselinePath = isAbsolute(options.paths[0])
+    ? resolve(options.paths[0])
+    : resolve(cwd, options.paths[0]);
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // Same loading logic as `check` (`resolvePolicy`) — a `--config`
+  // overrides the workspace's own `boundaryConfig`, profile-aware the same
+  // way `check` is.
+  const { config } = await resolvePolicy(options, commandContext, cwd);
+  return deltaCommand(baselinePath, commandContext, {
+    config,
+    eventOut: options.eventOut,
+  });
 }

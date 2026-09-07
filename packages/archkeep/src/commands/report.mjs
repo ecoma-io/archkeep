@@ -107,6 +107,7 @@
  */
 import { formatGovernanceReport } from "../report/report-text.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
+import { isAbsolute, resolve } from "node:path";
 import { healthCommand } from "./health.mjs";
 import { declaresFitness, fitnessCommand } from "./fitness.mjs";
 import { waiversCommand } from "./waivers.mjs";
@@ -128,6 +129,9 @@ import {
 } from "../governance/adr-registry.mjs";
 import { computeDecisionFitness } from "../governance/decision-fitness.mjs";
 import { hasAuthority, stripRuleFitnessPrefix } from "../governance/adr-registry.mjs";
+import { resolveCommandContext } from "./context.mjs";
+import { loadIntentIfTracked } from "../architecture-intent/model.mjs";
+import { resolvePolicy } from "./policy.mjs";
 
 /**
  * The message a thrown refusal carries, as the report's reason for a surface
@@ -597,4 +601,38 @@ export async function reportCommand(commandContext, io = {}) {
       json: renderJson(envelope),
     },
   };
+}
+
+/**
+ * `report` as the CLI drives it: the shared preamble — command context, the
+ * ONE boundary law the whole document is written against, the tracked
+ * intent — resolved here, so `../../cli.mjs`'s driver only wires options,
+ * IO seams, and where output lands (`./README.md`). The engine this returns
+ * from is `reportCommand` above, unchanged.
+ *
+ * @param {{config: string|null, paths: string[]}} options This run's parsed
+ *   flags; at most one positional, the snapshot directory for trends.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `reportCommand`'s result, unmodified.
+ */
+export async function report(options, { cwd, readGraph, listFiles }) {
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // ONE law for the whole document — resolved exactly the way `check` and
+  // `health` resolve theirs, and handed to every surface the report
+  // composes, so no two sections can cite different laws.
+  const { config, source } = await resolvePolicy(options, commandContext, cwd);
+  const intent = await loadIntentIfTracked(commandContext.root, commandContext.tracked);
+  const trendDir =
+    options.paths.length === 1
+      ? isAbsolute(options.paths[0])
+        ? options.paths[0]
+        : resolve(cwd, options.paths[0])
+      : null;
+  return reportCommand(commandContext, {
+    config,
+    intent,
+    trendDir,
+    policySource: source,
+  });
 }

@@ -9,5 +9,5 @@
  * ../../../../docs/architecture/refactor/DECISIONS.md).
  */
 export { check, sortViolations } from "./check.mjs";
-export { fitnessCommand } from "./fitness.mjs";
-export { scenarioCommand } from "./scenario.mjs";
+export { fitness } from "./fitness.mjs";
+export { scenario } from "./scenario.mjs";

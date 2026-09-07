@@ -51,11 +51,14 @@ import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
 import { computeDebtLedger } from "../governance/debt-ledger.mjs";
 import { readEvents } from "../governance/evolution-store.mjs";
 import { formatDebtReport } from "../report/debt-text.mjs";
+import { isAbsolute, resolve } from "node:path";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { buildObserved, refuseIncompleteGraph } from "./drift.mjs";
 import { readSnapshots } from "./history.mjs";
+import { resolveCommandContext } from "./context.mjs";
+import { resolvePolicy } from "./policy.mjs";
 
 /**
  * Runs the `debt` command: computes the current candid facts, ages them across
@@ -239,4 +242,31 @@ export async function debtCommand(dir, commandContext, options = {}) {
       json: renderJson(envelope),
     },
   };
+}
+
+/**
+ * `debt` as the CLI drives it: the history directory resolved from the
+ * single positional argument, then the shared preamble — command context,
+ * then the boundary law — so `../../cli.mjs`'s driver only wires options,
+ * IO seams, and where output lands (`./README.md`). The engine this returns
+ * from is `debtCommand` above, unchanged.
+ *
+ * @param {{config: string|null, events: string|null, paths: string[]}} options
+ *   This run's parsed flags; `paths[0]` is the history directory.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `debtCommand`'s result, unmodified.
+ */
+export async function debt(options, { cwd, readGraph, listFiles }) {
+  const dir = isAbsolute(options.paths[0]) ? options.paths[0] : resolve(cwd, options.paths[0]);
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // The boundary law the ledger ages waivers against — resolved the same way
+  // `graph` and `diff` resolve it (`resolvePolicy`), so a `debt` run and a
+  // `check` run never disagree about the current suppressions, and a
+  // profile-selected workspace resolves the same way `check` does.
+  const { config } = await resolvePolicy(options, commandContext, cwd);
+  return debtCommand(dir, commandContext, {
+    config,
+    events: options.events,
+  });
 }

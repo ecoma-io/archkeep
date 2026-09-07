@@ -8,9 +8,9 @@
  * graph, not just to a comment (PD-18,
  * ../../../../docs/architecture/refactor/DECISIONS.md).
  */
-export { waiversCommand } from "./waivers.mjs";
-export { reportCommand } from "./report.mjs";
-export { debtCommand } from "./debt.mjs";
+export { waivers } from "./waivers.mjs";
+export { report } from "./report.mjs";
+export { debt } from "./debt.mjs";
 export { provenanceCommand } from "./provenance-command.mjs";
-export { decisionsCommand } from "./decisions.mjs";
+export { decisions } from "./decisions.mjs";
 export { adrCommand } from "./adr.mjs";

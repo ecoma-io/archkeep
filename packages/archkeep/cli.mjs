@@ -94,7 +94,7 @@
  * only once a later command needs something this table cannot express.
  */
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -107,40 +107,31 @@ import { UsageError } from "./src/errors.mjs";
 // `<word>-capability.mjs` module is its word's explicit verb roster — pure
 // re-exports, zero judgment (PD-18, docs/architecture/refactor/DECISIONS.md).
 // Non-verb helper modules keep their direct imports.
-import { discoverCommand, proposalToIntent } from "./src/commands/analyze-capability.mjs";
+import { discoverCommand, intentJsonFromProposal } from "./src/commands/analyze-capability.mjs";
+import { check, fitness, scenario, sortViolations } from "./src/commands/check-capability.mjs";
 import {
-  check,
-  fitnessCommand,
-  scenarioCommand,
-  sortViolations,
-} from "./src/commands/check-capability.mjs";
-import {
-  captureDelta,
-  changeCommand,
-  deltaCommand,
-  diffCommand,
-  driftCommand,
+  captureBaseline,
+  change,
+  changeOutputRefusal,
+  delta,
+  diff,
+  drift,
   evolutionCommand,
-  historyCommand,
+  history,
+  historyOutputRefusal,
   reconcileCommand,
   trajectoryCommand,
+  trajectoryOutputRefusal,
 } from "./src/commands/compare-capability.mjs";
-import { explainCommand } from "./src/commands/explain-capability.mjs";
-import {
-  computePolicyFingerprint,
-  contextCommand,
-  graphCommand,
-  healthCommand,
-  impactCommand,
-  planContextCommand,
-} from "./src/commands/inspect-capability.mjs";
+import { explain } from "./src/commands/explain-capability.mjs";
+import { context, graph, health, impact, planContext } from "./src/commands/inspect-capability.mjs";
 import {
   adrCommand,
-  debtCommand,
-  decisionsCommand,
+  debt,
+  decisions,
   provenanceCommand,
-  reportCommand,
-  waiversCommand,
+  report,
+  waivers,
 } from "./src/commands/govern-capability.mjs";
 import {
   rulesAddCommand,
@@ -148,18 +139,14 @@ import {
   rulesListCommand,
   rulesVerifyCommand,
 } from "./src/commands/rules-capability.mjs";
-import {
-  nativePolicyOptions,
-  resolveDescribedPolicy,
-  resolvePolicy,
-} from "./src/commands/policy.mjs";
+import { nativePolicyOptions } from "./src/commands/policy.mjs";
 import {
   DEFAULT_OPTIONS,
   WORKSPACE_MARKERS,
   markersAt,
   resolveCommandContext,
 } from "./src/commands/context.mjs";
-import { INTENT_FILE, loadIntentIfTracked } from "./src/architecture-intent/model.mjs";
+import { INTENT_FILE } from "./src/architecture-intent/model.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { ARCHKEEP_MODEL_FILE, readPluginOptions } from "./src/options.mjs";
 import { EXIT } from "./src/verdict.mjs";
@@ -830,32 +817,7 @@ async function runGraph(options, { cwd, env }) {
 
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    // Load the boundary config so the snapshot carries a policy fingerprint
-    // that `diff` can use to warn when the policy changed between runs. Without
-    // a config, the snapshot carries no policy identity — the consumer did not
-    // provide one (`./src/commands/graph.mjs` makes that field conditional). A
-    // profile-selected workspace's `boundaryConfig` names a profile rather than
-    // a file, resolved the same way `check` resolves it (`resolvePolicy`), so
-    // the fingerprint moves with a profile edit the same way it already does
-    // with a file or inline-object edit.
-    //
-    // `graph` describes the project graph, not the boundary law — it reads no
-    // constraint row and judges nothing against one — so a workspace that has
-    // not written a law yet must not be refused here. Every arm of that
-    // decision — what is skipped is the load of a file that is NOT THERE, the
-    // `boundaryConfigDeclared` bit that keeps the guard to the un-overridden
-    // default, and why a law someone named and then deleted stays loud — lives
-    // in `resolveDescribedPolicy` (`./src/commands/policy.mjs`) rather than
-    // here, so the descriptive commands and the MCP face that serves them
-    // cannot disagree about what "no law declared" means.
-    const { config } = await resolveDescribedPolicy(options, commandContext, cwd);
-
-    result = graphCommand(commandContext, { config });
+    result = await graph(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -902,26 +864,9 @@ async function runDiff(options, { cwd, env }) {
     return EXIT.usage;
   }
 
-  const baselinePath = isAbsolute(options.paths[0])
-    ? options.paths[0]
-    : resolve(cwd, options.paths[0]);
-
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    // Load the boundary config when --config is given or when the workspace
-    // declares one, so rule-impact analysis is computed. Without a config,
-    // the diff reports only structural changes — same as before. A
-    // profile-selected workspace resolves the same way `check` does
-    // (`resolvePolicy`), so a policy edit under an unchanged profile NAME is
-    // still visible as a fingerprint change here.
-    const { config } = await resolvePolicy(options, commandContext, cwd);
-
-    result = diffCommand(baselinePath, commandContext, { config });
+    result = await diff(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -986,18 +931,12 @@ async function runDelta(options, { cwd, env }) {
 
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    // Both modes need the boundary law: capture fingerprints it, compare
-    // re-judges both sides under it — the same ladder every judging command
-    // resolves through (`resolvePolicy`).
-    const { config } = await resolvePolicy(options, commandContext, cwd);
-
     if (options.capture) {
-      const { text } = captureDelta(commandContext, { config });
+      const { text } = await captureBaseline(options, {
+        cwd,
+        readGraph: env.readGraph,
+        listFiles: env.listFiles,
+      });
       if (options.output) {
         // Atomic, symlink-safe write — `writeOutputReport`'s own docstring
         if (!writeOutputReport(options.output, text, env, cwd, options.config)) return EXIT.error;
@@ -1009,13 +948,7 @@ async function runDelta(options, { cwd, env }) {
       return EXIT.ok;
     }
 
-    const baselinePath = isAbsolute(options.paths[0])
-      ? resolve(options.paths[0])
-      : resolve(cwd, options.paths[0]);
-    result = await deltaCommand(baselinePath, commandContext, {
-      config,
-      eventOut: options.eventOut,
-    });
+    result = await delta(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -1090,36 +1023,7 @@ async function runDrift(options, { cwd, env }) {
 
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-    // The loaded policy — profile-aware the same way `check` is
-    // (`resolvePolicy`), `null` when the workspace declares none. Drift reads
-    // the intent's rows, and the fitness half of a row's `decisionRef`
-    // resolves against the ids THIS policy declares (F04), so the same policy
-    // that made the boundary law answerable to the model must answer here.
-    // `drift` has no `--config` (`DRIFT_FLAG_HELP`), so `config` is always the
-    // workspace's own default — resolvePolicy reads `options.config` as the
-    // override, hence `null` here, which selects the workspace's configured
-    // boundary law (or a profile, when one is registered).
-    //
-    // The failure is DEFERRED rather than thrown here. `drift`'s only reader of
-    // this policy is the non-verdict decisionRef axis, and only for rows that
-    // carry one, so a workspace with an intent and no boundary config was
-    // exiting 3 over a law drift would never have opened — a fifth refusal
-    // neither `docs/usage/drift.md` nor `reconcile`, which makes the same four,
-    // ever had. `driftCommand` rethrows it, unchanged, at the one site that
-    // reads the policy, so every workspace whose intent cites anything keeps the
-    // exact exit-3 it had.
-    let config = null;
-    let configError = null;
-    try {
-      ({ config } = await resolvePolicy({ ...options, config: null }, commandContext, cwd));
-    } catch (error) {
-      configError = /** @type {Error} */ (error);
-    }
-    result = await driftCommand(commandContext, { config, configError });
+    result = await drift(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -1304,55 +1208,15 @@ async function runChange(options, { cwd, env }) {
     return EXIT.usage;
   }
 
-  const baselinePath = isAbsolute(options.paths[0])
-    ? options.paths[0]
-    : resolve(cwd, options.paths[0]);
-  const intentPath = isAbsolute(options.intent) ? options.intent : resolve(cwd, options.intent);
-
-  // A self-footgun guard, the same shape `history`'s holds: writing the
-  // reconciliation report over the very manifest this run just read would
-  // destroy the declaration it verified, with the loss surfacing only later —
-  // the first time someone tries to re-run the verification.
-  if (options.output) {
-    const outputAbs = isAbsolute(options.output)
-      ? resolve(options.output)
-      : resolve(cwd, options.output);
-    if (outputAbs === intentPath) {
-      env.err(
-        `archkeep: --output '${options.output}' resolves to the change-intent manifest itself — ` +
-          `overwriting the declaration with its own reconciliation report would destroy it. ` +
-          `Write the report somewhere else.`,
-      );
-      return EXIT.usage;
-    }
+  const refusal = changeOutputRefusal(options, cwd);
+  if (refusal) {
+    env.err(refusal);
+    return EXIT.usage;
   }
 
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    // Declared constraints are judged under whichever law THIS run resolves,
-    // and the envelope records that law's fingerprint beside the baseline's —
-    // the same loading every judging command does (`resolvePolicy`),
-    // profile-aware the same way `check` is.
-    const { config } = await resolvePolicy(options, commandContext, cwd);
-
-    // `--event-out` names the reconcile event store directory, resolved from
-    // cwd like the other path flags; `undefined` when absent, so a run
-    // without the flag writes no event and stays byte-identical.
-    const eventOut =
-      typeof options.eventOut === "string" && options.eventOut !== ""
-        ? isAbsolute(options.eventOut)
-          ? options.eventOut
-          : resolve(cwd, options.eventOut)
-        : undefined;
-    result = await changeCommand(baselinePath, intentPath, commandContext, {
-      config,
-      ...(eventOut === undefined ? {} : { eventOut }),
-    });
+    result = await change(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -1408,25 +1272,7 @@ async function runWaivers(options, { cwd, env }) {
 
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    // The waivers surface is part of the run's boundary law, so the law is
-    // loaded the same way `check` loads it (`resolvePolicy`) and `--config`
-    // wins the same way — resolved against the working directory, never
-    // against this tool's own location, and a `profiles` registry resolves
-    // `--config`/`boundaryConfig` as a profile NAME the same way `check`
-    // does. A malformed law throws here, exit 3, exactly as in `check`.
-    const { config, source } = await resolvePolicy(options, commandContext, cwd);
-
-    // `source` rides along for one job: `waiversCommand` subtracts the law's
-    // own file from the unowned-file set the `coverage.unowned` acceptances
-    // are matched against, exactly as `check` does — the law is not source
-    // judged by the law (`../src/commands/context.mjs`'s
-    // `unownedGapWithoutRunConfiguration`).
-    result = await waiversCommand(commandContext, config, { policySource: source });
+    result = await waivers(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -1495,24 +1341,7 @@ async function runFitness(options, { cwd, env }) {
 
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    // Fitness is part of the run's boundary law, so the law is loaded the same
-    // way `check` loads it (`resolvePolicy`) and `--config` wins the same
-    // way — resolved against the working directory, never against this
-    // tool's own location, profile-aware the same way `check` is. A malformed
-    // law throws here, exit 3, exactly as in `check`. A profile's `block` may
-    // carry a `fitness` key (`docs/concepts/profiles.md` now names four
-    // block keys, fitness among them), so a profile-selected workspace folds
-    // the declared functions the same way a file-selected one does — a
-    // profile that declares none reaches `fitnessCommand`'s own "declares no
-    // fitness functions" refusal below rather than a config-loading failure.
-    const { config } = await resolvePolicy(options, commandContext, cwd);
-
-    result = await fitnessCommand(commandContext, { config });
+    result = await fitness(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -1570,17 +1399,11 @@ async function runImpact(options, { cwd, env }) {
 
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    // Load the boundary config when --config is given or when the workspace
-    // declares one, so constraint-impact analysis is computed — profile-aware
-    // the same way `check` is (`resolvePolicy`).
-    const { config } = await resolvePolicy(options, commandContext, cwd);
-
-    result = impactCommand(projectName, commandContext, config);
+    result = await impact(projectName, options, {
+      cwd,
+      readGraph: env.readGraph,
+      listFiles: env.listFiles,
+    });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -1653,14 +1476,11 @@ async function runScenario(options, { cwd, env }) {
 
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    const { config } = await resolvePolicy(options, commandContext, cwd);
-
-    result = scenarioCommand(projectName, scenarioJson, commandContext, config);
+    result = await scenario(projectName, scenarioJson, options, {
+      cwd,
+      readGraph: env.readGraph,
+      listFiles: env.listFiles,
+    });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -1708,22 +1528,9 @@ async function runExplain(options, { cwd, env }) {
     return EXIT.usage;
   }
 
-  const site = options.paths[0];
-
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    // The config's location is a separate fact from the workspace root.
-    // Same loading logic as `check` (`resolvePolicy`) — a `--config`
-    // overrides the workspace's own `boundaryConfig`, profile-aware the same
-    // way `check` is.
-    const { config } = await resolvePolicy(options, commandContext, cwd);
-
-    result = explainCommand(site, commandContext, config);
+    result = await explain(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -1774,36 +1581,11 @@ async function runContextCommand(options, { cwd, env }) {
     return EXIT.usage;
   }
 
-  const projectName = options.paths[0];
-  const scopePaths = options.plan ? options.paths.slice(1) : [];
-
   let result;
   try {
-    // The command context is resolved over the WHOLE workspace. Scoping by
-    // path is the plan command's decision (which projects the change touches),
-    // not the preamble's: the rule verdict and the architecture snapshot must
-    // be over the whole tree, and only reporting is narrowed. Passing no paths
-    // here keeps the non-plan `context` path byte-for-byte identical to before.
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    // The config's location is a separate fact from the workspace root.
-    // Same loading logic as `check` and `explain` (`resolvePolicy`) — a
-    // `--config` overrides the workspace's own `boundaryConfig`,
-    // profile-aware the same way `check` is.
-    const { config } = await resolvePolicy(options, commandContext, cwd);
-
-    const historyDir = options.historyDir
-      ? isAbsolute(options.historyDir)
-        ? options.historyDir
-        : resolve(cwd, options.historyDir)
-      : null;
-
     result = options.plan
-      ? await planContextCommand(projectName, scopePaths, commandContext, config, historyDir)
-      : contextCommand(projectName, commandContext, config);
+      ? await planContext(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles })
+      : await context(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -1919,18 +1701,7 @@ async function runDecisions(options, { cwd, env }) {
 
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    // ONE law for the chain, resolved exactly like `report` — the Fitness leg
-    // reads this law's declared gates, so a `--config` override must reach it.
-    const { config } = await resolvePolicy(options, commandContext, cwd);
-
-    const intent = await loadIntentIfTracked(commandContext.root, commandContext.tracked);
-
-    result = await decisionsCommand(options.paths[0], commandContext, config, { intent });
+    result = await decisions(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -2049,56 +1820,15 @@ async function runHistory(options, { cwd, env }) {
     return EXIT.usage;
   }
 
-  const dir = isAbsolute(options.paths[0])
-    ? resolve(options.paths[0])
-    : resolve(cwd, options.paths[0]);
-
-  // A self-footgun guard: writing the history report back into the very
-  // directory `history` reads would poison every later run (the report envelope
-  // is a `history` envelope, which `parseBaseline` refuses as a non-`graph`
-  // snapshot). Refuse loudly instead of eventually failing on a poisoned dir.
-  if (options.output) {
-    // `resolve()` on the absolute branch too — not just the raw path — the
-    // same normalization `writeOutputReport` applies, so an absolute
-    // `--output` carrying a `..` segment that resolves INTO the history
-    // directory cannot slip past this guard unnormalized.
-    const outputAbs = isAbsolute(options.output)
-      ? resolve(options.output)
-      : resolve(cwd, options.output);
-    if (dirname(outputAbs) === dir) {
-      env.err(
-        `archkeep: --output '${options.output}' is inside the history directory '${dir}' — ` +
-          `writing the report there would be read back as a snapshot on the next run. ` +
-          `Write it somewhere else.`,
-      );
-      return EXIT.usage;
-    }
+  const refusal = historyOutputRefusal(options, cwd);
+  if (refusal) {
+    env.err(refusal);
+    return EXIT.usage;
   }
 
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    // The boundary law's fingerprint when the workspace declares one, so a
-    // captured snapshot records the policy it was taken under — the same
-    // config loading `graph` uses (`resolvePolicy`, profile-aware the same
-    // way `check` is), kept in one place so a capture and a standalone
-    // `graph` never disagree about the current policy.
-    let fingerprint = null;
-    if (options.capture) {
-      const { config } = await resolvePolicy(options, commandContext, cwd);
-      if (config) {
-        fingerprint = computePolicyFingerprint(config);
-      }
-    }
-
-    result = historyCommand(dir, commandContext, {
-      capture: options.capture,
-      policyFingerprint: fingerprint,
-    });
+    result = await history(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -2148,22 +1878,10 @@ async function runTrajectory(options, { cwd, env }) {
     ? resolve(options.paths[0])
     : resolve(cwd, options.paths[0]);
 
-  // The same self-footgun guard `runHistory` applies: a report written into
-  // the directory being read would be read back as a snapshot on the next run
-  // (the envelope is not a `graph` snapshot, which `parseBaseline` refuses) —
-  // poison the record loudly refused rather than quietly planted.
-  if (options.output) {
-    const outputAbs = isAbsolute(options.output)
-      ? resolve(options.output)
-      : resolve(cwd, options.output);
-    if (dirname(outputAbs) === dir) {
-      env.err(
-        `archkeep: --output '${options.output}' is inside the history directory '${dir}' — ` +
-          `writing the report there would be read back as a snapshot on the next run. ` +
-          `Write it somewhere else.`,
-      );
-      return EXIT.usage;
-    }
+  const refusal = trajectoryOutputRefusal(options, cwd);
+  if (refusal) {
+    env.err(refusal);
+    return EXIT.usage;
   }
 
   let result;
@@ -2302,25 +2020,9 @@ async function runDebt(options, { cwd, env }) {
     return EXIT.usage;
   }
 
-  const dir = isAbsolute(options.paths[0]) ? options.paths[0] : resolve(cwd, options.paths[0]);
-
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    // The boundary law the ledger ages waivers against — resolved the same way
-    // `graph` and `diff` resolve it (`resolvePolicy`), so a `debt` run and a
-    // `check` run never disagree about the current suppressions, and a
-    // profile-selected workspace resolves the same way `check` does.
-    const { config } = await resolvePolicy(options, commandContext, cwd);
-
-    result = await debtCommand(dir, commandContext, {
-      config,
-      events: options.events,
-    });
+    result = await debt(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -2424,9 +2126,7 @@ async function runDiscover(options, { cwd, env }) {
       return EXIT.error;
     }
     try {
-      const intentJson = JSON.stringify(proposalToIntent(result.proposal), null, 2) + "\n";
-      // `wx` refuses the file materializing between the check above and this
-      // write, so the refusal above cannot be raced past.
+      const intentJson = intentJsonFromProposal(result.proposal);
       writeFileSync(options.writeIntent, intentJson, { encoding: "utf-8", flag: "wx" });
       env.err(`archkeep: proposed architecture written to ${options.writeIntent}`);
       env.err(
@@ -2443,8 +2143,6 @@ async function runDiscover(options, { cwd, env }) {
 }
 
 /**
- * `health`'s `run`: resolves the command context, drives `healthCommand`,
- * writes the report where it belongs, and returns the process's exit code.
  * `health`'s `run`: resolves the command context, drives `healthCommand`,
  * writes the report where it belongs, and returns the process's exit code.
  *
@@ -2465,29 +2163,9 @@ async function runHealth(options, { cwd, env }) {
     return EXIT.usage;
   }
 
-  const trendDir =
-    options.paths.length === 1
-      ? isAbsolute(options.paths[0])
-        ? options.paths[0]
-        : resolve(cwd, options.paths[0])
-      : null;
-
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    // The boundary law and the intent, the same loading every command does
-    // (`resolvePolicy`) — a `--config` overrides the workspace's own
-    // `boundaryConfig`, profile-aware the same way `check` is, and the
-    // intent is the tracked root `architecture-intent.json` (or absent).
-    const { config } = await resolvePolicy(options, commandContext, cwd);
-
-    const intent = await loadIntentIfTracked(commandContext.root, commandContext.tracked);
-
-    result = healthCommand(commandContext, { config, intent, trendDir });
+    result = await health(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
@@ -2535,45 +2213,20 @@ async function runReport(options, { cwd, env }) {
     return EXIT.usage;
   }
 
-  const trendDir =
-    options.paths.length === 1
-      ? isAbsolute(options.paths[0])
-        ? options.paths[0]
-        : resolve(cwd, options.paths[0])
-      : null;
-
   let result;
   try {
-    const commandContext = resolveCommandContext(
-      { cwd },
-      { readGraph: env.readGraph, listFiles: env.listFiles },
-    );
-
-    // ONE law for the whole document — resolved exactly the way `check` and
-    // `health` resolve theirs, and handed to every surface the report
-    // composes, so no two sections can cite different laws.
-    const { config, source } = await resolvePolicy(options, commandContext, cwd);
-
-    const intent = await loadIntentIfTracked(commandContext.root, commandContext.tracked);
-
-    result = await reportCommand(commandContext, {
-      config,
-      intent,
-      trendDir,
-      policySource: source,
-    });
+    result = await report(options, { cwd, readGraph: env.readGraph, listFiles: env.listFiles });
   } catch (error) {
     const usageError = error instanceof UsageError;
     env.err(String(error?.message ?? error));
     return usageError ? EXIT.usage : EXIT.error;
   }
-
-  const report = options.format === "json" ? result.report.json : result.report.text;
+  const rendered = options.format === "json" ? result.report.json : result.report.text;
 
   if (options.output) {
     // Atomic, symlink-safe write — `writeOutputReport`'s own docstring owns
     // the mechanism and the threat it closes.
-    const reportText = report.endsWith("\n") ? report : `${report}\n`;
+    const reportText = rendered.endsWith("\n") ? rendered : `${rendered}\n`;
     if (!writeOutputReport(options.output, reportText, env, cwd, options.config)) return EXIT.error;
     // The confirmation names the no-verdict case, so a reader who only
     // glances at stderr cannot mistake a written document for an established
@@ -2586,7 +2239,7 @@ async function runReport(options, { cwd, env }) {
         : `NO VERDICT — ${gaps} surface${gaps === 1 ? "" : "s"} could not be inspected`;
     env.err(`archkeep: report complete (${verdict}) → ${options.output}`);
   } else {
-    env.out(report);
+    env.out(rendered);
   }
 
   // Descriptive: 0 when every surface reached a verdict, 3 when any evidence

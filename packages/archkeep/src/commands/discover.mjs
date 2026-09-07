@@ -123,6 +123,20 @@ export function proposalToIntent(proposal) {
 }
 
 /**
+ * Serialize a proposal into the exact bytes `--write-intent` plants at the
+ * target path — `proposalToIntent` rendered as stable, two-space JSON with a
+ * trailing newline, so the file a human reviews as a diff is the file
+ * `check` would read. Owned here, beside the conversion it renders, so the
+ * CLI's write door can never re-derive a second spelling of it.
+ *
+ * @param {object} proposal The proposal from `discoverCommand`'s result.
+ * @returns {string} The serialized intent document.
+ */
+export function intentJsonFromProposal(proposal) {
+  return JSON.stringify(proposalToIntent(proposal), null, 2) + "\n";
+}
+
+/**
  * Runs the `discover` command: observes the workspace, optionally proposes the
  * candidate architecture over it, and returns the report.
  *

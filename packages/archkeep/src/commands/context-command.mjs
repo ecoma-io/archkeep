@@ -37,10 +37,12 @@ import { judgeEdge } from "../rules/edge-constraints.mjs";
 import { findConstraintsFor } from "../rules/tags.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatContextReport } from "../report/context-text.mjs";
+import { resolveCommandContext } from "./context.mjs";
 import { coverageVerdict } from "./coverage-verdict.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { declaredFitnessNames, unresolvedDecisionRefRows } from "../governance/adr-registry.mjs";
+import { resolvePolicy } from "./policy.mjs";
 
 /**
  * Collects the architecture context for a project: its tags, which constraint
@@ -209,4 +211,33 @@ export function contextCommand(projectName, commandContext, config) {
       json: renderJson(envelope),
     },
   };
+}
+
+/**
+ * `context` as the CLI drives it (the non-plan read): the shared preamble —
+ * command context, then the boundary law — resolved here so
+ * `../../cli.mjs`'s driver only wires options, IO seams, and where output
+ * lands (`./README.md`). The engine this returns from is `contextCommand`
+ * above, unchanged.
+ *
+ * The command context is resolved over the WHOLE workspace. Scoping by path
+ * is the plan command's decision (which projects the change touches), not
+ * the preamble's: the rule verdict and the architecture snapshot must be
+ * over the whole tree, and only reporting is narrowed. Passing no paths
+ * keeps the non-plan `context` path byte-for-byte identical.
+ *
+ * @param {{config: string|null, paths: string[]}} options This run's parsed
+ *   flags; `paths[0]` is the project name.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `contextCommand`'s result, unmodified.
+ */
+export async function context(options, { cwd, readGraph, listFiles }) {
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // The config's location is a separate fact from the workspace root.
+  // Same loading logic as `check` and `explain` (`resolvePolicy`) — a
+  // `--config` overrides the workspace's own `boundaryConfig`,
+  // profile-aware the same way `check` is.
+  const { config } = await resolvePolicy(options, commandContext, cwd);
+  return contextCommand(options.paths[0], commandContext, config);
 }

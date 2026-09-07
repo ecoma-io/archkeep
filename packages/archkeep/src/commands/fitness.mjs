@@ -49,8 +49,10 @@ import { blindSpotRows } from "../analysis/source-util.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatFitnessSection } from "../report/text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import { resolveCommandContext } from "./context.mjs";
 import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { driftForCheck } from "./drift.mjs";
+import { resolvePolicy } from "./policy.mjs";
 import {
   evaluateFitness,
   fitnessSnapshot,
@@ -303,4 +305,32 @@ export async function fitnessCommand(commandContext, io = {}) {
   };
 
   return { status, exitCode, fitness: result, coverage, report };
+}
+
+/**
+ * `fitness` as the CLI drives it: the shared preamble — command context,
+ * then the boundary law — resolved here so `../../cli.mjs`'s driver only
+ * wires options, IO seams, and where output lands (`./README.md`). The
+ * engine this returns from is `fitnessCommand` above, unchanged.
+ *
+ * @param {{config: string|null, paths: string[]}} options This run's parsed
+ *   flags.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `fitnessCommand`'s result, unmodified.
+ */
+export async function fitness(options, { cwd, readGraph, listFiles }) {
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // Fitness is part of the run's boundary law, so the law is loaded the same
+  // way `check` loads it (`resolvePolicy`) and `--config` wins the same
+  // way — resolved against the working directory, never against this
+  // tool's own location, profile-aware the same way `check` is. A malformed
+  // law throws here, exit 3, exactly as in `check`. A profile's `block` may
+  // carry a `fitness` key (`docs/concepts/profiles.md` names four block
+  // keys, fitness among them), so a profile-selected workspace folds the
+  // declared functions the same way a file-selected one does — a profile
+  // that declares none reaches `fitnessCommand`'s own "declares no fitness
+  // functions" refusal rather than a config-loading failure.
+  const { config } = await resolvePolicy(options, commandContext, cwd);
+  return fitnessCommand(commandContext, { config });
 }

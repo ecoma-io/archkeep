@@ -40,8 +40,10 @@ import { coverageRefusal, coverageVerdict } from "./coverage-verdict.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatImpactReport } from "../report/impact-text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import { resolveCommandContext } from "./context.mjs";
 import { composeImpactStatement } from "./impact-statement.mjs";
 import { computeImpact } from "./impact-reachability.mjs";
+import { resolvePolicy } from "./policy.mjs";
 
 /**
  * The reachability walk this command reports, shared with the canonical
@@ -170,4 +172,25 @@ export function impactCommand(projectName, commandContext, config = null) {
       json: renderJson(envelope),
     },
   };
+}
+
+/**
+ * `impact` as the CLI drives it: the shared preamble — command context, then
+ * the boundary law — resolved here so `../../cli.mjs`'s driver only wires
+ * options, IO seams, and where output lands (`./README.md`). The engine this
+ * returns from is `impactCommand` above, unchanged.
+ *
+ * @param {string} projectName The project whose dependents are walked.
+ * @param {{config: string|null}} options This run's parsed flags.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `impactCommand`'s result, unmodified.
+ */
+export async function impact(projectName, options, { cwd, readGraph, listFiles }) {
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // Load the boundary config when --config is given or when the workspace
+  // declares one, so constraint-impact analysis is computed — profile-aware
+  // the same way `check` is (`resolvePolicy`).
+  const { config } = await resolvePolicy(options, commandContext, cwd);
+  return impactCommand(projectName, commandContext, config);
 }

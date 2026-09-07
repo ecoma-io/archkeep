@@ -24,6 +24,10 @@ vi.mock("node:fs", () => ({
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
   renameSync: vi.fn(),
+  // Exported for the law-loading chain (`./policy.mjs` →
+  // `../governance/adr-registry.mjs`) whose default IO binding is read at
+  // module init; not exercised by these tests.
+  existsSync: vi.fn(),
   // The default capture writer runs `containmentViolation`
   // (`../containment.mjs`) before staging the `.tmp`, which lstat-walks the
   // history path's ancestors. In a mocked-fs test no path exists, so the walk

@@ -8,4 +8,4 @@
  * graph, not just to a comment (PD-18,
  * ../../../../docs/architecture/refactor/DECISIONS.md).
  */
-export { explainCommand } from "./explain.mjs";
+export { explain } from "./explain.mjs";

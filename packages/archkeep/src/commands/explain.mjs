@@ -86,8 +86,10 @@ import { findConstraintsFor } from "../rules/tags.mjs";
 import { findProjectForPath, createProjectRootMappings } from "../rules/specifiers.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { coverageVerdict } from "./coverage-verdict.mjs";
+import { resolveCommandContext } from "./context.mjs";
 import { formatExplainReport } from "../report/explain-text.mjs";
 import { resolveProvenance } from "./provenance.mjs";
+import { resolvePolicy } from "./policy.mjs";
 import { readAdrContext } from "./adr.mjs";
 import { lineage } from "../governance/decision-graph.mjs";
 import { unresolvedDecisionRefNote } from "./provenance-command.mjs";
@@ -612,4 +614,26 @@ export function explainCommand(site, commandContext, config, options = {}) {
       json: renderJson(envelope),
     },
   };
+}
+
+/**
+ * `explain` as the CLI drives it: the shared preamble — command context,
+ * then the boundary law — resolved here so `../../cli.mjs`'s driver only
+ * wires options, IO seams, and where output lands (`./README.md`). The
+ * engine this returns from is `explainCommand` above, unchanged.
+ *
+ * @param {{config: string|null, paths: string[]}} options This run's parsed
+ *   flags; `paths[0]` is the site, a `file:line:column` string.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `explainCommand`'s result, unmodified.
+ */
+export async function explain(options, { cwd, readGraph, listFiles }) {
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // The config's location is a separate fact from the workspace root.
+  // Same loading logic as `check` (`resolvePolicy`) — a `--config`
+  // overrides the workspace's own `boundaryConfig`, profile-aware the same
+  // way `check` is.
+  const { config } = await resolvePolicy(options, commandContext, cwd);
+  return explainCommand(options.paths[0], commandContext, config);
 }

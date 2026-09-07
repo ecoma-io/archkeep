@@ -7,7 +7,17 @@ import { SCHEMA_VERSION } from "../report/json.mjs";
 // `readBaselineFromDisk` reads through node:fs, so the default reader is
 // driven here with a mocked fs — the baseline-path failure contract (name the
 // path, whatever shape the fs error takes) is pinned without touching disk.
-vi.mock("node:fs", () => ({ readFileSync: vi.fn() }));
+vi.mock("node:fs", () => ({
+  readFileSync: vi.fn(),
+  // The law-loading chain this module reaches at import time
+  // (`./policy.mjs` → `../governance/adr-registry.mjs`) reads its default
+  // IO binding at module init, so every name that binding passes must be
+  // exported by this mock. None of them is exercised by these tests.
+  existsSync: vi.fn(),
+  lstatSync: vi.fn(),
+  readdirSync: vi.fn(),
+  realpathSync: vi.fn(),
+}));
 const readFileSync = vi.mocked((await import("node:fs")).readFileSync);
 
 // The head's provenance is resolved by spawning real git from the workspace

@@ -41,7 +41,9 @@ import { DEFAULT_WORKSPACE_LAYOUT } from "../rules/specifiers.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatGraphReport } from "../report/graph-text.mjs";
 import { coverageIncompleteReasons } from "../verdict.mjs";
+import { resolveCommandContext } from "./context.mjs";
 import { coverageVerdict } from "./coverage-verdict.mjs";
+import { resolveDescribedPolicy } from "./policy.mjs";
 import { resolveProvenance } from "./provenance.mjs";
 
 /**
@@ -341,4 +343,41 @@ export function graphCommand(commandContext, { config = null } = {}) {
       json: renderJson(envelope),
     },
   };
+}
+
+/**
+ * `graph` as the CLI drives it: the shared preamble — command context, then
+ * the workspace's described policy — resolved here, so `../../cli.mjs`'s
+ * driver only wires options, IO seams, and where output lands
+ * (`./README.md`). The engine this returns from is `graphCommand` above,
+ * unchanged.
+ *
+ * The policy is DESCRIBED, not judged: `graph` describes the project graph,
+ * not the boundary law — it reads no constraint row and judges nothing
+ * against one — so a workspace that has not written a law yet must not be
+ * refused here. Every arm of that decision — what is skipped is the load of
+ * a file that is NOT THERE, the `boundaryConfigDeclared` bit that keeps the
+ * guard to the un-overridden default, and why a law someone named and then
+ * deleted stays loud — lives in `resolveDescribedPolicy`
+ * (`./policy.mjs`) rather than here, so the descriptive commands and the
+ * MCP face that serves them cannot disagree about what "no law declared"
+ * means.
+ *
+ * @param {{config: string|null, paths: string[]}} options This run's parsed
+ *   flags — `graph` has no `--config` flag, so `config` is always `null`
+ *   and the workspace's own default is what resolves.
+ * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
+ *   seams a test injects, the same ones `check` takes.
+ * @returns {Promise<object>} `graphCommand`'s result, unmodified.
+ */
+export async function graph(options, { cwd, readGraph, listFiles }) {
+  const commandContext = resolveCommandContext({ cwd }, { readGraph, listFiles });
+  // The fingerprint is why the config loads even though `graph` judges
+  // nothing: `diff` warns when the policy changed between runs, and a
+  // profile-selected workspace's `boundaryConfig` names a profile rather
+  // than a file, resolved the same way `check` resolves it
+  // (`resolveDescribedPolicy`), so the fingerprint moves with a profile edit
+  // the same way it already does with a file or inline-object edit.
+  const { config } = await resolveDescribedPolicy(options, commandContext, cwd);
+  return graphCommand(commandContext, { config });
 }
