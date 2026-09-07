@@ -472,6 +472,17 @@ A decision this workspace recorded.
     expect(envelope.status).toBe("ok");
   });
 
+  it("refuses a decisions run with no workspace root, naming the markers", async () => {
+    // The refusal is this adapter's own: the command layer's composition
+    // returns the null and words nothing, so the message that reaches the
+    // tool-error lane is pinned here rather than assumed.
+    const bare = mkdtempSync(join(tmpdir(), "archkeep-mcp-bare-"));
+    created.push(bare);
+    await expect(historyTool({ workspaceRoot: bare, evidence: "decisions" })).rejects.toThrow(
+      /needs a workspace root — no marker/,
+    );
+  });
+
   it("states the input requirement itself when evolution has no directory", async () => {
     const w = workspace({ violating: false });
     await expect(

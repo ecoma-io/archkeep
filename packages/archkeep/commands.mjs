@@ -25,7 +25,12 @@
  * one. What is deliberately absent: the `run*` drivers and argv parsing
  * (`cli.mjs` alone owns what a process's stdout and exit code mean), and the
  * renderers (`src/report/` shapes bytes for humans; an importer reads the
- * envelopes the commands already return).
+ * envelopes the commands already return). `adrForWorkspace`
+ * (`./src/commands/adr-for-workspace.mjs`) is on the roster without bending
+ * that: it composes the workspace preamble two faces (`cli.mjs`'s `runAdr`
+ * and the MCP history adapter) used to duplicate — one of them past this
+ * subpath — and returns exactly what `adrCommand` returns, printing no byte
+ * and deciding no exit code of its own.
  *
  * The seams the CLI threads are threaded the same way here: `readGraph` and
  * `listFiles` are injectable on every entry point that reaches outside the
@@ -45,6 +50,7 @@ export { driftCommand } from "./src/commands/drift.mjs";
 export { planContextCommand } from "./src/commands/plan-context-command.mjs";
 export { historyCommand } from "./src/commands/history.mjs";
 export { adrCommand } from "./src/commands/adr.mjs";
+export { adrForWorkspace } from "./src/commands/adr-for-workspace.mjs";
 export { discoverCommand } from "./src/commands/discover.mjs";
 export { reconcileCommand } from "./src/commands/reconcile.mjs";
 export {

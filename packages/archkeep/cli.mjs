@@ -130,7 +130,6 @@ import {
 import { explain } from "./src/commands/explain-capability.mjs";
 import { context, graph, health, impact, planContext } from "./src/commands/inspect-capability.mjs";
 import {
-  adrCommand,
   debt,
   decisions,
   provenanceCommand,
@@ -150,12 +149,13 @@ import {
   markersAt,
   resolveCommandContext,
 } from "./src/commands/context.mjs";
+import { adrForWorkspace } from "./src/commands/adr-for-workspace.mjs";
 import { INTENT_FILE } from "./src/architecture-intent/model.mjs";
 import { isProgramEntry } from "./src/entry-point.mjs";
 import { ARCHKEEP_MODEL_FILE, readPluginOptions } from "./src/options.mjs";
 import { EXIT } from "./src/verdict.mjs";
 
-import { findWorkspaceRoot, listTrackedFiles } from "./src/workspace.mjs";
+import { findWorkspaceRoot } from "./src/workspace.mjs";
 
 /**
  * Workspace-relative read from `root`, the same default `createWorkspace`
@@ -1616,22 +1616,26 @@ async function runContextCommand(options, { cwd, env }) {
  * `adr`'s `run`: reads the ADR registry at the workspace root and renders it.
  *
  * The registry lives in `docs/adr/` in the tree being described, not in this
- * package's own tree, so the root comes from the current working directory —
- * the same walking `resolveCommandContext` does, but without the whole
- * project-graph preamble. `adr` never exits 1: a description of what is
- * recorded is never a finding. An unreadable registry (a malformed record, an
- * unreadable file, a bad filename) throws → exit 3; an id the user asked
- * about that the registry does not know → exit 3, the invariant.
+ * package's own tree, and the preamble it needs — the root walked up from
+ * `cwd`, the tracked file list — is the one `adrForWorkspace`
+ * (`./src/commands/adr-for-workspace.mjs`) composes, the same composition
+ * the MCP history adapter runs. This driver decides none of it: it words the
+ * no-workspace refusal (`adrForWorkspace` returns the `null` and holds no
+ * message of its own) and maps the command's throws. `adr` never exits 1: a
+ * description of what is recorded is never a finding. An unreadable registry
+ * (a malformed record, an unreadable file, a bad filename) throws → exit 3;
+ * an id the user asked about that the registry does not know → exit 3, the
+ * invariant.
  *
- * The tracked-file list is read the same way every other command reads it —
- * `env.listFiles ?? listTrackedFiles`, so a test can inject a fake the same
- * way `runCheck` and its siblings do — and handed to `adrCommand` so the
- * registry resolves only git-tracked records (`src/governance/adr-registry.mjs`'s
+ * The tracked-file list is injected the way every other command's is —
+ * `env.listFiles`, so a test can drive the read over a fixture tree with no
+ * git — and reaches `adrCommand` through the driver, so the registry
+ * resolves only git-tracked records (`src/governance/adr-registry.mjs`'s
  * header). A `git ls-files` failure here throws the same as any other
  * unreadable registry, mapped to exit 3 below.
  *
  * @param {{format: string, output: string|null, paths: string[]}} options
- * @param {{cwd: string, env: {out: Function, err: Function, listFiles?: typeof listTrackedFiles}}} runContext
+ * @param {{cwd: string, env: {out: Function, err: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
 async function runAdr(options, { cwd, env }) {
@@ -1643,21 +1647,18 @@ async function runAdr(options, { cwd, env }) {
     return EXIT.usage;
   }
 
-  const root = resolveWorkspaceRootForUsage(cwd);
-  if (root === null) {
+  let result;
+  try {
+    result = adrForWorkspace({ cwd }, { id: options.paths[0] }, { listFiles: env.listFiles });
+  } catch (error) {
+    env.err(String(error?.message ?? error));
+    return EXIT.error;
+  }
+  if (result === null) {
     env.err(
       `archkeep: adr needs a workspace root — no nx.json, archkeep.json, or ` +
         `.moon/workspace.yml marker found walking up from ${cwd}`,
     );
-    return EXIT.error;
-  }
-
-  let result;
-  try {
-    const tracked = (env.listFiles ?? listTrackedFiles)(root);
-    result = adrCommand(root, { id: options.paths[0] }, { tracked });
-  } catch (error) {
-    env.err(String(error?.message ?? error));
     return EXIT.error;
   }
 
