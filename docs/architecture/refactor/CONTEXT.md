@@ -55,8 +55,8 @@ A missing field is a review defect, not a style preference.
 | 1 — Authority hardening                             | **complete** (PRs #730–#734 + #736)                                                               | CHK-1-CLOSE below        |
 | 2 — Canonical model hardening                       | **complete** — all units + the exit record (PD-15) landed (PRs #740–#749, #753, #754, #757, #759) | CHK-2-A–CHK-2-PD15 below |
 | 3 — Boundary enforcement                            | **complete** — all units + the exit checkpoint landed (PRs #762–#765, #766)                       | CHK-3 below              |
-| 4 — Internal extraction                             | **in progress** — GAP-A + GAP-B closed (PR #767)                                                  | CHK-4 below              |
-| 5 — Capability facades                              | not started                                                                                       | blocked by 4             |
+| 4 — Internal extraction                             | **complete** — GAP-A + GAP-B closed (PR #767); no proven extraction (CHK-5)                       | CHK-4, CHK-5 below       |
+| 5 — Capability facades                              | not started                                                                                       | maintainer-gated         |
 | 6 — CLI recomposition                               | not started                                                                                       | blocked by 5             |
 | 7 — Additional surfaces                             | not started                                                                                       | blocked by 6             |
 | 8 — Federation readiness                            | not started                                                                                       | maintainer-gated         |
@@ -75,7 +75,8 @@ module-header pins), PR #753 (the 2-E register closeout), PR #757
 fold-decision record — Phase 2's exit), PRs #762–#765 (Phase 3's units:
 the G-1/G-5/G-2 scans, the G-7 orphan detector and its test-support
 roster, the intra-`src/` DAG statement, the G-3/G-4/G-6/G-8
-dispositions), and PR #766 (the Phase 3 exit checkpoint).
+dispositions), and PR #766 (the Phase 3 exit checkpoint), and PR #767
+(Phase 4 entry gate: golden-output corpus + GAP-A/B).
 
 ## Checkpoints
 
@@ -1089,6 +1090,59 @@ dispositions), and PR #766 (the Phase 3 exit checkpoint).
   (git dates pinned, deterministic fixture path, 4-run byte-identity probe
   for all 23 non-debt verbs); boundary check clean; docs updated
   (VALIDATION-MATRIX.md, OPEN-QUESTIONS.md, this page).
+
+### CHK-5 — Phase 4 extraction-candidates investigation: no proven extraction (2026-09-07)
+
+- **ID**: CHK-5. **Phase**: 4 (extraction). **Status**: complete.
+- **Goal**: investigate the five pressure edges recorded in
+  [BOUNDARIES.md](BOUNDARIES.md#the-intra-src-dag) for extraction-candidate
+  viability. Per
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-4--internal-extraction-proven-gains-only):
+  "No proven extraction is a successful Phase 4 outcome."
+- **Pressure edges investigated** (all verified at HEAD 7b8c85b6, every import
+  line confirmed):
+  1. `analysis → rules` — `analysis/markdown.mjs:51` imports
+     `safeMatchesGlob` from `rules/match.mjs`. **Decision**: keep — pure
+     shared primitive (BOUNDARIES.md:118).
+  2. `options ↔ analysis` — `analysis/typescript.mjs:85` imports
+     `DEFAULT_OPTIONS` from `options.mjs`; `options.mjs:94` imports
+     `languageOf` from `analysis/registry.mjs`. **Decision**: keep — frozen
+     vocabulary, acyclic at module granularity (BOUNDARIES.md:119).
+  3. `rules ↔ config` — `rules/index.mjs:57` imports
+     `findBoundaryConfigViolations`/`suppressionCovers` from `config.mjs`;
+     `config.mjs:132-141` imports glob/match/message vocabulary from
+     `rules/match.mjs` and `rules/messages.mjs`. **Decision**: keep — shared
+     vocabulary between validator and validated, acyclic (BOUNDARIES.md:120).
+  4. core → `governance/` — `config.mjs:129-131` imports three governance
+     registries; `rules/index.mjs:58-59` imports clock/waiver evidence.
+     **Decision**: keep — vocabulary and evidence, no verdict logic
+     (BOUNDARIES.md:121).
+  5. `report → rules` — `report/sarif.mjs:58-65` imports message tables from
+     `rules/messages.mjs`. **Decision**: keep — SARIF descriptors derived
+     from the one message home; renders, decides nothing (BOUNDARIES.md:122).
+- **Invariants protected**: none changed (read-only verification). INV-11
+  (verdict core → report layering) and INV-13 (acyclic module graph) remain
+  as enforced by the conformance suite.
+- **Architectural change**: none. All five edges remain keep decisions — no
+  module moved, no boundary created.
+- **Evidence**: every documented import verified against source at HEAD
+  7b8c85b6; each imported symbol confirmed exported by its target file. No
+  post-Phase-3 commit (the newest is #747's message-registry collapse, an
+  ancestor of the Phase-3 base 7fd2828) touched any of the six files
+  (`analysis/markdown.mjs`, `analysis/typescript.mjs`, `options.mjs`,
+  `rules/index.mjs`, `config.mjs`, `report/sarif.mjs`).
+- **Debt budget**: gaps before — GAP-A + GAP-B (Phase 4 entry gate, closed
+  in CHK-4) plus the five pressure edges to investigate; gaps closed — all
+  five edges confirmed keep, no new gap; gaps introduced — none; net delta
+  — negative: uncertainty removed.
+- **Exit gate**: Phase 4 internal extraction complete — entry gate closed
+  (CHK-4) and extraction-candidates investigated (this checkpoint). Phase 5
+  (capability facades) unblocked.
+- **Forbidden next moves**: (1) reopen any pressure-edge decision without
+  new evidence or a maintainer ruling; (2) add extraction work not argued
+  from a measured pressure edge; (3) start Phase 5 without maintainer
+  approval of Phase 4's exit record.
+- **Next**: report Phase 4 exit to maintainer; Phase 5 entry awaits approval.
 
 ## Conventions maintained here
 
