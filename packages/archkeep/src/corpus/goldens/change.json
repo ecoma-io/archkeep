@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "change",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": []
+  },
+  "result": {
+    "intent": {
+      "file": "/tmp/archkeep-golden-fixture/.archkeep-change.json",
+      "version": "1",
+      "base": {
+        "commit": "1fd51709c377d99a6139891e1200291cf08aede9"
+      },
+      "declared": {
+        "projectsAdd": 0,
+        "projectsRemove": 0,
+        "edgesAdd": 0,
+        "edgesRemove": 0,
+        "constraints": []
+      }
+    },
+    "baseline": {
+      "path": "/tmp/archkeep-golden-fixture/.archkeep-delta.json",
+      "tool": {
+        "name": "@ecoma-io/archkeep",
+        "version": "0.25.0"
+      },
+      "provider": "native",
+      "provenance": {
+        "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+        "dirty": false,
+        "remote": null
+      },
+      "policyFingerprint": "e18ba4307f6baaaa0d558822327788e8925cb3c52dfac6b170ce4d89b5a728ca",
+      "projects": 3,
+      "records": 2
+    },
+    "head": {
+      "provenance": {
+        "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+        "remote": null,
+        "dirty": false
+      },
+      "policyFingerprint": "e18ba4307f6baaaa0d558822327788e8925cb3c52dfac6b170ce4d89b5a728ca",
+      "projects": 3
+    },
+    "reconciliation": {
+      "verdict": "matched",
+      "reasons": [],
+      "matched": [],
+      "unexpected": [],
+      "missingExpected": []
+    },
+    "constraints": [],
+    "policy": {
+      "fingerprint": "e18ba4307f6baaaa0d558822327788e8925cb3c52dfac6b170ce4d89b5a728ca",
+      "changedSinceBase": false,
+      "liveViolations": 0
+    },
+    "classifications": [],
+    "affected": {
+      "projects": [],
+      "boundaries": [],
+      "constraints": [],
+      "decisions": []
+    },
+    "debt": {
+      "introduced": [],
+      "resolved": []
+    }
+  },
+  "decision": {
+    "verdict": "pass"
+  }
+}
+

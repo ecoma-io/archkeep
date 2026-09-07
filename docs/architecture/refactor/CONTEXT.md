@@ -48,19 +48,19 @@ A missing field is a review defect, not a style preference.
 
 ## Program state
 
-| Phase                                               | Status                                                                                            | Record                      |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------- |
-| 0 — Architecture cartography                        | **complete** (PR #727 merged)                                                                     | CHK-0 below                 |
-| 0.5 — Decision closure & Phase 1 execution baseline | **complete** (PR #729 merged)                                                                     | CHK-1-PREP below            |
-| 1 — Authority hardening                             | **complete** (PRs #730–#734 + #736)                                                               | CHK-1-CLOSE below           |
-| 2 — Canonical model hardening                       | **complete** — all units + the exit record (PD-15) landed (PRs #740–#749, #753, #754, #757, #759) | CHK-2-A–CHK-2-PD15 below    |
-| 3 — Boundary enforcement                            | **complete** — all units + the exit checkpoint landed (PRs #762–#765, #766)                       | CHK-3 below                 |
-| 4 — Internal extraction                             | not started                                                                                       | **blocked by GAP-A** (PD-4) |
-| 5 — Capability facades                              | not started                                                                                       | blocked by 4                |
-| 6 — CLI recomposition                               | not started                                                                                       | blocked by 5                |
-| 7 — Additional surfaces                             | not started                                                                                       | blocked by 6                |
-| 8 — Federation readiness                            | not started                                                                                       | maintainer-gated            |
-| 9 — Final hardening                                 | not started                                                                                       | blocked by 8 (or waiver)    |
+| Phase                                               | Status                                                                                            | Record                   |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------ |
+| 0 — Architecture cartography                        | **complete** (PR #727 merged)                                                                     | CHK-0 below              |
+| 0.5 — Decision closure & Phase 1 execution baseline | **complete** (PR #729 merged)                                                                     | CHK-1-PREP below         |
+| 1 — Authority hardening                             | **complete** (PRs #730–#734 + #736)                                                               | CHK-1-CLOSE below        |
+| 2 — Canonical model hardening                       | **complete** — all units + the exit record (PD-15) landed (PRs #740–#749, #753, #754, #757, #759) | CHK-2-A–CHK-2-PD15 below |
+| 3 — Boundary enforcement                            | **complete** — all units + the exit checkpoint landed (PRs #762–#765, #766)                       | CHK-3 below              |
+| 4 — Internal extraction                             | **in progress** — GAP-A + GAP-B closed (PR #767)                                                  | CHK-4 below              |
+| 5 — Capability facades                              | not started                                                                                       | blocked by 4             |
+| 6 — CLI recomposition                               | not started                                                                                       | blocked by 5             |
+| 7 — Additional surfaces                             | not started                                                                                       | blocked by 6             |
+| 8 — Federation readiness                            | not started                                                                                       | maintainer-gated         |
+| 9 — Final hardening                                 | not started                                                                                       | blocked by 8 (or waiver) |
 
 Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
 #729 (Phase 0.5), PRs #730–#734 (Phase 1 units A, B, E, F, C), PR #736
@@ -1054,6 +1054,44 @@ dispositions), and PR #766 (the Phase 3 exit checkpoint).
   finding), then GAP-A's implementation per
   [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-4--internal-extraction-proven-gains-only)
   once approved.
+
+### CHK-4 — Phase 4 entry gate: golden-output corpus (2026-09-07)
+
+- **ID**: CHK-4. **Phase**: 4 (entry). **Status**: complete — GAP-A + GAP-B
+  closed (PR #767).
+- **Goal**: commit the golden-output corpus and byte-identity comparator for
+  all 24 read-only CLI verbs, closing Phase 4's entry gate (GAP-A + GAP-B).
+- **Invariants protected**: none changed (read-only addition). INV-18
+  (determinism-sweep fixture) is the fixture source; the golden-output test
+  extends byte-identity coverage from `check` to all 22 included verbs.
+- **Architectural change**: none. New files in
+  `packages/archkeep/src/corpus/goldens/` (45 golden files) and
+  `packages/archkeep/src/corpus/golden-output.integration.test.mjs` (the gate
+  test with `ARCHKEEP_UPDATE_GOLDENS=1` regen). Test file only; no CLI,
+  process, or package changes.
+- **Evidence**: `golden-output.integration.test.mjs` runs 45 tests (22 verbs ×
+  formats) — all PASS with and without `ARCHKEEP_UPDATE_GOLDENS=1`. Excluded
+  verbs: `debt` (wall-clock `sampleTime`) and `rules verify` (needs
+  `@ecoma-io/archkeep-rules` catalog, not installed).
+- **Dependency-graph delta**: none (no code touched; test-only addition).
+- **Semantic-ownership delta**: none.
+- **Risks carried forward**: GAP-C through GAP-E remain open; GAP-D and GAP-E
+  gated at Phase 7 and Phase 9 respectively.
+- **Rollback point**: revert PR #767; no other state exists.
+- **Next-phase entry criteria**: Phase 4 entry accepted (PR #767 merged) →
+  begin Phase 4 extraction per
+  [MIGRATION-PLAN.md](MIGRATION-PLAN.md#phase-4--internal-extraction-proven-gains-only).
+- **Forbidden next moves**: (1) start Phase 4 extraction before this PR is
+  merged; (2) reopen GAP-A or GAP-B without new evidence or a maintainer
+  ruling; (3) add verbs not yet proven deterministic (`debt`, `rules verify`)
+  to the corpus until their instability cause is resolved.
+- **Debt budget**: gaps before — GAP-A + GAP-B (Phase 4 entry gate); gaps
+  closed — GAP-A + GAP-B; gaps introduced — none; net delta — negative:
+  uncertainty removed, no new gap.
+- **Validation evidence**: all 45 golden-output tests pass against the
+  committed golden files; fixture determinism confirmed (git dates pinned,
+  deterministic fixture path, 4-run byte-identity probe for all included
+  verbs); docs updated (VALIDATION-MATRIX.md, OPEN-QUESTIONS.md, this page).
 
 ## Conventions maintained here
 

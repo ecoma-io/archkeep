@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "reconcile",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": []
+  },
+  "result": {
+    "intent": {
+      "file": "architecture-intent.json",
+      "fingerprint": "ce10167aef69f6282985e218a59fe5bb88bd232cb221bc8b1ee8fefbe458b4bc",
+      "rows": 6
+    },
+    "observed": {
+      "projects": 3,
+      "edges": 2,
+      "implicitEdges": 0
+    },
+    "scores": {
+      "projects": [
+        {
+          "plane": "project",
+          "name": "api",
+          "state": "match",
+          "severity": 0,
+          "classification": "match",
+          "intentRow": null,
+          "confidence": "not governed"
+        },
+        {
+          "plane": "project",
+          "name": "app",
+          "state": "match",
+          "severity": 0,
+          "classification": "match",
+          "intentRow": null,
+          "confidence": "not governed"
+        },
+        {
+          "plane": "project",
+          "name": "core",
+          "state": "match",
+          "severity": 0,
+          "classification": "match",
+          "intentRow": null,
+          "confidence": "not governed"
+        }
+      ],
+      "edges": [
+        {
+          "plane": "edge",
+          "name": "api → core",
+          "intentRow": null,
+          "state": "match",
+          "severity": 0,
+          "classification": "match",
+          "confidence": "not governed"
+        },
+        {
+          "plane": "edge",
+          "name": "app → api",
+          "intentRow": null,
+          "state": "match",
+          "severity": 0,
+          "classification": "match",
+          "confidence": "not governed"
+        }
+      ],
+      "tags": [],
+      "boundaries": [
+        {
+          "plane": "boundary",
+          "name": "api",
+          "state": "match",
+          "severity": 0,
+          "classification": "match",
+          "intentRow": null,
+          "confidence": "stated"
+        },
+        {
+          "plane": "boundary",
+          "name": "app",
+          "state": "match",
+          "severity": 0,
+          "classification": "match",
+          "intentRow": null,
+          "confidence": "stated"
+        },
+        {
+          "plane": "boundary",
+          "name": "core",
+          "state": "match",
+          "severity": 0,
+          "classification": "match",
+          "intentRow": null,
+          "confidence": "stated"
+        }
+      ],
+      "intentRows": [
+        {
+          "plane": "intent-row",
+          "name": "app → api",
+          "state": "match",
+          "severity": 0,
+          "classification": "match",
+          "intentRow": {
+            "plane": "intent-row",
+            "index": 0,
+            "kind": "allowed",
+            "key": "app → api"
+          },
+          "confidence": "stated"
+        },
+        {
+          "plane": "intent-row",
+          "name": "api → core",
+          "state": "match",
+          "severity": 0,
+          "classification": "match",
+          "intentRow": {
+            "plane": "intent-row",
+            "index": 1,
+            "kind": "allowed",
+            "key": "api → core"
+          },
+          "confidence": "stated"
+        },
+        {
+          "plane": "intent-row",
+          "name": "core → app",
+          "state": "match",
+          "severity": 0,
+          "classification": "match",
+          "intentRow": {
+            "plane": "intent-row",
+            "index": 2,
+            "kind": "forbidden",
+            "key": "core → app"
+          },
+          "confidence": "stated"
+        }
+      ]
+    },
+    "unknownFiles": []
+  }
+}
+

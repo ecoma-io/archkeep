@@ -1,0 +1,328 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "evolution",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": [
+      "each change is attributed to the first analyzed revision where it is observed — a fact about where history shows it, not about why it was made",
+      "rule-impact cannot be recomputed across revisions — each analyzed revision carries its graph and policy fingerprint, not import sites judged under a law. Run 'check' at a revision for its boundary verdict."
+    ]
+  },
+  "result": {
+    "base": "05536ee5cfe2828bda459a026877ff8d225b30d7",
+    "head": "1fd51709c377d99a6139891e1200291cf08aede9",
+    "revisions": [
+      {
+        "commit": "05536ee5cfe2828bda459a026877ff8d225b30d7",
+        "id": "71341a045f02564205e125994a50536459cf3114afd89c0523982de8cbfc02ae",
+        "evidence": {
+          "intent": {
+            "verdict": "ok",
+            "findings": [],
+            "unresolved": [],
+            "boundaries": [
+              {
+                "name": "core",
+                "projects": [
+                  "core"
+                ]
+              },
+              {
+                "name": "api",
+                "projects": [
+                  "api"
+                ]
+              },
+              {
+                "name": "app",
+                "projects": [
+                  "app"
+                ]
+              }
+            ],
+            "notes": [],
+            "gaps": []
+          },
+          "fitness": {
+            "verdict": "pass",
+            "decisions": [
+              {
+                "verdict": "pass",
+                "name": "cycle-free",
+                "evidence": {
+                  "projects": 3,
+                  "cycles": 0
+                },
+                "message": "3 matched projects form no dependency cycle",
+                "rows": []
+              }
+            ],
+            "overall": {
+              "verdict": "pass",
+              "decisions": [
+                {
+                  "verdict": "pass",
+                  "name": "cycle-free",
+                  "evidence": {
+                    "projects": 3,
+                    "cycles": 0
+                  },
+                  "message": "3 matched projects form no dependency cycle",
+                  "rows": []
+                }
+              ]
+            }
+          },
+          "adr": {
+            "records": [
+              {
+                "id": "0001-layers",
+                "status": "accepted",
+                "supersedes": [],
+                "bindings": [
+                  "intentForbiddenEdge"
+                ],
+                "supersededBy": []
+              }
+            ],
+            "byId": {},
+            "knownFitness": {}
+          }
+        }
+      },
+      {
+        "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+        "id": "71341a045f02564205e125994a50536459cf3114afd89c0523982de8cbfc02ae",
+        "evidence": {
+          "intent": {
+            "verdict": "ok",
+            "findings": [],
+            "unresolved": [],
+            "boundaries": [
+              {
+                "name": "core",
+                "projects": [
+                  "core"
+                ]
+              },
+              {
+                "name": "api",
+                "projects": [
+                  "api"
+                ]
+              },
+              {
+                "name": "app",
+                "projects": [
+                  "app"
+                ]
+              }
+            ],
+            "notes": [],
+            "gaps": []
+          },
+          "fitness": {
+            "verdict": "pass",
+            "decisions": [
+              {
+                "verdict": "pass",
+                "name": "cycle-free",
+                "evidence": {
+                  "projects": 3,
+                  "cycles": 0
+                },
+                "message": "3 matched projects form no dependency cycle",
+                "rows": []
+              }
+            ],
+            "overall": {
+              "verdict": "pass",
+              "decisions": [
+                {
+                  "verdict": "pass",
+                  "name": "cycle-free",
+                  "evidence": {
+                    "projects": 3,
+                    "cycles": 0
+                  },
+                  "message": "3 matched projects form no dependency cycle",
+                  "rows": []
+                }
+              ]
+            }
+          },
+          "adr": {
+            "records": [
+              {
+                "id": "0001-layers",
+                "status": "accepted",
+                "supersedes": [],
+                "bindings": [
+                  "intentForbiddenEdge"
+                ],
+                "supersededBy": []
+              }
+            ],
+            "byId": {},
+            "knownFitness": {}
+          }
+        }
+      }
+    ],
+    "transitions": [
+      {
+        "from": "05536ee5cfe2828bda459a026877ff8d225b30d7",
+        "to": "1fd51709c377d99a6139891e1200291cf08aede9",
+        "architectureChanged": false,
+        "changes": null,
+        "policyChanged": false,
+        "policyOneSided": false,
+        "provenanceChanged": true,
+        "providerChanged": false,
+        "codeDrift": true,
+        "notes": [],
+        "classifications": [
+          "DRIFT"
+        ],
+        "comparison": {
+          "observed": {
+            "architectureChanged": false,
+            "projects": {
+              "added": [],
+              "removed": [],
+              "changed": []
+            },
+            "edges": {
+              "added": [],
+              "removed": []
+            },
+            "policyChanged": false,
+            "policyOneSided": false,
+            "providerChanged": false,
+            "provenanceChanged": true
+          },
+          "findings": {
+            "introduced": [],
+            "resolved": [],
+            "unknown": []
+          },
+          "debt": {
+            "introduced": [],
+            "resolved": []
+          },
+          "fitness": {
+            "verdictDeltas": [
+              {
+                "id": "cycle-free",
+                "base": "pass",
+                "head": "pass"
+              }
+            ]
+          },
+          "coverage": {
+            "base": {
+              "projects": 3,
+              "analyzedFiles": 3,
+              "imports": 2
+            },
+            "head": {
+              "projects": 3,
+              "analyzedFiles": 3,
+              "imports": 2
+            }
+          },
+          "classifications": [
+            "DRIFT"
+          ],
+          "disposition": "accepted",
+          "affected": {
+            "projects": [],
+            "boundaries": [],
+            "constraints": [
+              "cycle-free"
+            ],
+            "decisions": [],
+            "lineage": [
+              {
+                "id": "cycle-free",
+                "adrs": [],
+                "resolution": "none"
+              }
+            ]
+          },
+          "notes": []
+        }
+      }
+    ],
+    "summary": {
+      "transitions": 1,
+      "disposition": "accepted",
+      "classifications": [
+        "DRIFT"
+      ],
+      "observed": {
+        "architectureChanged": 0,
+        "projects": {
+          "added": [],
+          "removed": [],
+          "changed": []
+        },
+        "edges": {
+          "added": [],
+          "removed": []
+        },
+        "policyChanged": 0,
+        "providerChanged": 0
+      },
+      "affected": {
+        "projects": [],
+        "boundaries": [],
+        "constraints": [
+          "cycle-free"
+        ],
+        "decisions": []
+      },
+      "findings": {
+        "introduced": [],
+        "resolved": [],
+        "unknown": []
+      },
+      "debt": {
+        "introduced": [],
+        "resolved": []
+      },
+      "fitness": {
+        "verdictDeltas": [
+          {
+            "id": "cycle-free",
+            "base": "pass",
+            "head": "pass"
+          }
+        ]
+      },
+      "notes": []
+    }
+  }
+}
+

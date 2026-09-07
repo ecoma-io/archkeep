@@ -1,0 +1,453 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "provenance",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 0,
+    "analyzedFiles": 0,
+    "imports": 0,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": []
+  },
+  "result": {
+    "repo": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    },
+    "established": true,
+    "rows": [
+      {
+        "kind": "allowed[0]",
+        "attested": false,
+        "origin": null
+      },
+      {
+        "kind": "allowed[1]",
+        "attested": false,
+        "origin": null
+      },
+      {
+        "kind": "forbidden[0]",
+        "attested": false,
+        "origin": null
+      },
+      {
+        "kind": "depConstraints[0]",
+        "attested": false,
+        "origin": null
+      },
+      {
+        "kind": "depConstraints[1]",
+        "attested": false,
+        "origin": null
+      },
+      {
+        "kind": "depConstraints[2]",
+        "attested": false,
+        "origin": null
+      }
+    ],
+    "unattested": [
+      {
+        "kind": "allowed[0]",
+        "label": "allowed[0] app→api",
+        "note": "no origin recorded — cannot attest"
+      },
+      {
+        "kind": "allowed[1]",
+        "label": "allowed[1] api→core",
+        "note": "no origin recorded — cannot attest"
+      },
+      {
+        "kind": "forbidden[0]",
+        "label": "forbidden[0] core→app",
+        "note": "no origin recorded — cannot attest"
+      },
+      {
+        "kind": "depConstraints[0]",
+        "label": "depConstraints[0] layer:core",
+        "note": "no origin recorded — cannot attest"
+      },
+      {
+        "kind": "depConstraints[1]",
+        "label": "depConstraints[1] layer:api",
+        "note": "no origin recorded — cannot attest"
+      },
+      {
+        "kind": "depConstraints[2]",
+        "label": "depConstraints[2] layer:app",
+        "note": "no origin recorded — cannot attest"
+      }
+    ],
+    "unresolvedDecisionRefs": [],
+    "decisionLifecycle": [
+      {
+        "id": "0001-layers",
+        "status": "accepted",
+        "authority": true,
+        "created": null,
+        "updated": null,
+        "supersedes": [],
+        "supersededBy": [],
+        "bindings": [
+          "intentForbiddenEdge"
+        ],
+        "attribution": {
+          "createdBy": {
+            "by": "t <t@t>",
+            "tool": "git",
+            "on": "2026-01-01T00:00:00Z"
+          },
+          "lastChangedBy": {
+            "by": "t <t@t>",
+            "tool": "git",
+            "on": "2026-01-01T00:00:00Z"
+          }
+        },
+        "attested": true,
+        "note": null
+      }
+    ],
+    "provenanceGraph": {
+      "nodes": [
+        {
+          "id": "decision:0001-layers",
+          "kind": "decision",
+          "label": "0001-layers",
+          "data": {
+            "attribution": {
+              "createdBy": {
+                "by": "t <t@t>",
+                "tool": "git",
+                "on": "2026-01-01T00:00:00Z"
+              },
+              "lastChangedBy": {
+                "by": "t <t@t>",
+                "tool": "git",
+                "on": "2026-01-01T00:00:00Z"
+              }
+            },
+            "evidence": {
+              "kind": "adr-record",
+              "file": "docs/adr/0001-layers.md",
+              "commit": "1fd51709c377d99a6139891e1200291cf08aede9"
+            }
+          }
+        },
+        {
+          "id": "repo:1fd51709c377d99a6139891e1200291cf08aede9",
+          "kind": "repo",
+          "label": "1fd51709c377d99a6139891e1200291cf08aede9",
+          "data": {
+            "origin": {
+              "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+              "remote": null,
+              "dirty": false
+            },
+            "evidence": {
+              "kind": "git",
+              "file": null,
+              "commit": "1fd51709c377d99a6139891e1200291cf08aede9"
+            }
+          }
+        },
+        {
+          "id": "row:allowed[0]:0",
+          "kind": "row",
+          "label": "allowed[0] app→api",
+          "data": {
+            "origin": null,
+            "evidence": {
+              "kind": "governance-row",
+              "file": null,
+              "commit": null
+            }
+          }
+        },
+        {
+          "id": "row:allowed[1]:1",
+          "kind": "row",
+          "label": "allowed[1] api→core",
+          "data": {
+            "origin": null,
+            "evidence": {
+              "kind": "governance-row",
+              "file": null,
+              "commit": null
+            }
+          }
+        },
+        {
+          "id": "row:depConstraints[0]:3",
+          "kind": "row",
+          "label": "depConstraints[0] layer:core",
+          "data": {
+            "origin": null,
+            "evidence": {
+              "kind": "governance-row",
+              "file": null,
+              "commit": null
+            }
+          }
+        },
+        {
+          "id": "row:depConstraints[1]:4",
+          "kind": "row",
+          "label": "depConstraints[1] layer:api",
+          "data": {
+            "origin": null,
+            "evidence": {
+              "kind": "governance-row",
+              "file": null,
+              "commit": null
+            }
+          }
+        },
+        {
+          "id": "row:depConstraints[2]:5",
+          "kind": "row",
+          "label": "depConstraints[2] layer:app",
+          "data": {
+            "origin": null,
+            "evidence": {
+              "kind": "governance-row",
+              "file": null,
+              "commit": null
+            }
+          }
+        },
+        {
+          "id": "row:forbidden[0]:2",
+          "kind": "row",
+          "label": "forbidden[0] core→app",
+          "data": {
+            "origin": null,
+            "evidence": {
+              "kind": "governance-row",
+              "file": null,
+              "commit": null
+            }
+          }
+        }
+      ],
+      "edges": [
+        {
+          "from": "repo:1fd51709c377d99a6139891e1200291cf08aede9",
+          "to": "row:allowed[0]:0",
+          "kind": "provenance"
+        },
+        {
+          "from": "repo:1fd51709c377d99a6139891e1200291cf08aede9",
+          "to": "row:allowed[1]:1",
+          "kind": "provenance"
+        },
+        {
+          "from": "repo:1fd51709c377d99a6139891e1200291cf08aede9",
+          "to": "row:depConstraints[0]:3",
+          "kind": "provenance"
+        },
+        {
+          "from": "repo:1fd51709c377d99a6139891e1200291cf08aede9",
+          "to": "row:depConstraints[1]:4",
+          "kind": "provenance"
+        },
+        {
+          "from": "repo:1fd51709c377d99a6139891e1200291cf08aede9",
+          "to": "row:depConstraints[2]:5",
+          "kind": "provenance"
+        },
+        {
+          "from": "repo:1fd51709c377d99a6139891e1200291cf08aede9",
+          "to": "row:forbidden[0]:2",
+          "kind": "provenance"
+        }
+      ],
+      "claims": [
+        {
+          "id": "decision:0001-layers",
+          "kind": "lifecycle",
+          "verdict": "attested",
+          "evidence": [
+            {
+              "kind": "file-attribution",
+              "detail": "created by t <t@t>"
+            },
+            {
+              "kind": "file-attribution",
+              "detail": "last changed by t <t@t>"
+            }
+          ]
+        },
+        {
+          "id": "row:allowed[0]:0",
+          "kind": "attestation",
+          "verdict": "unattested",
+          "evidence": [
+            {
+              "kind": "origin",
+              "detail": "no origin recorded"
+            }
+          ]
+        },
+        {
+          "id": "row:allowed[1]:1",
+          "kind": "attestation",
+          "verdict": "unattested",
+          "evidence": [
+            {
+              "kind": "origin",
+              "detail": "no origin recorded"
+            }
+          ]
+        },
+        {
+          "id": "row:depConstraints[0]:3",
+          "kind": "attestation",
+          "verdict": "unattested",
+          "evidence": [
+            {
+              "kind": "origin",
+              "detail": "no origin recorded"
+            }
+          ]
+        },
+        {
+          "id": "row:depConstraints[1]:4",
+          "kind": "attestation",
+          "verdict": "unattested",
+          "evidence": [
+            {
+              "kind": "origin",
+              "detail": "no origin recorded"
+            }
+          ]
+        },
+        {
+          "id": "row:depConstraints[2]:5",
+          "kind": "attestation",
+          "verdict": "unattested",
+          "evidence": [
+            {
+              "kind": "origin",
+              "detail": "no origin recorded"
+            }
+          ]
+        },
+        {
+          "id": "row:forbidden[0]:2",
+          "kind": "attestation",
+          "verdict": "unattested",
+          "evidence": [
+            {
+              "kind": "origin",
+              "detail": "no origin recorded"
+            }
+          ]
+        }
+      ],
+      "causalChains": []
+    },
+    "claims": [
+      {
+        "id": "decision:0001-layers",
+        "kind": "lifecycle",
+        "verdict": "attested",
+        "evidence": [
+          {
+            "kind": "file-attribution",
+            "detail": "created by t <t@t>"
+          },
+          {
+            "kind": "file-attribution",
+            "detail": "last changed by t <t@t>"
+          }
+        ]
+      },
+      {
+        "id": "row:allowed[0]:0",
+        "kind": "attestation",
+        "verdict": "unattested",
+        "evidence": [
+          {
+            "kind": "origin",
+            "detail": "no origin recorded"
+          }
+        ]
+      },
+      {
+        "id": "row:allowed[1]:1",
+        "kind": "attestation",
+        "verdict": "unattested",
+        "evidence": [
+          {
+            "kind": "origin",
+            "detail": "no origin recorded"
+          }
+        ]
+      },
+      {
+        "id": "row:depConstraints[0]:3",
+        "kind": "attestation",
+        "verdict": "unattested",
+        "evidence": [
+          {
+            "kind": "origin",
+            "detail": "no origin recorded"
+          }
+        ]
+      },
+      {
+        "id": "row:depConstraints[1]:4",
+        "kind": "attestation",
+        "verdict": "unattested",
+        "evidence": [
+          {
+            "kind": "origin",
+            "detail": "no origin recorded"
+          }
+        ]
+      },
+      {
+        "id": "row:depConstraints[2]:5",
+        "kind": "attestation",
+        "verdict": "unattested",
+        "evidence": [
+          {
+            "kind": "origin",
+            "detail": "no origin recorded"
+          }
+        ]
+      },
+      {
+        "id": "row:forbidden[0]:2",
+        "kind": "attestation",
+        "verdict": "unattested",
+        "evidence": [
+          {
+            "kind": "origin",
+            "detail": "no origin recorded"
+          }
+        ]
+      }
+    ]
+  }
+}
+

@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "report",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": [
+      "report composes health, waivers, fitness, the ADR registry and provenance through the same functions those commands run; it performs no scan of its own and cannot disagree with them about the same tree.",
+      "a waiver's active/expired status is judged against this run's reference instant, the same judgement `check` makes; remainingMs is not carried here — run `waivers` for it.",
+      "the debt surface here is the per-run one (the boundary law's own deferred rows). The ledger aged across snapshots is `debt`'s, which needs a snapshot directory."
+    ]
+  },
+  "result": {
+    "trendDir": null,
+    "metrics": {
+      "projects": {
+        "verdict": "ok",
+        "value": 3
+      },
+      "edges": {
+        "verdict": "ok",
+        "value": 2
+      },
+      "coverage": {
+        "verdict": "ok",
+        "value": 0
+      },
+      "violations": {
+        "verdict": "ok",
+        "value": 0
+      },
+      "waiverSurface": {
+        "verdict": "ok",
+        "value": 0
+      },
+      "cycles": {
+        "verdict": "ok",
+        "value": 0
+      },
+      "edgeDensity": {
+        "verdict": "ok",
+        "value": 0.6666666666666666
+      },
+      "debt": {
+        "verdict": "ok",
+        "value": 0
+      },
+      "fitness": {
+        "verdict": "ok",
+        "value": 0
+      }
+    },
+    "trends": null,
+    "waivers": {
+      "verdict": "ok",
+      "note": null,
+      "counts": {
+        "waivers": 0,
+        "covered": 0,
+        "expired": 0,
+        "stale": 0,
+        "suppressions": 0,
+        "suppressed": 0
+      },
+      "rows": []
+    },
+    "fitness": {
+      "verdict": "pass",
+      "note": null,
+      "functions": [
+        {
+          "name": "cycle-free",
+          "verdict": "pass",
+          "message": "3 matched projects form no dependency cycle",
+          "adrs": []
+        }
+      ]
+    },
+    "decisions": {
+      "verdict": "ok",
+      "note": null,
+      "registry": {
+        "dir": "docs/adr",
+        "count": 1
+      },
+      "records": [
+        {
+          "id": "0001-layers",
+          "status": "accepted",
+          "authority": true,
+          "bindings": [
+            "intentForbiddenEdge"
+          ],
+          "fitness": {
+            "id": "0001-layers",
+            "status": "accepted",
+            "level": "unverifiable",
+            "verified": false,
+            "reason": "no bound constraint for 0001-layers resolves or was evaluated — none can be verified"
+          },
+          "constraints": []
+        }
+      ],
+      "citations": [],
+      "unresolvedDecisionRefs": []
+    },
+    "provenance": {
+      "repo": {
+        "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+        "remote": null,
+        "dirty": false
+      },
+      "established": true,
+      "policySource": "module-boundaries.config.mjs",
+      "rows": {
+        "total": 6,
+        "unattested": [
+          {
+            "kind": "allowed[0]",
+            "label": "allowed[0] app→api"
+          },
+          {
+            "kind": "allowed[1]",
+            "label": "allowed[1] api→core"
+          },
+          {
+            "kind": "forbidden[0]",
+            "label": "forbidden[0] core→app"
+          },
+          {
+            "kind": "depConstraints[0]",
+            "label": "depConstraints[0] layer:core"
+          },
+          {
+            "kind": "depConstraints[1]",
+            "label": "depConstraints[1] layer:api"
+          },
+          {
+            "kind": "depConstraints[2]",
+            "label": "depConstraints[2] layer:app"
+          }
+        ]
+      }
+    },
+    "uninspectable": []
+  }
+}
+

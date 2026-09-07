@@ -1,0 +1,3 @@
+intent    ce10167aef69f6282985e218a59fe5bb88bd232cb221bc8b1ee8fefbe458b4bc — 6 rows
+observed  3 projects, 2 edges
+✔ no divergence — the observed architecture matches the intended model (3 projects and 2 edges)

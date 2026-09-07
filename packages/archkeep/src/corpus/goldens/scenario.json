@@ -1,0 +1,441 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "scenario",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": [
+      "scenario evaluation is virtual and not authoritative — run `check` for the real verdict",
+      "per-edge verdicts cover only depConstraints (3 of 15 violation types)"
+    ]
+  },
+  "result": {
+    "virtual": true,
+    "notAuthoritative": true,
+    "complete": false,
+    "completeness": {
+      "domains": {
+        "structural": {
+          "status": "evaluated",
+          "evaluated": true,
+          "partial": false,
+          "notEvaluated": false,
+          "unsupported": false,
+          "refused": false,
+          "note": ""
+        },
+        "constraint": {
+          "status": "evaluated",
+          "evaluated": true,
+          "partial": false,
+          "notEvaluated": false,
+          "unsupported": false,
+          "refused": false,
+          "note": ""
+        },
+        "boundary": {
+          "status": "evaluated",
+          "evaluated": true,
+          "partial": false,
+          "notEvaluated": false,
+          "unsupported": false,
+          "refused": false,
+          "note": ""
+        },
+        "decision": {
+          "status": "evaluated",
+          "evaluated": true,
+          "partial": false,
+          "notEvaluated": false,
+          "unsupported": false,
+          "refused": false,
+          "note": ""
+        },
+        "findings": {
+          "status": "not_evaluated",
+          "evaluated": false,
+          "partial": false,
+          "notEvaluated": true,
+          "unsupported": false,
+          "refused": false,
+          "note": "Findings not re-evaluated in scenario"
+        },
+        "debt": {
+          "status": "not_evaluated",
+          "evaluated": false,
+          "partial": false,
+          "notEvaluated": true,
+          "unsupported": false,
+          "refused": false,
+          "note": "Debt not re-evaluated in scenario"
+        },
+        "governance": {
+          "status": "not_evaluated",
+          "evaluated": false,
+          "partial": false,
+          "notEvaluated": true,
+          "unsupported": false,
+          "refused": false,
+          "note": "Governance incomplete — findings: not_evaluated, debt: not_evaluated"
+        },
+        "evidence": {
+          "status": "evaluated",
+          "evaluated": true,
+          "partial": false,
+          "notEvaluated": false,
+          "unsupported": false,
+          "refused": false,
+          "note": ""
+        }
+      },
+      "overallComplete": false,
+      "overallStatus": "not_evaluated",
+      "scenarioDomains": {
+        "changes": {
+          "status": "partial",
+          "evaluated": true,
+          "partial": true,
+          "notEvaluated": false,
+          "unsupported": false,
+          "refused": false,
+          "note": "Some changes could not be applied"
+        },
+        "base": {
+          "status": "evaluated",
+          "evaluated": true,
+          "partial": false,
+          "notEvaluated": false,
+          "unsupported": false,
+          "refused": false,
+          "note": ""
+        },
+        "mutationCoverage": {
+          "status": "partial",
+          "evaluated": true,
+          "partial": true,
+          "notEvaluated": false,
+          "unsupported": false,
+          "refused": false,
+          "note": "Not all mutations have explicit outcomes"
+        }
+      },
+      "evidenceComplete": {
+        "contractType": "scenario",
+        "domainCoverage": 1,
+        "claimEvidenceCoverage": 1,
+        "causalCoverage": 1,
+        "provenanceCoverage": 0,
+        "mutationCoverage": 0,
+        "surfaceParity": 0,
+        "hiddenGapCount": 0,
+        "falseCompleteCount": 0,
+        "baseIdentityValid": true,
+        "deterministic": true,
+        "overallStatus": "incomplete",
+        "overallComplete": false,
+        "gates": {
+          "domainCoverage": {
+            "value": 1,
+            "pass": true,
+            "required": true
+          },
+          "claimEvidenceCoverage": {
+            "value": 1,
+            "pass": true,
+            "required": true
+          },
+          "causalCoverage": {
+            "value": 1,
+            "pass": true,
+            "required": true
+          },
+          "provenanceCoverage": {
+            "value": 0,
+            "pass": false,
+            "required": true
+          },
+          "mutationCoverage": {
+            "value": 0,
+            "pass": false,
+            "required": true
+          },
+          "surfaceParity": {
+            "value": 0,
+            "pass": false,
+            "required": true
+          },
+          "hiddenGapCount": {
+            "value": 0,
+            "pass": true,
+            "required": true
+          },
+          "falseCompleteCount": {
+            "value": 0,
+            "pass": true,
+            "required": true
+          },
+          "baseIdentityValid": {
+            "value": true,
+            "pass": true,
+            "required": true
+          },
+          "deterministic": {
+            "value": true,
+            "pass": true,
+            "required": true
+          }
+        }
+      }
+    },
+    "project": "core",
+    "base": {
+      "revision": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "identity": "verified",
+      "identityVerified": true,
+      "identityMismatch": false,
+      "provenance": "auto-resolved: git commit 1fd51709c377d99a6139891e1200291cf08aede9"
+    },
+    "changes": [],
+    "refused": [
+      "cannot add dependency: target project \"libs/app\" not in graph"
+    ],
+    "current": {
+      "impact": {
+        "project": "core",
+        "direct": [
+          "api"
+        ],
+        "transitive": [
+          "app"
+        ],
+        "dependents": [
+          "api",
+          "app"
+        ]
+      },
+      "constraintImpact": [
+        {
+          "project": "api",
+          "edges": [
+            {
+              "target": "core",
+              "type": "static"
+            }
+          ],
+          "constraintRows": [
+            {
+              "sourceTag": "layer:api",
+              "onlyDependOnLibsWithTags": [
+                "layer:api",
+                "layer:core"
+              ]
+            }
+          ],
+          "violations": []
+        },
+        {
+          "project": "app",
+          "edges": [],
+          "constraintRows": [
+            {
+              "sourceTag": "layer:app",
+              "onlyDependOnLibsWithTags": [
+                "layer:app",
+                "layer:api",
+                "layer:core"
+              ]
+            }
+          ],
+          "violations": []
+        }
+      ],
+      "decisionImpact": {
+        "decisions": [],
+        "unresolvedDecisionRefs": []
+      },
+      "evolutionAlignment": {
+        "projects": [
+          "api",
+          "app",
+          "core"
+        ],
+        "boundaries": [
+          "api>core:static"
+        ],
+        "constraints": [
+          "sourceTag:layer:api",
+          "sourceTag:layer:app"
+        ],
+        "decisions": []
+      }
+    },
+    "scenario": {
+      "impact": {
+        "project": "core",
+        "direct": [
+          "api"
+        ],
+        "transitive": [
+          "app"
+        ],
+        "dependents": [
+          "api",
+          "app"
+        ]
+      },
+      "constraintImpact": [
+        {
+          "project": "api",
+          "edges": [
+            {
+              "target": "core",
+              "type": "static"
+            }
+          ],
+          "constraintRows": [
+            {
+              "sourceTag": "layer:api",
+              "onlyDependOnLibsWithTags": [
+                "layer:api",
+                "layer:core"
+              ]
+            }
+          ],
+          "violations": []
+        },
+        {
+          "project": "app",
+          "edges": [],
+          "constraintRows": [
+            {
+              "sourceTag": "layer:app",
+              "onlyDependOnLibsWithTags": [
+                "layer:app",
+                "layer:api",
+                "layer:core"
+              ]
+            }
+          ],
+          "violations": []
+        }
+      ],
+      "decisionImpact": {
+        "decisions": [],
+        "unresolvedDecisionRefs": []
+      },
+      "evolutionAlignment": {
+        "projects": [
+          "api",
+          "app",
+          "core"
+        ],
+        "boundaries": [
+          "api>core:static"
+        ],
+        "constraints": [
+          "sourceTag:layer:api",
+          "sourceTag:layer:app"
+        ],
+        "decisions": []
+      }
+    },
+    "governanceImpact": {
+      "findingsFiltered": false,
+      "debtFiltered": false,
+      "governanceComplete": false,
+      "scenarioFindingsCount": 0,
+      "scenarioDebtCount": 0,
+      "findingsStatus": "not_evaluated",
+      "debtStatus": "not_evaluated"
+    },
+    "evidenceChain": {
+      "baseRevision": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "appliedChanges": [],
+      "currentState": "current",
+      "scenarioState": "scenario",
+      "delta": {
+        "dependentsAdded": [],
+        "dependentsRemoved": [],
+        "constraintsChanged": {
+          "status": "unchanged"
+        },
+        "decisionsChanged": {
+          "status": "unchanged"
+        },
+        "structuralDelta": {
+          "dependentsAdded": [],
+          "dependentsRemoved": []
+        },
+        "governanceDelta": {
+          "findingsChanged": {
+            "status": "not_evaluated"
+          },
+          "debtChanged": {
+            "status": "not_evaluated"
+          }
+        },
+        "evidenceDelta": {
+          "baseRevision": "1fd51709c377d99a6139891e1200291cf08aede9",
+          "changesApplied": 0,
+          "changesRefused": 1
+        }
+      }
+    },
+    "delta": {
+      "dependentsAdded": [],
+      "dependentsRemoved": [],
+      "constraintsChanged": {
+        "status": "unchanged"
+      },
+      "decisionsChanged": {
+        "status": "unchanged"
+      },
+      "structuralDelta": {
+        "dependentsAdded": [],
+        "dependentsRemoved": []
+      },
+      "governanceDelta": {
+        "findingsChanged": {
+          "status": "not_evaluated"
+        },
+        "debtChanged": {
+          "status": "not_evaluated"
+        }
+      },
+      "evidenceDelta": {
+        "baseRevision": "1fd51709c377d99a6139891e1200291cf08aede9",
+        "changesApplied": 0,
+        "changesRefused": 1
+      }
+    },
+    "notes": [
+      "virtual evaluation — not authoritative",
+      "this scenario has not been committed; run `check` for the real verdict",
+      "constraint impact covers only depConstraints (3 of 15 violation types). A project with no violations here may still violate other rules.",
+      "finding impact not re-evaluated — no findings data provided to scenario. Pass findings data for complete governance re-evaluation.",
+      "debt impact not re-evaluated — no debt data provided to scenario. Pass debt data for complete governance re-evaluation.",
+      "changes that could not be applied: cannot add dependency: target project \"libs/app\" not in graph"
+    ]
+  }
+}
+

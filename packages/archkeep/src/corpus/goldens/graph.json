@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "graph",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": []
+  },
+  "result": {
+    "projects": [
+      {
+        "name": "api",
+        "root": "libs/api",
+        "type": "lib",
+        "tags": [
+          "layer:api"
+        ]
+      },
+      {
+        "name": "app",
+        "root": "libs/app",
+        "type": "lib",
+        "tags": [
+          "layer:app"
+        ]
+      },
+      {
+        "name": "core",
+        "root": "libs/core",
+        "type": "lib",
+        "tags": [
+          "layer:core"
+        ]
+      }
+    ],
+    "dependencies": [
+      {
+        "source": "api",
+        "target": "core",
+        "type": "static"
+      },
+      {
+        "source": "app",
+        "target": "api",
+        "type": "static"
+      }
+    ],
+    "workspaceLayout": {
+      "libsDir": "libs",
+      "appsDir": "apps"
+    },
+    "workspaceLayoutSource": "default",
+    "policy": {
+      "fingerprint": "e18ba4307f6baaaa0d558822327788e8925cb3c52dfac6b170ce4d89b5a728ca"
+    }
+  }
+}
+

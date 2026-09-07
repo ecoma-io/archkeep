@@ -1,0 +1,10 @@
+✔ health over complete coverage (2 imports in 3 files across 3 projects)
+  ok              projects  3
+  ok              edges  2
+  ok              coverage  0
+  ok              violations  0
+  ok              waiver surface  0
+  ok              cycles  0
+  ok              edge density  0.6666666666666666
+  ok              debt rows  0
+  ok              intent fitness  0

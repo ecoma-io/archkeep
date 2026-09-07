@@ -1,0 +1,28 @@
+Scenario evaluation for "core"
+==================================================
+Virtual: true  |  Not authoritative: true
+Coverage: 2 imports in 3 files across 3 projects
+
+Changes refused:
+  ✖ cannot add dependency: target project "libs/app" not in graph
+
+Current impact:
+  Direct:      1 project(s)
+  Transitive:  1 project(s)
+  Dependents:  2 project(s)
+
+Scenario impact:
+  Direct:      1 project(s)
+  Transitive:  1 project(s)
+  Dependents:  2 project(s)
+
+Delta:
+  No change to dependent set
+
+Notes:
+  virtual evaluation — not authoritative
+  this scenario has not been committed; run `check` for the real verdict
+  constraint impact covers only depConstraints (3 of 15 violation types). A project with no violations here may still violate other rules.
+  finding impact not re-evaluated — no findings data provided to scenario. Pass findings data for complete governance re-evaluation.
+  debt impact not re-evaluated — no debt data provided to scenario. Pass debt data for complete governance re-evaluation.
+  changes that could not be applied: cannot add dependency: target project "libs/app" not in graph

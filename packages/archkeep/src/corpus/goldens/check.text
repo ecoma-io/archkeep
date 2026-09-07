@@ -1,0 +1,9 @@
+policy  module-boundaries.config.mjs — fingerprint e18ba4307f6baaaa0d558822327788e8925cb3c52dfac6b170ce4d89b5a728ca
+
+✔ no boundary violations (2 imports in 3 files across 3 projects; 1 file exempted from coverage by archkeep.json's coverage.exempt)
+
+✔ architecture-intent agrees with the observed graph (3 boundaries)
+
+✔ cycle-free  3 matched projects form no dependency cycle
+
+✔ fitness: 1 function passed

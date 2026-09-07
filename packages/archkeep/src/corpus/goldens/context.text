@@ -1,0 +1,6 @@
+✔ context complete (2 imports in 3 files across 3 projects)
+Project  core
+Tags     layer:core
+Constraints (1 row matches):
+  sourceTag layer:core → onlyDependOnLibsWithTags [layer:core]
+Dependencies  (none)

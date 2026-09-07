@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "context",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": [
+      "per-edge violations cover only depConstraints (3 of 15 violation types). A dependency with no violations here may still violate npm-ban, circular-dependency, lazy-load, or other rules that require import-site details. Run `check` for the complete verdict."
+    ]
+  },
+  "result": {
+    "project": "core",
+    "tags": [
+      "layer:core"
+    ],
+    "constraints": [
+      {
+        "sourceTag": "layer:core",
+        "onlyDependOnLibsWithTags": [
+          "layer:core"
+        ]
+      }
+    ],
+    "dependencies": []
+  }
+}
+

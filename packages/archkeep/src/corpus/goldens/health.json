@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "health",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": []
+  },
+  "result": {
+    "trendDir": null,
+    "metrics": {
+      "projects": {
+        "verdict": "ok",
+        "value": 3
+      },
+      "edges": {
+        "verdict": "ok",
+        "value": 2
+      },
+      "coverage": {
+        "verdict": "ok",
+        "value": 0
+      },
+      "violations": {
+        "verdict": "ok",
+        "value": 0
+      },
+      "waiverSurface": {
+        "verdict": "ok",
+        "value": 0
+      },
+      "cycles": {
+        "verdict": "ok",
+        "value": 0
+      },
+      "edgeDensity": {
+        "verdict": "ok",
+        "value": 0.6666666666666666
+      },
+      "debt": {
+        "verdict": "ok",
+        "value": 0
+      },
+      "fitness": {
+        "verdict": "ok",
+        "value": 0
+      }
+    },
+    "trends": null
+  }
+}
+
