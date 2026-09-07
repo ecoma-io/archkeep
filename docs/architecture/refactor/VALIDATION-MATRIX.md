@@ -112,15 +112,16 @@ For the verbs its diff touches, over pinned fixture trees, old path vs new:
 ## Differential gaps (what the harness cannot prove today)
 
 - **GAP-A — golden-output corpus (load-bearing).** CLOSED. The corpus lives at
-  `packages/archkeep/src/corpus/goldens/` — 45 files for 22 verbs across all
+  `packages/archkeep/src/corpus/goldens/` — 50 files for 24 verbs across all
   output formats — and is gated by
   `packages/archkeep/src/corpus/golden-output.integration.test.mjs` (human-gated
-  regen via `ARCHKEEP_UPDATE_GOLDENS=1`). Every read-only verb is covered except
-  `debt` (wall-clock `sampleTime` in output) and `rules verify` (needs
-  `@ecoma-io/archkeep-rules` catalog, not installed in the fixture).
-- **GAP-B — byte-identity is single-command (`check`).** CLOSED.
+  regen via `ARCHKEEP_UPDATE_GOLDENS=1`). Every read-only verb is covered: 23
+  verbs at byte-identity (GAP-A level 3); `debt` at levels 1+2 only (wall-clock
+  `sampleTime` in output, per `src/commands/debt.mjs:197-200` — the golden is
+  committed for evidence, the gate normalises `sampleTime` before comparison).
+- **GAP-B — byte-identity across runs (all read-only verbs).** CLOSED.
   `golden-output.integration.test.mjs` composes the same byte-identity
-  comparator for all 22 included verbs.
+  comparator across 4 cold starts for all 23 non-debt verbs.
 - **GAP-C — differential breadth**: governance/provenance/report _values_
   have no differential, only relationship pins.
 - **GAP-D — no cross-version baseline**: nothing diffs engine output at

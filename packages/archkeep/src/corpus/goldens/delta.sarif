@@ -1,0 +1,472 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "archkeep",
+          "rules": [
+            {
+              "id": "noRelativeOrAbsoluteImportsAcrossLibraries",
+              "name": "noRelativeOrAbsoluteImportsAcrossLibraries",
+              "shortDescription": {
+                "text": "Projects cannot be imported by a relative or absolute path, and must begin with a npm scope"
+              },
+              "fullDescription": {
+                "text": "Projects cannot be imported by a relative or absolute path, and must begin with a npm scope"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "noRelativeOrAbsoluteExternals",
+              "name": "noRelativeOrAbsoluteExternals",
+              "shortDescription": {
+                "text": "External resources cannot be imported using a relative or absolute path"
+              },
+              "fullDescription": {
+                "text": "External resources cannot be imported using a relative or absolute path"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "noCircularDependencies",
+              "name": "noCircularDependencies",
+              "shortDescription": {
+                "text": "Circular dependency between \"{{sourceProjectName}}\" and \"{{targetProjectName}}\" detected: {{path}}"
+              },
+              "fullDescription": {
+                "text": "Circular dependency between \"{{sourceProjectName}}\" and \"{{targetProjectName}}\" detected: {{path}}\n\nCircular file chain:\n{{filePaths}}"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "noSelfCircularDependencies",
+              "name": "noSelfCircularDependencies",
+              "shortDescription": {
+                "text": "Projects should use relative imports to import from other files within the same project. Use \"./path/to/file\" instead of import from \"{{imp}}\""
+              },
+              "fullDescription": {
+                "text": "Projects should use relative imports to import from other files within the same project. Use \"./path/to/file\" instead of import from \"{{imp}}\""
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "noImportsOfApps",
+              "name": "noImportsOfApps",
+              "shortDescription": {
+                "text": "Imports of apps are forbidden"
+              },
+              "fullDescription": {
+                "text": "Imports of apps are forbidden"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "noImportsOfE2e",
+              "name": "noImportsOfE2e",
+              "shortDescription": {
+                "text": "Imports of e2e projects are forbidden"
+              },
+              "fullDescription": {
+                "text": "Imports of e2e projects are forbidden"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "noImportOfNonBuildableLibraries",
+              "name": "noImportOfNonBuildableLibraries",
+              "shortDescription": {
+                "text": "Buildable libraries cannot import or export from non-buildable libraries"
+              },
+              "fullDescription": {
+                "text": "Buildable libraries cannot import or export from non-buildable libraries"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "noImportsOfLazyLoadedLibraries",
+              "name": "noImportsOfLazyLoadedLibraries",
+              "shortDescription": {
+                "text": "Static imports of lazy-loaded libraries are forbidden."
+              },
+              "fullDescription": {
+                "text": "Static imports of lazy-loaded libraries are forbidden.\n\nLibrary \"{{targetProjectName}}\" is lazy-loaded in these files:\n{{filePaths}}"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "projectWithoutTagsCannotHaveDependencies",
+              "name": "projectWithoutTagsCannotHaveDependencies",
+              "shortDescription": {
+                "text": "A project without tags matching at least one constraint cannot depend on any libraries"
+              },
+              "fullDescription": {
+                "text": "A project without tags matching at least one constraint cannot depend on any libraries"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "bannedExternalImportsViolation",
+              "name": "bannedExternalImportsViolation",
+              "shortDescription": {
+                "text": "A project tagged with \"{{sourceTag}}\" is not allowed to import \"{{imp}}\""
+              },
+              "fullDescription": {
+                "text": "A project tagged with \"{{sourceTag}}\" is not allowed to import \"{{imp}}\""
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "nestedBannedExternalImportsViolation",
+              "name": "nestedBannedExternalImportsViolation",
+              "shortDescription": {
+                "text": "A project tagged with \"{{sourceTag}}\" is not allowed to import \"{{imp}}\". Nested import found at {{childProjectName}}"
+              },
+              "fullDescription": {
+                "text": "A project tagged with \"{{sourceTag}}\" is not allowed to import \"{{imp}}\". Nested import found at {{childProjectName}}"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "noTransitiveDependencies",
+              "name": "noTransitiveDependencies",
+              "shortDescription": {
+                "text": "Only packages defined in the \"package.json\" can be imported. Transitive or unresolvable dependencies are not allowed."
+              },
+              "fullDescription": {
+                "text": "Only packages defined in the \"package.json\" can be imported. Transitive or unresolvable dependencies are not allowed."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "onlyTagsConstraintViolation",
+              "name": "onlyTagsConstraintViolation",
+              "shortDescription": {
+                "text": "A project tagged with \"{{sourceTag}}\" can only depend on libs tagged with {{tags}}"
+              },
+              "fullDescription": {
+                "text": "A project tagged with \"{{sourceTag}}\" can only depend on libs tagged with {{tags}}"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "emptyOnlyTagsConstraintViolation",
+              "name": "emptyOnlyTagsConstraintViolation",
+              "shortDescription": {
+                "text": "A project tagged with \"{{sourceTag}}\" cannot depend on any libs with tags"
+              },
+              "fullDescription": {
+                "text": "A project tagged with \"{{sourceTag}}\" cannot depend on any libs with tags"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "notTagsConstraintViolation",
+              "name": "notTagsConstraintViolation",
+              "shortDescription": {
+                "text": "A project tagged with \"{{sourceTag}}\" can not depend on libs tagged with {{tags}}"
+              },
+              "fullDescription": {
+                "text": "A project tagged with \"{{sourceTag}}\" can not depend on libs tagged with {{tags}}\n\nViolation detected in:\n{{projects}}"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              },
+              "properties": {
+                "upstreamRule": "@nx/enforce-module-boundaries"
+              }
+            },
+            {
+              "id": "goWorkMissingUse",
+              "name": "goWorkMissingUse",
+              "shortDescription": {
+                "text": "A project's go.mod is not in go.work's use list: a developer's go build and gopls skip a module the Nx graph covers, so dev machines and CI select different module sets."
+              },
+              "fullDescription": {
+                "text": "A project's go.mod is not in go.work's use list: a developer's go build and gopls skip a module the Nx graph covers, so dev machines and CI select different module sets."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "goWorkStaleUse",
+              "name": "goWorkStaleUse",
+              "shortDescription": {
+                "text": "A go.work use entry names a directory with no tracked go.mod: go commands fail on developer machines while CI, which never reads go.work, stays green."
+              },
+              "fullDescription": {
+                "text": "A go.work use entry names a directory with no tracked go.mod: go commands fail on developer machines while CI, which never reads go.work, stays green."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "goWorkUnmodeledUse",
+              "name": "goWorkUnmodeledUse",
+              "shortDescription": {
+                "text": "A go.work use entry names a module the Nx graph does not model: it builds on developer machines while nx affected and the boundary check never see it."
+              },
+              "fullDescription": {
+                "text": "A go.work use entry names a module the Nx graph does not model: it builds on developer machines while nx affected and the boundary check never see it."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "goWorkOutsideUse",
+              "name": "goWorkOutsideUse",
+              "shortDescription": {
+                "text": "A go.work use entry points outside the workspace: developer builds include a module no run over this workspace can cover."
+              },
+              "fullDescription": {
+                "text": "A go.work use entry points outside the workspace: developer builds include a module no run over this workspace can cover."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "tsconfigDeadPathAlias",
+              "name": "tsconfigDeadPathAlias",
+              "shortDescription": {
+                "text": "A tsconfig paths alias maps only to targets whose directories do not exist: no import of it can resolve through the alias table, so the build breaks — or silently resolves to an installed package of the same name instead of the workspace source the alias promised."
+              },
+              "fullDescription": {
+                "text": "A tsconfig paths alias maps only to targets whose directories do not exist: no import of it can resolve through the alias table, so the build breaks — or silently resolves to an installed package of the same name instead of the workspace source the alias promised."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "intentForbiddenEdge",
+              "name": "intentForbiddenEdge",
+              "shortDescription": {
+                "text": "A dependency this workspace's architecture-intent.json forbids appears in the observed project graph — the architecture that is being built contradicts the one that was intended."
+              },
+              "fullDescription": {
+                "text": "A dependency this workspace's architecture-intent.json forbids appears in the observed project graph — the architecture that is being built contradicts the one that was intended."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "intentAllowedMissing",
+              "name": "intentAllowedMissing",
+              "shortDescription": {
+                "text": "A dependency this workspace's architecture-intent.json allows is not observed — the intended architecture is not being built."
+              },
+              "fullDescription": {
+                "text": "A dependency this workspace's architecture-intent.json allows is not observed — the intended architecture is not being built."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "projectMissing",
+              "name": "projectMissing",
+              "shortDescription": {
+                "text": "the intent requires a project to exist, but the observed architecture has no project of that name"
+              },
+              "fullDescription": {
+                "text": "the intent requires a project to exist, but the observed architecture has no project of that name"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "projectPresent",
+              "name": "projectPresent",
+              "shortDescription": {
+                "text": "the intent forbids a project, but the observed architecture contains it"
+              },
+              "fullDescription": {
+                "text": "the intent forbids a project, but the observed architecture contains it"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "projectTagMissing",
+              "name": "projectTagMissing",
+              "shortDescription": {
+                "text": "a required project lacks a required tag"
+              },
+              "fullDescription": {
+                "text": "a required project lacks a required tag"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "dependencyForbidden",
+              "name": "dependencyForbidden",
+              "shortDescription": {
+                "text": "a dependency the intent forbids exists in the observed architecture"
+              },
+              "fullDescription": {
+                "text": "a dependency the intent forbids exists in the observed architecture"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "dependencyNotAllowed",
+              "name": "dependencyNotAllowed",
+              "shortDescription": {
+                "text": "an observed dependency is not among the dependencies the intent allows"
+              },
+              "fullDescription": {
+                "text": "an observed dependency is not among the dependencies the intent allows"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "tagDependencyForbidden",
+              "name": "tagDependencyForbidden",
+              "shortDescription": {
+                "text": "a dependency the intent forbids between two tags exists in the observed architecture"
+              },
+              "fullDescription": {
+                "text": "a dependency the intent forbids between two tags exists in the observed architecture"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "intentUnknownProject",
+              "name": "intentUnknownProject",
+              "shortDescription": {
+                "text": "an intent row names a project the observed architecture does not have"
+              },
+              "fullDescription": {
+                "text": "an intent row names a project the observed architecture does not have"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "intentUnknownTag",
+              "name": "intentUnknownTag",
+              "shortDescription": {
+                "text": "a tag rule names a tag no observed project carries"
+              },
+              "fullDescription": {
+                "text": "a tag rule names a tag no observed project carries"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "fitnessFunctionFailed",
+              "name": "fitnessFunctionFailed",
+              "shortDescription": {
+                "text": "A declared fitness function failed its verdict."
+              },
+              "fullDescription": {
+                "text": "A fitness function declared in the boundary policy's `fitness` list judged its matched projects and returned `fail` — the function name and reason are in the result message and the `name` property."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "columnKind": "utf16CodeUnits",
+      "results": [],
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "toolExecutionNotifications": []
+        }
+      ]
+    }
+  ]
+}
+

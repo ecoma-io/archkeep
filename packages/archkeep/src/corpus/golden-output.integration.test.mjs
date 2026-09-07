@@ -13,12 +13,13 @@
  *
  * Then review every golden diff before committing.
  *
- * ## Excluded verbs
+ * ## Non-byte-identity verbs
  *
- * | Verb           | Reason                                          |
- * |----------------|-------------------------------------------------|
- * | `debt`         | Embeds wall-clock `sampleTime` in output        |
- * | `rules verify` | Needs `@ecoma-io/archkeep-rules` (not installed)|
+ * Most verbs gate at byte-identity (GAP-A level 3). One verb has an exception:
+ *
+ * | Verb   | Gate level     | Reason                                           |
+ * |--------|----------------|--------------------------------------------------|
+ * | `debt` | Level 1+2 only | `sampleTime` is wall-clock (see debt.mjs:197-200); JSON normalizes the field before comparison; text checks exit+non-empty |
  */
 
 import { spawnSync } from "node:child_process";
@@ -28,11 +29,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-
 import { EXIT } from "../verdict.mjs";
 import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../../spawn-budget.mjs";
 import { environmentForTree } from "../workspace.mjs";
-
 import { determinismSweepFiles, sweepIntents } from "../../e2e/fixtures/determinism-sweep.mjs";
 
 vi.setConfig({ testTimeout: SPAWN_TEST_BUDGET_MS });
@@ -98,7 +97,7 @@ const VERB_PLAN = [
   {
     name: "delta",
     argv: ["delta", "{deltaBaseline}", "--format", "{format}"],
-    formats: ["text", "json"],
+    formats: ["text", "sarif", "json"],
   },
   {
     name: "change",
@@ -129,21 +128,134 @@ const VERB_PLAN = [
     argv: ["scenario", "core", "--scenario-file", "{scenarioFile}", "--format", "{format}"],
     formats: ["text", "json"],
   },
+
+  // Verbs with known exit-code contracts (exit 3)
+  {
+    name: "rules verify",
+    argv: ["rules", "verify", "--format", "{format}"],
+    formats: ["text", "json"],
+  },
+
+  // Non-byte-identity verb: sampleTime is wall-clock per debt.mjs:197-200
+  {
+    name: "debt",
+    argv: ["debt", "{historyDir}", "--format", "{format}"],
+    formats: ["text", "json"],
+    comparator: "debt",
+  },
 ];
 
-/** Verbs excluded from the golden corpus. */
-const EXCLUDED = {
-  debt: "unstable — embeds wall-clock sampleTime in output",
-  "rules verify": "needs @ecoma-io/archkeep-rules catalog (not installed)",
-};
+// ---------------------------------------------------------------------------
+// Comparators
+// ---------------------------------------------------------------------------
 
 /**
- * Expected exit code per verb.  Most exit 0; `decisions` exits 3 (no-verdict)
- * because its ADR binding references an unresolvable intent constraint, but
- * the output is stable across runs.
+ * Default: byte-identity (GAP-A level 3). Both stdout buffers compared
+ * verbatim via vitest's toEqual.
+ */
+function byteIdentityComparator(stdout, golden) {
+  expect(stdout).toEqual(golden);
+}
+
+/**
+ * Debt comparator: level 1+2 contract check (GAP-A level-3 triaged).
+ *
+ * JSON format — parse both, verify structural contract, then normalise
+ * `result.sampleTime` to 0 before comparing the remaining fields.
+ *
+ * Text format — verify exit 0 + non-empty output.  The golden is retained for
+ * evidence but the gate does not enforce byte-identity on text.
+ */
+function debtComparator(stdout, golden, format) {
+  if (format === "json") {
+    const actual = JSON.parse(stdout.toString());
+    const expected = JSON.parse(golden.toString());
+
+    // Structural contract: envelope shape
+    const envelopeKeys = [
+      "schemaVersion",
+      "tool",
+      "command",
+      "workspace",
+      "status",
+      "exitCode",
+      "coverage",
+      "result",
+    ];
+    for (const key of envelopeKeys) {
+      expect(actual).toHaveProperty(key);
+    }
+
+    // Command identity
+    expect(actual.schemaVersion).toBe(2);
+    expect(actual.command).toBe("debt");
+    expect(actual.status).toBe("ok");
+    expect(actual.exitCode).toBe(0);
+
+    // Tool contract
+    expect(actual.tool).toHaveProperty("name");
+    expect(actual.tool).toHaveProperty("version");
+
+    // Workspace contract
+    expect(actual.workspace).toHaveProperty("root");
+    expect(actual.workspace).toHaveProperty("provider");
+    expect(actual.workspace).toHaveProperty("marker");
+    expect(actual.workspace).toHaveProperty("provenance");
+
+    // Coverage contract
+    expect(actual.coverage.complete).toBe(true);
+    expect(actual.coverage.projects).toBeGreaterThanOrEqual(0);
+    expect(Array.isArray(actual.coverage.notes)).toBe(true);
+
+    // Result structural contract
+    const resultKeys = [
+      "dir",
+      "snapshots",
+      "agings",
+      "sampleTime",
+      "entries",
+      "resolved",
+      "total",
+      "byKind",
+      "bySeverity",
+      "lifecycle",
+    ];
+    for (const key of resultKeys) {
+      expect(actual.result).toHaveProperty(key);
+    }
+    expect(typeof actual.result.sampleTime).toBe("string");
+    expect(typeof actual.result.agings).toBe("boolean");
+    expect(Array.isArray(actual.result.entries)).toBe(true);
+    expect(typeof actual.result.total).toBe("number");
+    expect(typeof actual.result.byKind).toBe("object");
+    expect(typeof actual.result.bySeverity).toBe("object");
+
+    // Normalise sampleTime in both to isolate the non-deterministic field
+    actual.result.sampleTime = "0";
+    expected.result.sampleTime = "0";
+
+    // Deep structural comparison (vitest's toEqual ignores key ordering)
+    expect(actual).toEqual(expected);
+    return;
+  }
+
+  // Text format: exit code + non-empty (level-1 gate only)
+  expect(stdout.length).toBeGreaterThan(0);
+}
+
+/** Select the comparator for a verb plan entry. */
+function comparatorFor(verb) {
+  if (verb.comparator === "debt") return debtComparator;
+  return byteIdentityComparator;
+}
+
+/**
+ * Expected exit code per verb.  Most exit 0; `decisions` and `rules verify`
+ * exit 3 (no-verdict — `decisions` has an unresolvable ADR constraint,
+ * `rules verify` has no installed catalog).
  */
 function expectedExit(verb) {
-  if (verb === "decisions") return EXIT.error; // 3
+  if (verb === "decisions" || verb === "rules verify") return EXIT.error; // 3
   return EXIT.ok; // 0
 }
 
@@ -318,8 +430,38 @@ for (const verb of VERB_PLAN) {
         }
 
         expect(result.status).toBe(expectedExit(verb.name));
-        expect(result.stdout).toEqual(golden);
+        comparatorFor(verb)(result.stdout, golden, fmt);
       });
     }
   });
 }
+
+// ---------------------------------------------------------------------------
+// GAP-B — byte-identity across repeated cold starts
+// ---------------------------------------------------------------------------
+// Every verb (except debt, which has non-deterministic sampleTime) is run 4
+// times.  All 4 stdouts must be byte-identical — proving that the output is
+// deterministic across invocations.
+
+describe("GAP-B — byte-identity across 4 cold starts", () => {
+  for (const verb of VERB_PLAN) {
+    if (verb.comparator === "debt") continue; // sampleTime non-deterministic
+
+    for (const fmt of verb.formats) {
+      it(`${verb.name} ${fmt} — all 4 runs produce identical output`, () => {
+        const argv = resolve(verb.argv.map((p) => p.replace("{format}", fmt)));
+        const results = Array.from({ length: 4 }, () => run(argv));
+
+        // All must exit correctly
+        for (const r of results) {
+          expect(r.status).toBe(expectedExit(verb.name));
+        }
+
+        // All 4 stdouts must be byte-identical
+        for (let i = 1; i < results.length; i++) {
+          expect(results[i].stdout).toEqual(results[0].stdout);
+        }
+      });
+    }
+  }
+});
