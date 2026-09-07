@@ -244,7 +244,7 @@ describe("layer direction imports — G-5: report renders, decides nothing", () 
    * vanishing fails the roster — a declaration that outlived the tree is
    * the same drift as a violation, only quieter.
    *
-   * @type {{from: string, specifier: string, resolved: string}[]}
+   * @type {readonly {from: string, specifier: string, resolved: string}[]}
    */
   const RECORDED_EDGES = Object.freeze([
     Object.freeze({
