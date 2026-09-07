@@ -1,0 +1,54 @@
+{
+  "diagnostics": [
+    {
+      "code": "analysisFailure",
+      "message": "Module boundaries were not fully checked here: parse error: ',' expected.. Imports this server could not read are not covered by the verdict below.",
+      "range": {
+        "end": {
+          "character": 15,
+          "line": 0
+        },
+        "start": {
+          "character": 15,
+          "line": 0
+        }
+      },
+      "severity": 2,
+      "source": "archkeep"
+    },
+    {
+      "code": "analysisFailure",
+      "message": "Module boundaries were not fully checked here: parse error: Expression expected.. Imports this server could not read are not covered by the verdict below.",
+      "range": {
+        "end": {
+          "character": 21,
+          "line": 1
+        },
+        "start": {
+          "character": 21,
+          "line": 1
+        }
+      },
+      "severity": 2,
+      "source": "archkeep"
+    },
+    {
+      "code": "analysisFailure",
+      "message": "Module boundaries were not fully checked here: TypeScript cannot resolve './thing' from 'libs/inner/broken.ts'. Imports this server could not read are not covered by the verdict below.",
+      "range": {
+        "end": {
+          "character": 22,
+          "line": 0
+        },
+        "start": {
+          "character": 20,
+          "line": 0
+        }
+      },
+      "severity": 2,
+      "source": "archkeep"
+    }
+  ],
+  "uri": "file:///tmp/archkeep-lsp-golden-fixture/libs/inner/broken.ts",
+  "version": 1
+}

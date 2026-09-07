@@ -1,0 +1,22 @@
+{
+  "diagnostics": [
+    {
+      "code": "onlyTagsConstraintViolation",
+      "message": "A project tagged with \"zone:inner\" can only depend on libs tagged with \"zone:inner\"",
+      "range": {
+        "end": {
+          "character": 27,
+          "line": 3
+        },
+        "start": {
+          "character": 1,
+          "line": 3
+        }
+      },
+      "severity": 1,
+      "source": "archkeep"
+    }
+  ],
+  "uri": "file:///tmp/archkeep-lsp-golden-fixture/libs/inner/main.go",
+  "version": 1
+}

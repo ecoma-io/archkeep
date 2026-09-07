@@ -1,0 +1,15 @@
+{
+  "capabilities": {
+    "textDocumentSync": {
+      "change": 1,
+      "openClose": true,
+      "save": {
+        "includeText": false
+      }
+    }
+  },
+  "serverInfo": {
+    "name": "archkeep",
+    "version": "<version>"
+  }
+}
