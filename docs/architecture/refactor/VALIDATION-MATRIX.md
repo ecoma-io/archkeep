@@ -131,21 +131,73 @@ For the verbs its diff touches, over pinned fixture trees, old path vs new:
 
 ## Architectural test gaps
 
-Structure claimed but not scanned — each is a one-direction static-import
-assertion over the shipped tree, same mechanics as `layer-direction.test.mjs`:
+The Phase 0 register of structure claimed but not scanned. A scan here is a
+one-direction static-import assertion over the shipped tree, same mechanics as
+`layer-direction.test.mjs`.
 
-- **G-1** core (`rules`/`analysis`/`report`) → `providers/` — claimed by
-  intent A, unenforced.
-- **G-2** `commands` → `lsp`.
-- **G-3** `nx.mjs`/`index.mjs`/`commands.mjs` re-export-only.
-- **G-4** `cli.mjs`/`lsp.mjs` wiring-only.
+### Scanned (Phase 3)
+
+- **G-1** core (`rules`/`analysis`/`report`) → `providers/` — intent A's
+  claim. Scanned by #762 —
+  `src/conformance/layer-direction-imports.test.mjs` (the static-import
+  edges extracted once in `src/conformance/layer-edges.mjs`).
+- **G-2** `commands` → `lsp`. Scanned by #762 —
+  `src/conformance/layer-direction-imports.test.mjs`.
 - **G-5** `report/` imports no rule/config law (renders, decides nothing).
-- **G-6** `options.mjs` the only filename-knowing layer.
-- **G-7** every `src/**.mjs` reachable from an entry (no orphans).
-- **G-8** unit-tier filesystem purity.
+  Scanned by #762 — `src/conformance/layer-direction-imports.test.mjs`.
+- **G-7** every `src/**.mjs` reachable from an entry (no orphans). Scanned
+  by #763 — `src/conformance/module-graph.test.mjs` (describe
+  "G-7 — no orphan modules").
 
-Phase 3 closes them in priority order G-1, G-5, G-2, G-7; G-3/G-4/G-6/G-8
-remain conventions with recorded reasons unless a phase proves a scan's worth.
+### Conventions (Phase 3 dispositions)
+
+- **G-3** `nx.mjs`/`index.mjs`/`commands.mjs` re-export-only.
+  Decision (Phase 3): convention — read in full: `nx.mjs` is two re-exports
+  plus the `name` constant (`nx.mjs:19-24`) and `commands.mjs` is
+  re-exports only; `index.mjs` adds exactly one non-re-export, the throwing
+  `createDependencies` misregistration guard (`index.mjs:79-85`), the
+  exception `packages/archkeep/AGENTS.md` ("Layout, and what each layer may
+  know") already tolerates by name. No scan added: one would have to encode
+  that sanctioned throwing guard as an allowed shape.
+- **G-4** `cli.mjs`/`lsp.mjs` wiring-only.
+  Decision (Phase 3): scan-worth — follow-up on umbrella #725: the
+  executable surface composes `src/commands/*` and imports no `src/rules/`,
+  `src/analysis/` or `src/report/` (holds today per `cli.mjs`'s import
+  roster, `cli.mjs:94-147`); not implemented in Phase 3, since a new scan
+  file is #762's lock. Measured: `lsp.mjs` is wiring-only as claimed; the
+  literal claim is false for `cli.mjs`, which owns the process surface —
+  argv parsing, help rendering, `--output`/evidence writes, run drivers —
+  so a literal scan would flag the executable's sanctioned duties.
+- **G-6** `options.mjs` the only filename-knowing layer.
+  Decision (Phase 3): convention — the renameable names are defined once,
+  in `src/options.mjs` (`DEFAULT_OPTIONS` at `options.mjs:104-107`,
+  `NX_CONFIG_FILE` at `:121`, `MOON_TSCONFIG_CHAIN` at `:350`), and every
+  other production module imports them from there
+  (`analysis/typescript.mjs:85`, `commands/context.mjs:39-44`,
+  `lsp/server.mjs:38-45`, `providers/model-gate.mjs:19`, `workspace.mjs:40`);
+  the grep hits outside `options.mjs` are prose comments or module-self
+  resolution (`import.meta.url` for lazy parser loads, version stamps,
+  `entry-point.mjs`'s sanctioned idiom) — they know their own module's
+  location, never a workspace-named file. No scan added: a
+  literal-confinement scan would flag the convention's own explanatory
+  prose (`typescript.mjs:94-98`, `context.mjs:409-425`).
+- **G-8** unit-tier filesystem purity.
+  Decision (Phase 3): convention, restated — the literal rule is already
+  false at the filename tier: 32 unit-named `*.test.mjs` files under `src/`
+  import `node:fs` (full census), overwhelmingly `mkdtempSync`/
+  `writeFileSync` tmpdir fixtures; the conformance scans read the shipped
+  tree by design; `rules/match.test.mjs:1` reads the rules README;
+  `analysis/typescript.test.mjs:654` reads `package.json` for a version
+  pin. The practiced law, recorded here: a unit test never reads this
+  repository's real tree — every real tree is a tmpdir fixture the test
+  built, and pure-layer tests drive in-memory files. No scan added: the
+  literal rule is born-red, and the restated one is not statically
+  expressible below AST-heuristic complexity.
+
+Phase 3 closed the register in priority order G-1, G-5, G-2, G-7 (#762,
+#763); G-3/G-4/G-6/G-8 stay conventions unless a phase proves a scan's
+worth — the verdicts above are that record, with G-4's scan a follow-up
+on umbrella #725 (a new conformance file is #762's lock).
 
 ## Per-phase validation requirement
 
