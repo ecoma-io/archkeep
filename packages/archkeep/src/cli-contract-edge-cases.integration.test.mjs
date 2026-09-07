@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { runCli } from "../cli.mjs";
+import { COMMAND_NAMES, runCli } from "../cli.mjs";
 
 /**
  * Runs one command in-process, capturing both streams.
@@ -131,33 +131,15 @@ describe("CLI contract — unknown or invalid flags", () => {
 // ---------------------------------------------------------------------------
 
 describe("CLI contract — per-command --help exits 0", () => {
-  const COMMANDS_WITH_HELP = [
-    "check",
-    "graph",
-    "diff",
-    "delta",
-    "change",
-    "discover",
-    "drift",
-    "reconcile",
-    "waivers",
-    "fitness",
-    "history",
-    "trajectory",
-    "evolution",
-    "health",
-    "report",
-    "debt",
-    "impact",
-    "explain",
-    "context",
-    "provenance",
-    "decisions",
-    "adr",
-    "rules",
-  ];
-
-  for (const cmd of COMMANDS_WITH_HELP) {
+  // The roster is derived from COMMAND_NAMES, never restated: this file's
+  // hand-written copy once drifted (it named no `scenario`, so the one verb
+  // added later went unexercised here while its --help worked, #771). The
+  // parser-level claim below — --help/-h exit 0 without dispatching — is
+  // owned per-command by every entry of the real roster; the usage text's
+  // byte identity is the corpus gate's contract
+  // (src/corpus/golden-output.integration.test.mjs, the --help lane), not
+  // this file's.
+  for (const cmd of COMMAND_NAMES) {
     it(`${cmd} --help exits 0`, async () => {
       const { exitCode, out } = await run([cmd, "--help"]);
       expect(exitCode).toBe(EXIT.ok);
@@ -165,7 +147,7 @@ describe("CLI contract — per-command --help exits 0", () => {
     });
   }
 
-  for (const cmd of COMMANDS_WITH_HELP) {
+  for (const cmd of COMMAND_NAMES) {
     it(`${cmd} -h exits 0`, async () => {
       const { exitCode, out } = await run([cmd, "-h"]);
       expect(exitCode).toBe(EXIT.ok);

@@ -15,6 +15,7 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { SPAWN_TEST_BUDGET_MS } from "../../spawn-budget.mjs";
 import { runEngine } from "./engines.mjs";
 
 describe("the engines over a minimal tree", () => {
@@ -32,32 +33,43 @@ describe("the engines over a minimal tree", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("records a broken fixture's parse error as a note, never as a clean verdict", async () => {
-    // A fixture source ESLint cannot parse still produces an ESLint result —
-    // its messages are the parser's, not the boundary rule's. The runner must
-    // record them as notes: a verdict-less file is not a clean file, and a
-    // fixture that stopped parsing would otherwise read as agreement.
-    mkdirSync(join(root, "broken"), { recursive: true });
-    writeFileSync(join(root, "broken", "broken.ts"), "import { from 'x';\n", "utf8");
+  it(
+    "records a broken fixture's parse error as a note, never as a clean verdict",
+    async () => {
+      // A fixture source ESLint cannot parse still produces an ESLint result —
+      // its messages are the parser's, not the boundary rule's. The runner must
+      // record them as notes: a verdict-less file is not a clean file, and a
+      // fixture that stopped parsing would otherwise read as agreement.
+      //
+      // The vitest budget is stated here because this test spawns the ESLint
+      // runner (`createUpstreamRunner`) while its siblings here do not — the
+      // default 5000 ms went red under full-suite load before any spawn budget
+      // could matter (#770). SPAWN_TEST_BUDGET_MS is the shared ceiling for a
+      // spawning test; the global default stays untouched so a genuinely hung
+      // test still fails fast everywhere else.
+      mkdirSync(join(root, "broken"), { recursive: true });
+      writeFileSync(join(root, "broken", "broken.ts"), "import { from 'x';\n", "utf8");
 
-    const { createUpstreamRunner } = await import("./engines.mjs");
-    const upstream = await createUpstreamRunner(root);
-    const byFile = await upstream.run({
-      spec: { id: "broken", probes: [{ file: "broken.ts" }] },
-      graph: { nodes: {}, externalNodes: {}, dependencies: {} },
-      projectFileMap: {},
-      options: {},
-      depConstraints: [],
-      projects: [],
-      files: ["broken/broken.ts"],
-    });
+      const { createUpstreamRunner } = await import("./engines.mjs");
+      const upstream = await createUpstreamRunner(root);
+      const byFile = await upstream.run({
+        spec: { id: "broken", probes: [{ file: "broken.ts" }] },
+        graph: { nodes: {}, externalNodes: {}, dependencies: {} },
+        projectFileMap: {},
+        options: {},
+        depConstraints: [],
+        projects: [],
+        files: ["broken/broken.ts"],
+      });
 
-    const entry = byFile.get("broken/broken.ts");
-    expect(entry.readable).toBe(true);
-    expect(entry.messages).toEqual([]);
-    expect(entry.notes.length).toBeGreaterThan(0);
-    expect(entry.notes[0]).toMatch(/Parsing error/);
-  });
+      const entry = byFile.get("broken/broken.ts");
+      expect(entry.readable).toBe(true);
+      expect(entry.messages).toEqual([]);
+      expect(entry.notes.length).toBeGreaterThan(0);
+      expect(entry.notes[0]).toMatch(/Parsing error/);
+    },
+    SPAWN_TEST_BUDGET_MS,
+  );
 
   it("skips a listed source that cannot be read back, instead of crashing the run", () => {
     // A file the materialised tree names but that is not on disk (deleted

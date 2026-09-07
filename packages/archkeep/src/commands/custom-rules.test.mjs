@@ -706,6 +706,14 @@ describe("customRulesForDelta", () => {
     // pipeline that believed it had bounded the run would be wrong with no
     // symptom until it hung. The reason naming the caller's own number is the
     // proof the value arrived.
+    //
+    // 1000ms, not something tighter (#770): the host shares this one budget
+    // across the load pass too, so on a loaded machine the wasm can take a
+    // large slice of it before the loop starts. A tighter number could
+    // terminate the rule during loading rather than by its own looping —
+    // still a refusal, but the test would be pinning the machine, not the
+    // hand-off. The loop still has to terminate BY the budget; the budget is
+    // only given room to be the thing that ends it.
     const rule = declared({ evaluateBehavior: "loop" });
     const baseline = baselineOf({
       customRules: [{ name: RULE, artifact: rule.row.artifact, sha256: rule.row.sha256 }],
@@ -716,10 +724,10 @@ describe("customRulesForDelta", () => {
       policy: POLICY,
       baseline,
       readArtifact: (artifact) => bytesFor.get(artifact) ?? null,
-      timeoutMs: 400,
+      timeoutMs: 1000,
     });
     expect(judged).toEqual([]);
-    expect(unknownRules[0].reason).toContain("400ms budget");
+    expect(unknownRules[0].reason).toContain("1000ms budget");
   });
 
   it("routes a base record the stored owned map does not claim to unknownRules", async () => {
