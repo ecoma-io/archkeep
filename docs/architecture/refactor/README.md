@@ -32,17 +32,18 @@ roster); nothing moves structurally
 before a phase's entry criteria hold (see
 [CONTEXT.md](CONTEXT.md) for state and the last checkpoint):
 
-| page                                         | owns                                                                                                      |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| [CONSTITUTION.md](CONSTITUTION.md)           | The refactor's immutable rules — the trade this program refuses to make                                   |
-| [INVARIANTS.md](INVARIANTS.md)               | The `INV-*` registry: every invariant, its witness, its honest gaps                                       |
-| [AUTHORITY-MAP.md](AUTHORITY-MAP.md)         | Who may decide what, where judgment lives, and where it is forbidden                                      |
-| [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md)       | Canonical vocabulary and the one owner of each semantic concept                                           |
-| [DATA-FLOW.md](DATA-FLOW.md)                 | The canonical semantic pipeline, input adapters to surfaces                                               |
-| [BOUNDARIES.md](BOUNDARIES.md)               | Allowed dependency direction; enforced versus declared-only                                               |
-| [MIGRATION-PLAN.md](MIGRATION-PLAN.md)       | Phases 1–9, entry/exit criteria, the maturity gate                                                        |
-| [VALIDATION-MATRIX.md](VALIDATION-MATRIX.md) | Invariant/contract/differential coverage; test tiers and gaps                                             |
-| [CONTEXT.md](CONTEXT.md)                     | The restart briefing: current state for any agent resuming the program                                    |
-| [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)       | The decision register — CLOSED / VERIFICATION REQUIRED / MAINTAINER GATED, plus the doctrine-gap register |
-| [DECISIONS.md](DECISIONS.md)                 | ADRs the refactor inherits; program decisions (`PD-*`)                                                    |
-| [MOON-POLICY.md](MOON-POLICY.md)             | The Phase 1-C adjudication: each Moon provider transformation's verdict and record                        |
+| page                                               | owns                                                                                                                                     |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| [CONSTITUTION.md](CONSTITUTION.md)                 | The refactor's immutable rules — the trade this program refuses to make                                                                  |
+| [INVARIANTS.md](INVARIANTS.md)                     | The `INV-*` registry: every invariant, its witness, its honest gaps                                                                      |
+| [AUTHORITY-MAP.md](AUTHORITY-MAP.md)               | Who may decide what, where judgment lives, and where it is forbidden                                                                     |
+| [SEMANTIC-MODEL.md](SEMANTIC-MODEL.md)             | Canonical vocabulary and the one owner of each semantic concept                                                                          |
+| [DATA-FLOW.md](DATA-FLOW.md)                       | The canonical semantic pipeline, input adapters to surfaces                                                                              |
+| [BOUNDARIES.md](BOUNDARIES.md)                     | Allowed dependency direction; enforced versus declared-only                                                                              |
+| [MIGRATION-PLAN.md](MIGRATION-PLAN.md)             | Phases 1–9, entry/exit criteria, the maturity gate                                                                                       |
+| [VALIDATION-MATRIX.md](VALIDATION-MATRIX.md)       | Invariant/contract/differential coverage; test tiers and gaps                                                                            |
+| [CONTEXT.md](CONTEXT.md)                           | The restart briefing: current state for any agent resuming the program                                                                   |
+| [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)             | The decision register — CLOSED / VERIFICATION REQUIRED / MAINTAINER GATED, plus the doctrine-gap register                                |
+| [DECISIONS.md](DECISIONS.md)                       | ADRs the refactor inherits; program decisions (`PD-*`)                                                                                   |
+| [MOON-POLICY.md](MOON-POLICY.md)                   | The Phase 1-C adjudication: each Moon provider transformation's verdict and record                                                       |
+| [FEDERATION-READINESS.md](FEDERATION-READINESS.md) | Phase 8's runway record: the seven adversarial questions answered, the OQ-14/GAP-D gate, and what would make federation genuinely needed |

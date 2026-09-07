@@ -59,7 +59,7 @@ A missing field is a review defect, not a style preference.
 | 5 — Capability facades                              | **complete** (PR #772 merged as 60f0e7d2)                                                         | PD-18, CHK-6             |
 | 6 — CLI recomposition                               | **complete** (PR #775)                                                                            | CHK-7 below              |
 | 7 — Additional surfaces                             | **complete** — all four units landed (PRs #776, #777, #786, #787)                                 | CHK-9 close below        |
-| 8 — Federation readiness                            | not started                                                                                       | maintainer-gated         |
+| 8 — Federation readiness                            | **recorded** — runway record landed, no machinery (PR #791)                                       | CHK-10 below             |
 | 9 — Final hardening                                 | not started                                                                                       | blocked by 8 (or waiver) |
 
 Tracking: issue #725 (the program), PR #727 (Phase 0's control plane), PR
@@ -81,7 +81,8 @@ capability facades), PR #774 (CHK-6), and PR #775 (Phase 6's units + exit
 checkpoint), and PR #776 (Phase 7 adjacent hardening: the spawn-budget and
 help-roster fixes), PR #777 (GAP-E: the LSP golden-response corpus), PR
 #787 (the MCP seam: `adr` preamble into the commands layer), and PR #786
-(the 7-A LSP provider convergence, stacked on #777).
+(the 7-A LSP provider convergence, stacked on #777), and PR #791 (Phase 8:
+the federation-readiness runway record).
 
 ## Checkpoints
 
@@ -1450,6 +1451,39 @@ help-roster fixes), PR #777 (GAP-E: the LSP golden-response corpus), PR
   do not touch VS Code analysis. The objective of the next PR: Phase 8's
   runway record (the seven adversarial questions + the OQ-14/GAP-D gate),
   then Phase 9's final audits + falsifiable gate.
+
+### CHK-10 — Phase 8 close: federation readiness runway (2026-09-08)
+
+- **ID**: CHK-10. **Phase**: 8 (runway). **Status**: recorded — the runway
+  is built, no machinery. PR #791.
+- **Units**: one — the runway record
+  [FEDERATION-READINESS.md](FEDERATION-READINESS.md): the seven adversarial
+  questions answered, the OQ-14/GAP-D gate restated for Phase 9, and the
+  runway's verdict.
+- **Canonical ownership changes**: none — no ownership moved.
+- **Dependency-boundary changes**: none — [BOUNDARIES.md](BOUNDARIES.md)
+  unchanged.
+- **Contracts and compatibility**: class 3 (docs-only) — the record states
+  no new API, config, identity, serialization, CLI/`./commands` surface, or
+  verdict vocabulary. Nothing a consumer imports or runs moves.
+- **Differential evidence**: docs-links gate green (722 files); prettier
+  clean; no code touched. The runtime suites are unchanged because nothing
+  in `src/` moved — the gate's own "resolves against the tracked tree" check
+  is the differential for a docs-only change.
+- **Debt budget**: gaps before — GAP-C, GAP-D (both Phase 9-owned); gaps
+  closed — none (runway-only); gaps introduced — none; net delta — zero.
+- **Unresolved / open decisions**: GAP-C (differential breadth) and GAP-D /
+  OQ-14 (cross-version semantic baseline) remain open, recorded for Phase 9.
+  Phases 9 remains blocked by 8-or-waiver; this record does not change that.
+- **Rejected approaches**: a `FederationService` (REFUSED by CON-8 — no
+  concrete requirement); new identity/format/provenance abstractions for
+  federation (REFUSED by the runway's Q4/Q5/Q6 — every existing contract
+  already covers the plane).
+- **Forbidden next moves / traps**: do not build a federation framework
+  before the maintainer authorizes it; do not add a workspace-repository
+  identity ADR before a consumer proves it needs to address a remote tree;
+  do not make provenance a post-hoc-stamped field. The objective of the next
+  PR: Phase 9's final audits + falsifiable gate (GAP-C/GAP-D dispositions).
 
 ## Conventions maintained here
 
