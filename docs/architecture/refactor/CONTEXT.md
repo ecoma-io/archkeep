@@ -1380,7 +1380,7 @@ checkpoint).
   delta — negative (divergence 3 is the MCP unit's, in flight).
 - **Evidence**: the corpus is the differential — 4/4 golden cases
   byte-identical across the collapse; LSP + provider suites 294 passed;
-  touched suites 79 passed; full package suite 5934/5934 (220 files); tsc,
+  touched suites 79 passed; full package suite 5940/5940 (221 files); tsc,
   eslint, prettier clean; this repository's own boundary check exit 0.
 - **Next**: Phase 7 close (MCP seam verdict, VS Code disposition, provider
   re-measure), then Phase 8 under the maintainer's steering.
