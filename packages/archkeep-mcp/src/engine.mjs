@@ -51,7 +51,7 @@
 import { isAbsolute, resolve } from "node:path";
 
 import {
-  adrCommand,
+  adrForWorkspace,
   check,
   discoverCommand,
   driftCommand,
@@ -68,7 +68,6 @@ import {
   UsageError,
   WORKSPACE_MARKERS,
 } from "@ecoma-io/archkeep/commands";
-import { findWorkspaceRoot, listTrackedFiles } from "@ecoma-io/archkeep";
 
 /**
  * The working directory every adapter resolves a workspace from — an explicit
@@ -404,17 +403,20 @@ export async function historyTool({ workspaceRoot, evidence, directory }, io = {
     );
   }
   const cwd = cwdOf(workspaceRoot);
-  const root = findWorkspaceRoot(cwd, WORKSPACE_MARKERS);
-  if (root === null) {
-    // The marker names are read off the engine's own list, never restated —
-    // a marker added there reaches this refusal without a second copy to edit.
+  // The light preamble — root from cwd, the tracked list — is the one
+  // composition `adrForWorkspace` owns, the same one `cli.mjs`'s `runAdr`
+  // runs; the null it returns is refused HERE, with this adapter's own
+  // message. The marker names are read off the engine's own list, never
+  // restated — a marker added there reaches this refusal without a second
+  // copy to edit.
+  const result = adrForWorkspace({ cwd }, {}, { listFiles: io.listFiles });
+  if (result === null) {
     throw new Error(
       `archkeep: history evidence 'decisions' needs a workspace root — no marker ` +
         `(${WORKSPACE_MARKERS.join(", ")}) found walking up from ${cwd}`,
     );
   }
-  const listFiles = io.listFiles ?? listTrackedFiles;
-  return envelopeOf(adrCommand(root, {}, { tracked: listFiles(root) }));
+  return envelopeOf(result);
 }
 
 /**
