@@ -1,0 +1,7 @@
+0001-layers  (accepted)
+-----------------------
+fitness:      unverifiable — no bound constraint for 0001-layers resolves or was evaluated — none can be verified
+governs: (none — recorded but not enforceable)
+unresolved:
+  intentForbiddenEdge: "intentForbiddenEdge" is bound by 0001-layers but no governed row in the context carries that id
+

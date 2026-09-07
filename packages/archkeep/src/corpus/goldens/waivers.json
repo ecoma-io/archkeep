@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "waivers",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": [
+      "remainingMs is the wall clock at the moment of this run, not a fact about the workspace — it is expected to differ between two runs of an unchanged tree and should be excluded from any diff or hash meant to detect real change. Every other field here is deterministic given the same law and the same tree."
+    ]
+  },
+  "result": {
+    "waivers": [],
+    "covered": 0,
+    "expired": 0,
+    "stale": 0,
+    "suppressions": [],
+    "suppressed": 0
+  }
+}
+

@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "decisions",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "docs/adr",
+    "provenance": null
+  },
+  "status": "no-verdict",
+  "exitCode": 3,
+  "coverage": {
+    "complete": false,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [
+      {
+        "file": "intentForbiddenEdge",
+        "reason": "\"intentForbiddenEdge\" is bound by 0001-layers but no governed row in the context carries that id"
+      }
+    ],
+    "blindSpots": [],
+    "notes": []
+  },
+  "result": {
+    "decisionId": "0001-layers",
+    "record": {
+      "id": "0001-layers",
+      "status": "accepted",
+      "supersedes": [],
+      "bindings": [
+        "intentForbiddenEdge"
+      ],
+      "supersededBy": []
+    },
+    "walk": {
+      "ok": false,
+      "nodes": [
+        {
+          "id": "0001-layers",
+          "kind": "decision",
+          "label": "0001-layers",
+          "data": {
+            "status": "accepted"
+          }
+        }
+      ],
+      "edges": [],
+      "unresolved": [
+        {
+          "ref": "intentForbiddenEdge",
+          "kind": "binding",
+          "reason": "\"intentForbiddenEdge\" is bound by 0001-layers but no governed row in the context carries that id"
+        }
+      ]
+    },
+    "fitness": {
+      "id": "0001-layers",
+      "status": "accepted",
+      "level": "unverifiable",
+      "verified": false,
+      "reason": "no bound constraint for 0001-layers resolves or was evaluated — none can be verified"
+    },
+    "knownFitness": [
+      "intentForbiddenEdge"
+    ]
+  }
+}
+

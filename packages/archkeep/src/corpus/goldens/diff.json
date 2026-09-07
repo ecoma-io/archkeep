@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "diff",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": [
+      "per-edge rule-impact covers only depConstraints (3 of 15 violation types; standing edges adjacent to a tags-changed project are re-judged under both sides' tags). A dependency with no rule-impact may still violate npm-ban, circular-dependency, lazy-load, or other rules that require import-site details. Run check for the complete verdict."
+    ]
+  },
+  "result": {
+    "baseline": {
+      "path": "/tmp/archkeep-golden-fixture/.archkeep-graph.json",
+      "projects": 3,
+      "edges": 2,
+      "toolVersion": "0.25.0",
+      "provenance": {
+        "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+        "remote": null,
+        "dirty": false
+      }
+    },
+    "head": {
+      "projects": 3,
+      "edges": 2
+    },
+    "addedProjects": [],
+    "removedProjects": [],
+    "changedProjects": [],
+    "addedEdges": [],
+    "removedEdges": [],
+    "ruleImpact": {
+      "introduced": [],
+      "resolved": []
+    }
+  }
+}
+

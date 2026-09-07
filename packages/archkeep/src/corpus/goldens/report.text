@@ -1,0 +1,42 @@
+architecture governance report — every surface reached a verdict
+
+provenance
+  root        /tmp/archkeep-golden-fixture
+  provider    native (archkeep.json)
+  policy      module-boundaries.config.mjs
+  commit      1fd51709c377d99a6139891e1200291cf08aede9
+  remote      none configured
+  rows        6 governed rows, 6 with no origin recorded
+    unattested  allowed[0] app→api — no origin recorded, cannot attest
+    unattested  allowed[1] api→core — no origin recorded, cannot attest
+    unattested  forbidden[0] core→app — no origin recorded, cannot attest
+    unattested  depConstraints[0] layer:core — no origin recorded, cannot attest
+    unattested  depConstraints[1] layer:api — no origin recorded, cannot attest
+    unattested  depConstraints[2] layer:app — no origin recorded, cannot attest
+
+health
+✔ report over complete coverage (2 imports in 3 files across 3 projects)
+  ok              projects  3
+  ok              edges  2
+  ok              coverage  0
+  ok              violations  0
+  ok              waiver surface  0
+  ok              cycles  0
+  ok              edge density  0.6666666666666666
+  ok              debt rows  0
+  ok              intent fitness  0
+
+governance surfaces
+  ok              waivers
+    0 waivers (0 expired, 0 covering nothing), 0 permanent suppressions hiding 0 violations
+  pass            fitness gates
+    pass            cycle-free  bound by: no recorded decision
+  ok              decisions
+    1 record in docs/adr/
+      0001-layers  (accepted)  binds intentForbiddenEdge
+          fitness: unverifiable — no bound constraint for 0001-layers resolves or was evaluated — none can be verified
+          stands on: no governed row cites this decision
+    no governed row cites a decisionRef
+
+could not inspect
+  nothing — every surface in this report reached a verdict

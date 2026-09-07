@@ -30,3 +30,8 @@ CHANGELOG.md
 .eslint-config-fixture-*/
 .cli-eslint-config-fixture-*/
 .oracle-simple-*/
+
+# Golden-output corpus — CLI byte-identity references, not source code.
+# Prettier would reformat JSON (key ordering, spacing) and cannot parse .text
+# files, breaking the byte-identity comparator.
+packages/archkeep/src/corpus/goldens/

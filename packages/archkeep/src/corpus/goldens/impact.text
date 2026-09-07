@@ -1,0 +1,10 @@
+✔ impact complete (2 imports in 3 files across 3 projects)
+Impact of core
+  api
+  app
+Constraint context
+  ✔ api
+    [layer:api] only [layer:api, layer:core]
+  ✔ app
+    [layer:app] only [layer:app, layer:api, layer:core]
+2 projects depend on core (direct: 1, transitive: 1)

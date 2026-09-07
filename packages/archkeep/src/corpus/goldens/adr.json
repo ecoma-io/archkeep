@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "adr",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "docs/adr",
+    "provenance": null
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 0,
+    "analyzedFiles": 1,
+    "imports": 0,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": []
+  },
+  "result": {
+    "adrs": [
+      "0001-layers"
+    ],
+    "registry": {
+      "dir": "docs/adr",
+      "count": 1
+    },
+    "statuses": [
+      {
+        "id": "0001-layers",
+        "status": "accepted"
+      }
+    ],
+    "bindings": [
+      {
+        "adr": "0001-layers",
+        "binding": "intentForbiddenEdge"
+      }
+    ],
+    "supersedes": [],
+    "supersededBy": [],
+    "fitness": [
+      {
+        "id": "0001-layers",
+        "status": "accepted",
+        "level": "unverifiable",
+        "verified": false,
+        "reason": "no bound constraint for 0001-layers resolves or was evaluated — none can be verified"
+      }
+    ],
+    "unresolved": [],
+    "knownFitness": [
+      "intentForbiddenEdge"
+    ]
+  }
+}
+

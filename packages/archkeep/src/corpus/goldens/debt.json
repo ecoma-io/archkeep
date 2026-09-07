@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "debt",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": [
+      "ledger ages are snapshot-relative; 0 entries derived across 1 snapshot",
+      "sampleTime is the wall clock at the moment of this run, not a fact about the workspace — it is expected to differ between two runs of an unchanged tree and should be excluded from any diff or hash meant to detect real change. Every other field here is deterministic given the same law, history directory and tree.",
+      "no event store linked — lifecycle refs unavailable"
+    ]
+  },
+  "result": {
+    "dir": "/tmp/archkeep-golden-fixture/.archkeep-history",
+    "snapshots": 1,
+    "agings": false,
+    "sampleTime": "2026-09-07T06:50:29.512Z",
+    "entries": [],
+    "resolved": [],
+    "total": 0,
+    "byKind": {
+      "waiver": 0,
+      "expired-waiver": 0,
+      "aspirational-gap": 0,
+      "drift": 0,
+      "unresolved": 0
+    },
+    "bySeverity": {
+      "high": 0,
+      "medium": 0,
+      "low": 0
+    },
+    "lifecycle": {
+      "linked": false,
+      "note": "no event store linked — lifecycle refs unavailable"
+    }
+  }
+}
+

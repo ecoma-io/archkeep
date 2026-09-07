@@ -1,0 +1,14 @@
+repo      1fd51709c377d99a6139891e1200291cf08aede9
+rows      6 governance rows, 0 with an origin, 6 without
+unattested (no origin recorded — cannot attest):
+  allowed[0]
+  allowed[1]
+  forbidden[0]
+  depConstraints[0]
+  depConstraints[1]
+  depConstraints[2]
+6 of them carry no decision behind the rule
+decisions  1 recorded — 1 attributed, 0 without attribution
+  accepted    0001-layers  created by t <t@t> on 2026-01-01T00:00:00Z; changed by t <t@t> on 2026-01-01T00:00:00Z; binds intentForbiddenEdge
+✔ every decision's lifecycle is attributed — each change names who recorded it and with what tool
+graph     8 nodes, 6 edges, 7 claims, 0 causal chains

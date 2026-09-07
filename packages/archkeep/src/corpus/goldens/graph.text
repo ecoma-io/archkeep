@@ -1,0 +1,10 @@
+✔ graph snapshot complete (2 imports in 3 files across 3 projects)
+layout apps/libs (default)
+3 projects
+  api  libs/api  lib [layer:api]
+    → core (static)
+  app  libs/app  lib [layer:app]
+    → api (static)
+  core  libs/core  lib [layer:core]
+    (no dependencies)
+2 edges

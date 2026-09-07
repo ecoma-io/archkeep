@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "fitness",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": []
+  },
+  "result": {
+    "verdict": "pass",
+    "functions": [
+      {
+        "verdict": "pass",
+        "name": "cycle-free",
+        "evidence": {
+          "projects": 3,
+          "cycles": 0
+        },
+        "message": "3 matched projects form no dependency cycle",
+        "rows": []
+      }
+    ]
+  }
+}
+

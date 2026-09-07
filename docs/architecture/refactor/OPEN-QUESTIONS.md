@@ -96,6 +96,16 @@ each closure in one line and links it.
   (`determinism-source-guard.test.mjs`) proves the exemption load-bearing
   with an empty-allow-list negative control; recorded beside
   [INV-16](INVARIANTS.md#inv-16--clock-discipline).
+- **OQ-8 — Golden corpus home — in-repo vs CI artifact.** CLOSED by
+  GAP-A implementation (PR #767): in-repo at
+  `packages/archkeep/src/corpus/goldens/` (maintainer decision 2026-09-07,
+  per OQ-8's own recommendation). The corpus is gated by
+  `golden-output.integration.test.mjs` with human-gated regen via
+  `ARCHKEEP_UPDATE_GOLDENS=1`.
+- **OQ-9 — What `nightly.yml` and `check-docs-claims-parity.mjs` actually carry.**
+  CLOSED by GAP-A work (Phase 4 entry): nightly carries determinism only
+  transitively inside e2e; check-docs-claims-parity is doc-count only. Gap list
+  confirmed unchanged — GAP-A's gates unaffected.
 
 ## VERIFICATION REQUIRED
 
@@ -104,21 +114,19 @@ names: owner (the phase that owes it), decision class, exact evidence
 required, the phase it blocks, what evidence closes it, and the no-issue
 outcome.
 
-| ID   | Question                                                                 | Owner                      | Evidence required                                                                                                                                             | Blocks                                 | What closes it                                                                                                                                                                   | No-issue outcome                                        |
-| ---- | ------------------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| OQ-4 | Do INV-20/INV-21 (static-reading-only, edges-never-nodes) gain scans?    | Phase 3                    | The investigation's record: per candidate scan — mechanical-witness cost, false-positive rate, false-negative rate, maintenance burden, architectural gain    | Phase 3's G-scan work                  | A scan adopted with a red-twin demonstration, **or** the recorded decision that none earns it — "no scan" is a legitimate outcome; a scan is not added because it can be written | The recorded "no scan" decision, with its reasons       |
-| OQ-9 | What do `nightly.yml` and `check-docs-claims-parity.mjs` actually carry? | GAP-A work (Phase 4 entry) | Both files read; the [gap list](VALIDATION-MATRIX.md#differential-gaps-what-the-harness-cannot-prove-today) updated if nightly carries determinism/sweep legs | GAP-A's implementation (Phase 4 entry) | A recorded reading of both files, gap list updated or confirmed                                                                                                                  | Gap list confirmed unchanged — GAP-A's gates unaffected |
+| ID   | Question                                                              | Owner   | Evidence required                                                                                                                                          | Blocks                | What closes it                                                                                                                                                                   | No-issue outcome                                  |
+| ---- | --------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| OQ-4 | Do INV-20/INV-21 (static-reading-only, edges-never-nodes) gain scans? | Phase 3 | The investigation's record: per candidate scan — mechanical-witness cost, false-positive rate, false-negative rate, maintenance burden, architectural gain | Phase 3's G-scan work | A scan adopted with a red-twin demonstration, **or** the recorded decision that none earns it — "no scan" is a legitimate outcome; a scan is not added because it can be written | The recorded "no scan" decision, with its reasons |
 
 ## MAINTAINER GATED
 
 A row here names the gate at which the maintainer decides; nothing is
 decided here, and nothing is decided before its gate.
 
-| ID    | Question                                    | Gate                                 | What the maintainer decides                                                                                               | What closes it                                                                                                                             |
-| ----- | ------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| OQ-8  | Golden corpus home — in-repo vs CI artifact | GAP-A implementation (Phase 4 entry) | The home for the golden-output corpus; the audit recommends in-repo (the `envelope-shape.json` habit, human-gated regen)  | The maintainer's choice recorded at GAP-A's implementation PR                                                                              |
-| OQ-11 | LSP golden-response scope (GAP-E)           | Phase 7 entry                        | The minimal recorded-response set for a server-refactor differential                                                      | The approved scope recorded at Phase 7's entry                                                                                             |
-| OQ-14 | INV-23's semantic-compatibility witness     | Phase 9's GAP-D decision             | Whether a cross-version semantic-baseline differential is owed, or the corpus + differentials + review discipline suffice | Adoption, or the reasoned no-fix per budget honesty ([CON-0](CONSTITUTION.md#con-0--do-not-trade-semantic-maturity-for-structural-purity)) |
+| ID    | Question                                | Gate                     | What the maintainer decides                                                                                               | What closes it                                                                                                                             |
+| ----- | --------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| OQ-11 | LSP golden-response scope (GAP-E)       | Phase 7 entry            | The minimal recorded-response set for a server-refactor differential                                                      | The approved scope recorded at Phase 7's entry                                                                                             |
+| OQ-14 | INV-23's semantic-compatibility witness | Phase 9's GAP-D decision | Whether a cross-version semantic-baseline differential is owed, or the corpus + differentials + review discipline suffice | Adoption, or the reasoned no-fix per budget honesty ([CON-0](CONSTITUTION.md#con-0--do-not-trade-semantic-maturity-for-structural-purity)) |
 
 ## Doctrine-gap register (DG-\*)
 

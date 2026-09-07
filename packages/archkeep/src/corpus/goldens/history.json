@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "history",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": [
+      "rule-impact cannot be recomputed from stored snapshots — snapshots carry the graph and the policy fingerprint, not the constraint table or import sites. Run `check` at any commit for the boundary verdict; run `diff` for one transition's rule-impact."
+    ]
+  },
+  "result": {
+    "dir": "/tmp/archkeep-golden-fixture/.archkeep-history",
+    "captured": null,
+    "snapshots": [
+      {
+        "name": "0001-71341a04.json",
+        "id": "71341a045f02564205e125994a50536459cf3114afd89c0523982de8cbfc02ae"
+      }
+    ],
+    "transitions": []
+  }
+}
+

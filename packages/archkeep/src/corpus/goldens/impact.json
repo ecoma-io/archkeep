@@ -1,0 +1,327 @@
+{
+  "schemaVersion": 2,
+  "tool": {
+    "name": "@ecoma-io/archkeep",
+    "version": "0.25.0"
+  },
+  "command": "impact",
+  "workspace": {
+    "root": "/tmp/archkeep-golden-fixture",
+    "provider": "native",
+    "marker": "archkeep.json",
+    "provenance": {
+      "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
+      "remote": null,
+      "dirty": false
+    }
+  },
+  "status": "ok",
+  "exitCode": 0,
+  "coverage": {
+    "complete": true,
+    "projects": 3,
+    "analyzedFiles": 3,
+    "imports": 2,
+    "notAnalyzed": [],
+    "blindSpots": [],
+    "notes": [
+      "per-edge violations cover only depConstraints (3 of 15 violation types). A dependent with no violations here may still violate npm-ban, circular-dependency, lazy-load, or other rules that require import-site details. Run `check` for the complete verdict."
+    ]
+  },
+  "result": {
+    "project": "core",
+    "direct": [
+      "api"
+    ],
+    "transitive": [
+      "app"
+    ],
+    "dependents": [
+      "api",
+      "app"
+    ],
+    "constraintImpact": [
+      {
+        "project": "api",
+        "edges": [
+          {
+            "target": "core",
+            "type": "static"
+          }
+        ],
+        "constraintRows": [
+          {
+            "sourceTag": "layer:api",
+            "onlyDependOnLibsWithTags": [
+              "layer:api",
+              "layer:core"
+            ]
+          }
+        ],
+        "violations": []
+      },
+      {
+        "project": "app",
+        "edges": [],
+        "constraintRows": [
+          {
+            "sourceTag": "layer:app",
+            "onlyDependOnLibsWithTags": [
+              "layer:app",
+              "layer:api",
+              "layer:core"
+            ]
+          }
+        ],
+        "violations": []
+      }
+    ],
+    "impactStatement": {
+      "project": "core",
+      "impact": {
+        "project": "core",
+        "direct": [
+          "api"
+        ],
+        "transitive": [
+          "app"
+        ],
+        "dependents": [
+          "api",
+          "app"
+        ]
+      },
+      "evolutionAlignment": {
+        "projects": [
+          "api",
+          "app",
+          "core"
+        ],
+        "boundaries": [
+          "api>core:static"
+        ],
+        "constraints": [
+          "sourceTag:layer:api",
+          "sourceTag:layer:app"
+        ],
+        "decisions": []
+      },
+      "findingsImpact": {
+        "evaluated": false,
+        "findings": [],
+        "count": 0
+      },
+      "debtImpact": {
+        "evaluated": false,
+        "debt": [],
+        "count": 0
+      },
+      "boundaryImpact": {
+        "boundaries": [
+          {
+            "source": "api",
+            "target": "core",
+            "type": "static",
+            "crossesLayer": true,
+            "violated": false,
+            "governingConstraintRows": 1
+          }
+        ],
+        "evaluated": true
+      },
+      "completeness": {
+        "domains": {
+          "structural": {
+            "status": "evaluated",
+            "evaluated": true,
+            "partial": false,
+            "notEvaluated": false,
+            "unsupported": false,
+            "refused": false,
+            "note": ""
+          },
+          "constraint": {
+            "status": "evaluated",
+            "evaluated": true,
+            "partial": false,
+            "notEvaluated": false,
+            "unsupported": false,
+            "refused": false,
+            "note": ""
+          },
+          "boundary": {
+            "status": "evaluated",
+            "evaluated": true,
+            "partial": false,
+            "notEvaluated": false,
+            "unsupported": false,
+            "refused": false,
+            "note": ""
+          },
+          "decision": {
+            "status": "evaluated",
+            "evaluated": true,
+            "partial": false,
+            "notEvaluated": false,
+            "unsupported": false,
+            "refused": false,
+            "note": ""
+          },
+          "findings": {
+            "status": "not_evaluated",
+            "evaluated": false,
+            "partial": false,
+            "notEvaluated": true,
+            "unsupported": false,
+            "refused": false,
+            "note": ""
+          },
+          "debt": {
+            "status": "not_evaluated",
+            "evaluated": false,
+            "partial": false,
+            "notEvaluated": true,
+            "unsupported": false,
+            "refused": false,
+            "note": ""
+          },
+          "governance": {
+            "status": "not_evaluated",
+            "evaluated": false,
+            "partial": false,
+            "notEvaluated": true,
+            "unsupported": false,
+            "refused": false,
+            "note": "Governance incomplete — findings: not_evaluated, debt: not_evaluated"
+          },
+          "evidence": {
+            "status": "evaluated",
+            "evaluated": true,
+            "partial": false,
+            "notEvaluated": false,
+            "unsupported": false,
+            "refused": false,
+            "note": ""
+          }
+        },
+        "overallComplete": false,
+        "overallStatus": "not_evaluated",
+        "evidenceComplete": {
+          "contractType": "canonical",
+          "domainCoverage": 0.625,
+          "claimEvidenceCoverage": 1,
+          "causalCoverage": 1,
+          "provenanceCoverage": 0,
+          "mutationCoverage": 0,
+          "surfaceParity": 0,
+          "hiddenGapCount": 2,
+          "falseCompleteCount": 0,
+          "baseIdentityValid": false,
+          "deterministic": true,
+          "overallStatus": "incomplete",
+          "overallComplete": false,
+          "gates": {
+            "domainCoverage": {
+              "value": 0.625,
+              "pass": false,
+              "required": true
+            },
+            "claimEvidenceCoverage": {
+              "value": 1,
+              "pass": true,
+              "required": true
+            },
+            "causalCoverage": {
+              "value": 1,
+              "pass": true,
+              "required": true
+            },
+            "provenanceCoverage": {
+              "value": 0,
+              "pass": false,
+              "required": true
+            },
+            "mutationCoverage": {
+              "value": 0,
+              "pass": false,
+              "required": false
+            },
+            "surfaceParity": {
+              "value": 0,
+              "pass": false,
+              "required": false
+            },
+            "hiddenGapCount": {
+              "value": 2,
+              "pass": false,
+              "required": true
+            },
+            "falseCompleteCount": {
+              "value": 0,
+              "pass": true,
+              "required": true
+            },
+            "baseIdentityValid": {
+              "value": false,
+              "pass": false,
+              "required": false
+            },
+            "deterministic": {
+              "value": true,
+              "pass": true,
+              "required": true
+            }
+          }
+        },
+        "hiddenGapCount": 2
+      },
+      "complete": false,
+      "notes": [
+        "constraint impact covers only depConstraints (3 of 15 violation types). A project with no violations here may still violate other rules that require import-site details. Run `check` for the complete verdict.",
+        "finding impact not evaluated — no findings data provided to impact statement. Pass findings data for complete governance evaluation.",
+        "debt impact not evaluated — no debt data provided to impact statement. Pass debt data for complete governance evaluation."
+      ],
+      "constraintImpact": [
+        {
+          "project": "api",
+          "edges": [
+            {
+              "target": "core",
+              "type": "static"
+            }
+          ],
+          "constraintRows": [
+            {
+              "sourceTag": "layer:api",
+              "onlyDependOnLibsWithTags": [
+                "layer:api",
+                "layer:core"
+              ]
+            }
+          ],
+          "violations": []
+        },
+        {
+          "project": "app",
+          "edges": [],
+          "constraintRows": [
+            {
+              "sourceTag": "layer:app",
+              "onlyDependOnLibsWithTags": [
+                "layer:app",
+                "layer:api",
+                "layer:core"
+              ]
+            }
+          ],
+          "violations": []
+        }
+      ],
+      "decisionImpact": {
+        "decisions": [],
+        "unresolvedDecisionRefs": []
+      }
+    }
+  }
+}
+

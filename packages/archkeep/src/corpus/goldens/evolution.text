@@ -1,0 +1,32 @@
+evolution  05536ee5cfe2..1fd51709c377
+2 revisions, 1 transition (2 imports in 3 files across 3 projects)
+0  05536ee5cfe2828bda459a026877ff8d225b30d7  71341a04
+1  1fd51709c377d99a6139891e1200291cf08aede9  71341a04
+~ 05536ee5cfe2828bda459a026877ff8d225b30d7 → 1fd51709c377d99a6139891e1200291cf08aede9  (code drift)
+
+  comparison for 05536ee5cfe2 → 1fd51709c377
+  disposition: accepted
+  classifications: DRIFT
+  architecture changed: no
+  policy changed: no
+  provider changed: no
+  provenance changed: yes
+  drift findings: introduced 0, resolved 0
+  debt: introduced 0, resolved 0
+  fitness:
+    cycle-free: pass → pass
+  coverage: base 3 projects / 3 files / 2 imports; head 3 / 3 / 2
+  affected constraints: cycle-free
+✔ no architectural change across the selected revisions (only policy, provider, or drift signals)
+
+summary
+  transitions: 1
+  disposition: accepted
+  classifications: DRIFT
+  architecture changed in 0 transitions
+  policy changed: 0
+  drift findings: introduced 0, resolved 0
+  debt: introduced 0, resolved 0
+  fitness:
+    cycle-free: pass → pass
+  affected constraints: cycle-free

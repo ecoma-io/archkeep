@@ -1,0 +1,7 @@
+libs/api/api.go:3:8
+  import       "example.test/core" (static)
+  source       api [layer:api]
+  target       core [layer:core]
+  constraint   sourceTag layer:api → onlyDependOnLibsWithTags [layer:api, layer:core]
+  verdict      allowed — no constraint was violated
+✔ coverage complete (2 imports in 3 files across 3 projects)

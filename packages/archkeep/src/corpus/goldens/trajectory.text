@@ -1,0 +1,10 @@
+trajectory  /tmp/archkeep-golden-fixture/.archkeep-history
+1 observation (graph_snapshots), 0 transitions
+✖ insufficient_history: a trajectory needs at least two observations — derived values are unavailable, not zero
+signals  architecture 0 · policy 0 · provider 0 · code drift 0 · incomparable 0 · unchanged 0
+projects  first 3 · current 3 · delta n/a · added n/a · removed n/a · changed n/a · introduced n/a · resolved n/a · persistent n/a
+edges     first 2 · current 2 · delta n/a · added n/a · removed n/a · introduced n/a · resolved n/a · persistent n/a
+disclosures  policy incomparable 0 · provenance incomparable 0 · cross-repo 0 · dirty captures 0 · with provenance 1
+trends  n/a
+counts are snapshot-relative: 1 observation are stored graph snapshots — capture points, not commits, days, or captures attempted
+rule-impact cannot be recomputed from stored snapshots — snapshots carry the graph and the policy fingerprint, not the constraint table or import sites, so no violation-level trajectory is reported. Run `delta` between two live points, or `check` at any commit.
