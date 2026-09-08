@@ -1,15 +1,15 @@
 /**
  * The direction `src/governance/` may face — read by the core it serves, and
  * holding its own one-direction seam against the surface and the acquisition
- * layers. The documents do not draw this seam: `BOUNDARIES.md` ("The
- * intra-src DAG") states the ordered surface chain
- * `commands/ → analysis/ → rules/ → report/` and records the law-facing
- * consumer duty only as `core → governance/` — `config.mjs` and
- * `rules/index.mjs` read the clock, waiver fate and expired-waiver evidence,
- * the registry names. No document declares `governance → X` as a ban; this
- * gate is the one-direction static-import scan that absence left blind, and
- * it asserts the seam ARCHITECTURALLY — the direction the docs' own
- * `core → governance` reading duty and provider-never-decides both imply —
+ * layers. The documents draw this seam only in part:
+ * `docs/development/architecture.md`'s diagram lines the verdict half up as
+ * `src/analysis/ → src/rules/ → src/report/` under its one-way pipeline law;
+ * the surface chain's `commands/` head and a `governance` duty row no current
+ * document states — `config.mjs` and `rules/index.mjs` read the clock, waiver
+ * fate and expired-waiver evidence, the registry names. No document declares
+ * `governance → X` as a ban; this gate is the one-direction static-import scan
+ * that absence left blind, and it asserts the seam ARCHITECTURALLY — the
+ * direction the docs' own one-way line and provider-never-decides both imply —
  * rather than citing a written row that does not exist.
  *
  * Governance is a horizontal semantic layer. It observes and it decides; it
@@ -26,7 +26,7 @@
  *    (the only graph builders), `src/graph/`, `src/workspace.mjs`,
  *    `src/options.mjs` (the only filename-knowing layer), `src/nx-json.mjs`.
  *    Governance receives facts; seeding itself from a second acquisition
- *    authority is the same overreach `BOUNDARIES.md` draws around providers
+ *    authority is the same overreach `docs/development/architecture.md` draws around providers
  *    (a provider never decides) held on the governance clock-face: the
  *    semantic layer that scores decisions must not also hold a graph builder,
  *    because then a governance verdict can be produced from an acquisition
@@ -238,7 +238,7 @@ describe("governance layer direction — one semantic layer, its allowed reads a
           `layer that reads law and is read by the surface; it must not import the surface ` +
           `(commands/, report/) it is consumed by, nor the acquisition layers (providers/, ` +
           `graph/, workspace.mjs, options.mjs, nx-json.mjs) that feed that surface ` +
-          `(BOUNDARIES.md "The intra-src DAG")`,
+          `(docs/development/architecture.md, "The two halves" — the verdict half's one-way line)`,
       ),
     ).toEqual([]);
   });

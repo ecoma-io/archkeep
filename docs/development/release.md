@@ -4,6 +4,32 @@ How a version of Archkeep reaches the people who use it. This is the mechanics;
 CONTRIBUTING.md owns the contribution bar, and
 [testing.md](testing.md) owns the suite that must pass before anything ships.
 
+## The 1.0 readiness checklist
+
+[roadmap.md's "What 1.0 waits for"](../doctrine/roadmap.md#what-10-waits-for-and-how-each-condition-is-read)
+owns the conditions and how each is read. This page owns the checklist's
+**current measured state** — read off `scripts/check-readiness.mjs`
+(`pnpm readiness`) rather than remembered, because a checklist that is not
+recomputed is a claim wearing a table's name. No row here is fabricated a
+pass; each is `met`, `not met`, or `unmeasured`, and `unmeasured` is the
+third state, not a failure. As measured on 2026-09-08:
+
+| condition                                              | state       | evidence                                                                                                                           |
+| ------------------------------------------------------ | ----------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| real-tree differential green, run after run            | unmeasured  | `scripts/check-readiness.mjs` reads `--differential '<runs>,<red\|green>'`; the weekly differential lane's history is the owner    |
+| a workspace outside this repo gates a build on `check` | unmeasured  | `gate-attestation.md`'s evidence shape; readiness reads validated attestations                                                     |
+| a quiet stretch in what an unchanged workspace is told | **not met** | the log since the refactor names changes to reported verdicts on unchanged trees; conditions read it from the log                  |
+| releases land without a hand on them                   | unmeasured  | tags vs `npm view`; readiness needs `RELEASES_IN_A_ROW` consecutive hand-free releases, and that measurement has not been supplied |
+
+The `not met` row is actionable: until a stretch of commits passes with no
+fix changing a verdict on an unchanged tree, 1.0 is not quiet enough to trust
+with a stability promise. The three `unmeasured` rows are measurements the
+maintainer supplies to `check-readiness` (or observes from the lanes),
+not gaps in the tool. Structural exit criteria — the phases' own bars, read
+off [the roadmap](../doctrine/roadmap.md#what-10-waits-for-and-how-each-condition-is-read) —
+are the freeze manifest's concern and not
+restated here.
+
 ## What happens automatically
 
 [release-please](https://github.com/googleapis/release-please) reads the

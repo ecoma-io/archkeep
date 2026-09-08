@@ -377,7 +377,7 @@ describe("the per-transition 8-question comparison evidence", () => {
     // Nothing moved between mid and tip (same graph, same intent): empty
     // diffs on a comparable axis — the axis stays comparable, never zeroed.
     expect(second.comparison.findings).toEqual({ introduced: [], resolved: [], unknown: [] });
-    expect(second.comparison.debt).toEqual({ introduced: [], resolved: [] });
+    expect(second.comparison.debt).toEqual({ judged: true, introduced: [], resolved: [] });
   });
 
   it("classifies the introduced violation and the later code drift without inventing a decision change", async () => {

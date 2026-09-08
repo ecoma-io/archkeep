@@ -11,6 +11,7 @@ import { parseEvidenceSnapshot, serializeEvidenceSnapshot } from "./delta-snapsh
 import { captureDelta } from "./delta.mjs";
 import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../../spawn-budget.mjs";
 import { changeCommand, changeFold, violationFindingId } from "./change.mjs";
+import { readEvents } from "../governance/evolution-store.mjs";
 
 /**
  * What the `change` command guarantees: the reconciliation answers exactly
@@ -975,5 +976,42 @@ describe("changeFold input latch", () => {
     expect(fold.status).toBe("no-verdict");
     expect(fold.exitCode).toBe(3);
     expect(fold.refused).toContain('"unprovenReasons"');
+  });
+
+  // The not-judged debt spelling, shared with `delta`: the change event's
+  // `debt` sub-ledger says "could not look" IN-BAND (`judged: false`) rather
+  // than emitting a clean two-empty-lists shape that a consumer reads as
+  // "no architecture debt existed". This is the silent direction — see
+  // ../../../../AGENTS.md, the invariant.
+  it("marks the event debt as unjudged when architecture intent cannot be judged", async () => {
+    const baseline = baselineOf();
+    const dir = join(mkdtempSync(join(tmpdir(), "archkeep-change-events-")), "events");
+    const result = await changeCommand(
+      "baseline.json",
+      "intent.json",
+      contextOf({ graph: declaredHeadGraph() }),
+      {
+        config: config(),
+        readBaseline: baseline.readBaseline,
+        readIntent: async () => parseChangeIntent(JSON.stringify(manifest()), "intent.json"),
+        eventOut: dir,
+        loadIntentOverride: async () => {
+          throw new Error("intent boom");
+        },
+      },
+    );
+    // The reconciliation itself is matched — the debt sub-ledger is a
+    // separate surface: its not-judged shape must not drag the whole run to
+    // exit 3, but it must say `judged: false` in-band so a consumer never
+    // reads the event as "no architecture debt existed".
+    expect(result.status).toBe("ok");
+    expect(result.exitCode).toBe(0);
+    const [event] = readEvents(dir);
+    expect(event.debt).toEqual({
+      judged: false,
+      introduced: [],
+      resolved: [],
+      note: "architecture intent could not be judged — no debt ids emitted (intent boom)",
+    });
   });
 });

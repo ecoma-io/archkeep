@@ -1000,10 +1000,11 @@ export async function changeCommand(
   // `findings`, never in `debt`. An unproven base (F-CHG-1) or an unjudgeable
   // intent is a no-verdict: no ids are emitted, an in-band note says so, and a
   // change run never fabricates ledger ids over evidence it cannot vouch for.
-  /** @type {{introduced: string[], resolved: string[], note?: string}} */
+  /** @type {{judged: boolean, introduced: string[], resolved: string[], note?: string}} the marker is in-band on every shape: `false` on a fail-closed path, `true` from `debtChangeDiff` */
   let debt;
   if (baseEngineGraph === null) {
     debt = {
+      judged: false,
       introduced: [],
       resolved: [],
       note: "base identity unproven — no architecture debt diff can be trusted",
@@ -1013,6 +1014,7 @@ export async function changeCommand(
       const archIntent = await (loadIntentOverride ?? loadIntent)(root, { tracked });
       if (archIntent === undefined || archIntent === null) {
         debt = {
+          judged: false,
           introduced: [],
           resolved: [],
           note: `no '${INTENT_FILE}' tracked — the change event carries no architecture debt ids`,
@@ -1024,6 +1026,7 @@ export async function changeCommand(
       }
     } catch (error) {
       debt = {
+        judged: false,
         introduced: [],
         resolved: [],
         note: `architecture intent could not be judged — no debt ids emitted (${error.message})`,

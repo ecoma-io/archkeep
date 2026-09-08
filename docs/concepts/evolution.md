@@ -43,7 +43,7 @@ must not disagree with what is written here.
   },
   "findings": { "introduced": [], "resolved": [], "unknown": [] },
   "fitness": { "verdictDeltas": [] },
-  "debt": { "introduced": [], "resolved": [] },
+  "debt": { "judged": true, "introduced": [], "resolved": [] },
   "classifications": ["CHANGE"],
   "disposition": "accepted",
   "notes": [],
@@ -54,8 +54,11 @@ must not disagree with what is written here.
 The record carries **references, never graphs**: `base`/`head` name revisions
 and snapshot identities — the hash `snapshotIdentity` computes over exactly the
 graph that side was judged over — `findings`/`debt` carry identity strings, and
-each `affected` list holds identity strings only. An event is a pointer into the
-evidence, not a second copy of it. The two commands that consume a baseline
+each `affected` list holds identity strings only. `debt` also carries a
+`judged` marker: `false` when the intent could not be judged (no tracked
+`architecture-intent.json`, an unproven base, an intent that failed to read),
+so an empty ledger never reads as "no debt existed". An event is a pointer into
+the evidence, not a second copy of it. The two commands that consume a baseline
 file (`delta`, `change`) also disclose where that file sat on the writing
 machine in a top-level `evidence` reference, the same way a `change` event's
 `declaration.file` names the intent file — a storage pointer, deliberately

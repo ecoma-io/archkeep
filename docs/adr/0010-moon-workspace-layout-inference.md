@@ -25,10 +25,9 @@ one: each accepted project's canonical root, crossed with Moon's own `layer`
 classification — `application`-layer roots sharing a top-level directory
 give `appsDir`, `library`-layer roots give `libsDir`; a root-level project
 contributes to neither; a layout is stated only when both axes infer,
-otherwise none is. The architecture refactor's provider audit recorded the
-inference among the five policies embedded in `transformMoonGraph` awaiting
-adjudication. This record is the adjudication's outcome for this item,
-2026-09-05.
+otherwise none is. The provider audit recorded the inference among the five
+policies embedded in `transformMoonGraph` awaiting adjudication. This record
+is the adjudication's outcome for this item, 2026-09-05.
 
 ## Decision
 

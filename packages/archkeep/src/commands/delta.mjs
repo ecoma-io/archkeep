@@ -1029,12 +1029,13 @@ export async function deltaCommand(
     // gate; the fail-closed branches are an absent intent and an unjudgeable
     // one, each emitting no ids and an in-band note rather than a fabricated
     // clean ledger.
-    /** @type {{introduced: string[], resolved: string[], note?: string}} */
+    /** @type {{judged: boolean, introduced: string[], resolved: string[], note?: string}} the marker is in-band on every shape: `false` on a fail-closed path, `true` from `debtChangeDiff` */
     let debt;
     try {
       const archIntent = await (loadIntentOverride ?? loadIntent)(root, { tracked });
       if (archIntent === undefined || archIntent === null) {
         debt = {
+          judged: false,
           introduced: [],
           resolved: [],
           note: `no '${INTENT_FILE}' tracked — the delta event carries no architecture debt ids`,
@@ -1046,6 +1047,7 @@ export async function deltaCommand(
       }
     } catch (error) {
       debt = {
+        judged: false,
         introduced: [],
         resolved: [],
         note: `architecture intent could not be judged — no debt ids emitted (${error.message})`,

@@ -208,7 +208,10 @@ export function driftFactOf(finding) {
  *
  * @param {object} baseVerdict A `judgeIntent` result over the base graph.
  * @param {object} headVerdict A `judgeIntent` result over the head graph.
- * @returns {{introduced: string[], resolved: string[]}} Stable debt ids.
+ * @returns {{judged: true, introduced: string[], resolved: string[]}} Stable
+ *   debt ids, marked judged — the in-band complement of `judged: false`, so a
+ *   consumer can always distinguish "no debt existed" from "debt could not be
+ *   judged" (see `../../AGENTS.md`'s invariant).
  */
 export function debtChangeDiff(baseVerdict, headVerdict) {
   const driftOf = (v) => (v.findings ?? []).map((f) => debtFactId("drift", driftFactOf(f)));
@@ -218,7 +221,7 @@ export function debtChangeDiff(baseVerdict, headVerdict) {
   const headIds = new Set([...driftOf(headVerdict), ...gapOf(headVerdict)]);
   const introduced = [...headIds].filter((id) => !baseIds.has(id)).sort();
   const resolved = [...baseIds].filter((id) => !headIds.has(id)).sort();
-  return { introduced, resolved };
+  return { judged: true, introduced, resolved };
 }
 /**
  * Reduces an `opts.events` value to a loaded event array, or `null` when no

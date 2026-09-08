@@ -87,6 +87,7 @@
       "decisions": []
     },
     "debt": {
+      "judged": true,
       "introduced": [],
       "resolved": []
     }

@@ -114,7 +114,9 @@ fact about the delta, never an inference), `result.affected` (the projects,
 boundaries, constraints and decisions the transition touched, as identity
 strings), and `result.debt` (the change's divergence from its declaration —
 the findings it introduced, claimed as resolved only when the run observed a
-repair, which a change run never does). The classification is computed from
+repair, which a change run never does; `judged: false` names every path where
+the debt diff could not be produced, so an empty ledger never reads as "no
+debt existed"). The classification is computed from
 the reconciliation output itself, never re-derived: [../concepts/evolution.md](../concepts/evolution.md)
 owns the predicates' one home.
 

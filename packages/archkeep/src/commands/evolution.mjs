@@ -940,6 +940,16 @@ export function buildEvolutionSummary(comparisons) {
       });
       return { verdictDeltas };
     }
+    if (axis === "debt") {
+      // The aggregate states whether the debt it unions was judged at every
+      // transition (`debtChangeDiff`'s marker) — a summary over a transition
+      // that could not judge its debt never reads as a judged clean union.
+      return {
+        judged: comparisons.every((c) => c.debt === undefined || c.debt.judged === true),
+        introduced: collect("introduced"),
+        resolved: collect("resolved"),
+      };
+    }
     return {
       introduced: collect("introduced"),
       resolved: collect("resolved"),

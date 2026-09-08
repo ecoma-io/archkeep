@@ -5,8 +5,7 @@ carrying: the accepted violations, the un-built aspirations, and the drift —
 each aged across the snapshot history, ranked by severity, and printed as one
 deterministic report. It is an **aging record, not a finance metaphor**: age,
 count and severity only, no interest and no compounding. It is also a **report,
-not a gate** — it never changes a verdict and never exits 1; `check` stays the
-only command that fails a build.
+not a gate** — it never changes a verdict and never exits 1; the commands that fail a build are the verdict-carrier roster, `check` plus `fitness`, `delta`, `change` and `rules verify`.
 
 The directory argument is the same consumer-managed history directory
 `history` reads (`docs/usage/history.md`): a directory of `graph --format json`

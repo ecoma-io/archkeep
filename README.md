@@ -187,7 +187,7 @@ exactly one of them decides:
 | `rules verify`                                                                                                                                                                                               | Are the shipped rule artifacts what they claim?         | a verdict on catalog integrity                      | digest-level verification         |
 | `graph`, `diff`, `drift`, `history`, `trajectory`, `evolution`, `health`, `debt`, `report`, `impact`, `explain`, `context`, `provenance`, `adr`, `decisions`, `waivers`, `discover`, `reconcile`, `scenario` | evidence, analysis, governance records, projections     | descriptive — they inform, they never gate          | findings without the exit code    |
 
-`check` is the gate, and the only command holding all four exit codes.
+`check` is the gate — the enforcement authority, and the only command whose verdict fold spans all four exit codes.
 `fitness`, `delta`, `change` and `rules verify` are verdict-carriers on their
 own questions — a failing fitness function, a non-waived introduced violation,
 an unfulfilled change declaration, a rule artifact that fails integrity — and

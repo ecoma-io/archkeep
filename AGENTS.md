@@ -480,6 +480,17 @@ honest.
 
 ## Execution order for coding agents
 
+This repository is in **pre-1.0 stabilization mode**: the compatibility
+contract ([below](#the-compatibility-contract)) now includes the surfaces
+[1-0-semantic-contract.md](docs/doctrine/1-0-semantic-contract.md#what-is-frozen)
+names as frozen at 1.0. A change that alters what a frozen surface reports on
+an unchanged workspace, or that removes a compatibility surface, is a
+maintainer-authorized exception before it is a pull request — its
+[post-1.0 policy](docs/doctrine/1-0-semantic-contract.md#future-changes-after-10)
+owns the classes. Classify against the freeze manifest's
+[compatibility classification](docs/doctrine/1-0-semantic-contract.md#compatibility-classification)
+before implementing, not after.
+
 When implementing a change in this repository, follow this sequence. Skipping
 a step produces a diff that passes CI and is still wrong — the invariant test
 for each step is named beside it.

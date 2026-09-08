@@ -228,6 +228,7 @@
             "unknown": []
           },
           "debt": {
+            "judged": true,
             "introduced": [],
             "resolved": []
           },
@@ -309,6 +310,7 @@
         "unknown": []
       },
       "debt": {
+        "judged": true,
         "introduced": [],
         "resolved": []
       },
