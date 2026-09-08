@@ -27,8 +27,13 @@
 //
 // The tree entries are built with inline `content` (the same encoding
 // release-please uses) rather than pre-created blobs, so the bytes pushed are
-// byte-for-byte what was written by Prettier. A trailing newline is added to
-// every file, matching what `prettier --write` produces and what git records.
+// byte-for-byte what was written by the repair. A trailing newline is added to
+// the REFORMAT files only, matching what `prettier --write` produces and what
+// git records; the golden-output corpus is carried verbatim (its bytes are the
+// reference the golden gate compares against, so restoring a newline onto one
+// would rewrite the reference — measured corrupting the EMPTY `rules
+// verify.json` golden on the 0.26.0 release branch: a 0-byte reference came
+// back as one byte `\n`, and the byte-identity gate failed).
 //
 // The commit message, tree, and parents arrive as arguments — this script
 // never decides anything, only executes, so it needs no mocking layer and the
@@ -75,14 +80,22 @@ export const REFORMAT_FILES = [
   "packages/archkeep-rule-sdk-ts/package.json",
   "packages/archkeep-rule-sdk-rust/Cargo.lock",
   "packages/archkeep-rules/Cargo.lock",
-  // The golden-output corpus is another non-formatting repair carried back by
-  // this same signed push. `sync-goldens.mjs` rewrites the engine version these
-  // references embed on a release bump (the same chain-link class as the two
-  // Cargo.lock entries above); without them here the repair would be written
-  // to the checkout, `git diff --quiet` would see it, and the push would still
-  // skip them — leaving the release pull request red on the byte-identity gate.
-  ...GOLDEN_JSON_FILES,
 ];
+
+/**
+ * The golden-output corpus the repair additionally carries back. Kept OUT of
+ * `REFORMAT_FILES` on purpose: the manifests and locks are carried to fix
+ * their own byte layout, and `treePayload` guarantees them a trailing newline
+ * (what Prettier writes). The goldens are byte-identity REFERENCES — the raw
+ * bytes the golden gate compares CLI output against — so a `\n` coerced onto
+ * one rewrites the reference. All of them are Prettier-formatted JSON and
+ * already end in `\n` today, but the coercion silently corrupts any golden
+ * that does not, which is exactly how the EMPTY `rules verify.json` golden
+ * (0 committed bytes) came back as a one-byte `\n` on the 0.26.0 release
+ * branch and turned the golden gate red. When a golden needs carrying, it
+ * belongs here, carried verbatim.
+ */
+export const GOLDEN_CARRY_FILES = [...GOLDEN_JSON_FILES];
 
 /**
  * The message the repair commit carries. The title is deliberate: this commit
@@ -151,23 +164,35 @@ export function requestGit(owner, repo, method, path, token, body) {
 
 /**
  * The JSON payload for a `POST /git/trees` call: the base tree plus one
- * blob-entry per file, each carrying its Prettier-written bytes as inline
- * `content`. A file that disappeared after the last git-database call would
- * 404 in `readFileSync` with a message naming the path — loud, never a
- * silent omission.
+ * blob-entry per file, each carrying its on-disk bytes as inline `content`. A
+ * file that disappeared after the last git-database call would 404 in
+ * `readFileSync` with a message naming the path — loud, never a silent
+ * omission.
+ *
+ * Each file's bytes are carried exactly as read. The `reformat` entries get a
+ * trailing newline the way Prettier writes them (matching what the manifests
+ * and locks are repaired to); the `verbatim` (golden) entries are preserved
+ * byte-for-byte, because their bytes are the reference the golden gate
+ * compares against — see `GOLDEN_CARRY_FILES`. A `\n` coerced onto an empty
+ * golden rewrites the reference; measured on the 0.26.0 release branch where
+ * the empty `rules verify.json` came back as one byte and the gate failed.
  *
  * @param {string} baseTreeSha the tree of the branch head commit
- * @param {string[]} files paths (relative to the repository root)
+ * @param {{path: string, verbatim?: boolean}[]} entries paths and how their
+ *   bytes must be carried, relative to the repository root
  * @param {string} root filesystem path of the checked-out repository
  * @returns {{base_tree: string, tree: {path: string, mode: string, type: string, content: string}[]}}
  */
-export function treePayload(baseTreeSha, files, root) {
-  const tree = files.map((path) => ({
-    path,
-    mode: "100644",
-    type: "blob",
-    content: readFileSync(join(root, path), "utf8").replace(/\n?$/, "\n"),
-  }));
+export function treePayload(baseTreeSha, entries, root) {
+  const tree = entries.map(({ path, verbatim }) => {
+    const raw = readFileSync(join(root, path), "utf8");
+    return {
+      path,
+      mode: "100644",
+      type: "blob",
+      content: verbatim ? raw : raw.replace(/\n?$/, "\n"),
+    };
+  });
   return { base_tree: baseTreeSha, tree };
 }
 
@@ -180,7 +205,9 @@ export function treePayload(baseTreeSha, files, root) {
  * @param {string} repo repository name
  * @param {string} branch branch name to update
  * @param {string} message the commit message
- * @param {string[]} files paths whose current on-disk content becomes the commit
+ * @param {string[]} files paths whose current on-disk content becomes the
+ *   commit, reformatted (trailing newline guaranteed). Golden references pass
+ *   separate verbatim entries.
  * @param {string} root filesystem path of the checked-out repository
  * @param {string} token the workflow token (never a PAT)
  * @returns {{sha: string, verification: string}} the new head commit's SHA and
@@ -191,13 +218,17 @@ export function treePayload(baseTreeSha, files, root) {
 export function pushReformattedFiles(owner, repo, branch, message, files, root, token) {
   const head = requestGit(owner, repo, "GET", `/git/ref/heads/${branch}`, token).object.sha;
   const baseTree = requestGit(owner, repo, "GET", `/git/commits/${head}`, token).tree.sha;
+  const entries = [
+    ...files.map((path) => ({ path })),
+    ...GOLDEN_CARRY_FILES.map((path) => ({ path, verbatim: true })),
+  ];
   const treeSha = requestGit(
     owner,
     repo,
     "POST",
     "/git/trees",
     token,
-    treePayload(baseTree, files, root),
+    treePayload(baseTree, entries, root),
   ).sha;
   const commit = requestGit(owner, repo, "POST", "/git/commits", token, {
     message,

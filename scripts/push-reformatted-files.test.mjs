@@ -10,6 +10,12 @@
 // The failure case goes red in the SILENT direction first: a reformat commit
 // that did not come back `valid` is precisely the state that left release PR
 // #75 blocked with green checks — the script must refuse to claim success.
+//
+// The verbatim-carry test is the second half of the same invariant measured on
+// #728's 0.26.0 run: the golden-output corpus is byte-identity, so a trailing
+// newline coerced onto an EMPTY golden rewrites the reference the golden gate
+// compares against. Empty reference → one-byte `\n` is the exact corruption
+// that failed the gate; this test pins it in the SILENT direction.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -21,8 +27,12 @@ import { fileURLToPath } from "node:url";
 
 import { readFileSync } from "node:fs";
 
-import { REFORMAT_FILES, requestGit, treePayload } from "./push-reformatted-files.mjs";
-import { GOLDEN_JSON_FILES } from "./sync-goldens.mjs";
+import {
+  GOLDEN_CARRY_FILES,
+  REFORMAT_FILES,
+  requestGit,
+  treePayload,
+} from "./push-reformatted-files.mjs";
 
 test("treePayload embeds each file's bytes as inline content with a trailing newline", () => {
   const root = mkdtempSync(join(tmpdir(), "r0b-tree-"));
@@ -35,7 +45,7 @@ test("treePayload embeds each file's bytes as inline content with a trailing new
 
   const payload = treePayload(
     "abc123",
-    [".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"],
+    [{ path: ".claude-plugin/plugin.json" }, { path: ".claude-plugin/marketplace.json" }],
     root,
   );
 
@@ -59,13 +69,61 @@ test("treePayload embeds each file's bytes as inline content with a trailing new
 test("treePayload keeps a file that already ends in a newline at exactly one newline", () => {
   const root = mkdtempSync(join(tmpdir(), "r0b-tree-"));
   writeFileSync(join(root, "p.json"), '{"a":1}\n');
-  const payload = treePayload("abc", ["p.json"], root);
+  const payload = treePayload("abc", [{ path: "p.json" }], root);
   assert.equal(payload.tree[0].content, '{"a":1}\n');
 });
 
 test("treePayload throws loudly when a file is missing rather than omitting it silently", () => {
   const root = mkdtempSync(join(tmpdir(), "r0b-tree-"));
-  assert.throws(() => treePayload("abc", ["does-not-exist.json"], root), /does-not-exist\.json/);
+  assert.throws(
+    () => treePayload("abc", [{ path: "does-not-exist.json" }], root),
+    /does-not-exist\.json/,
+  );
+});
+
+test("treePayload carries verbatim entries byte-for-byte, coercing nothing", () => {
+  // The golden gate compares the real CLI's stdout to the golden's raw bytes
+  // with a byte-identity comparator. Rewriting the trailing newline onto an
+  // EMPTY golden is exactly the corruption that failed the 0.26.0 release PR
+  // (#728) — a 0-byte reference came back as one byte `\n` and the gate read
+  // golden Buffer[10] against the CLI's empty Buffer[]. A verbatim entry must
+  // preserve the bytes as read: empty stays empty, already-newline stays
+  // exactly one newline, and multi-line stays untouched.
+  const root = mkdtempSync(join(tmpdir(), "r0b-verbatim-"));
+  writeFileSync(join(root, "empty.json"), "");
+  writeFileSync(join(root, "plain.json"), "{}");
+  writeFileSync(join(root, "newlined.json"), "{}\n");
+
+  const payload = treePayload(
+    "abc123",
+    [
+      { path: "empty.json", verbatim: true },
+      { path: "plain.json", verbatim: true },
+      { path: "newlined.json", verbatim: true },
+    ],
+    root,
+  );
+
+  assert.equal(payload.tree[0].content, "");
+  assert.equal(payload.tree[1].content, "{}");
+  assert.equal(payload.tree[2].content, "{}\n");
+});
+
+test("every golden the repair carries is a verbatim entry", () => {
+  // GOLDEN_CARRY_FILES is what `pushReformattedFiles` flags verbatim when it
+  // builds the tree. A golden sitting in the non-verbatim reformat list would
+  // be exposed to the `\n` coercion again — this pins the two lists apart.
+  const goldens = new Set(GOLDEN_CARRY_FILES);
+  for (const golden of GOLDEN_CARRY_FILES) {
+    assert.ok(goldens.has(golden), `${golden} duplicated?`);
+  }
+  for (const reformat of REFORMAT_FILES) {
+    assert.equal(
+      goldens.has(reformat),
+      false,
+      `${reformat} is a reformat entry but appears verbatim in GOLDEN_CARRY_FILES`,
+    );
+  }
 });
 
 // The naive entry guard this replaced —
@@ -107,7 +165,6 @@ test("the reformat list is every file the lane repairs", () => {
     "packages/archkeep-rule-sdk-ts/package.json",
     "packages/archkeep-rule-sdk-rust/Cargo.lock",
     "packages/archkeep-rules/Cargo.lock",
-    ...GOLDEN_JSON_FILES,
   ]);
 });
 
