@@ -24,12 +24,14 @@
 // empty state becomes something the repository declares rather than something a
 // reader infers from a command that found nothing to do.
 //
-// The list of targets is READ OUT OF `.github/workflows/ci.yml` — out of the
-// `moon run …` or `nx run-many -t …` line itself — never written here a second
-// time. CI is where "green" is defined; a copy of that list in this file would
-// be a second definition, and the two would agree only until someone edited one
-// of them. That is the failure this script is meant to catch, so it must not
-// contain an instance of it.
+// The targets are READ OUT OF `.github/workflows/ci.yml` — out of the
+// `moon run …`/`moon ci …` invocation lines themselves, both the all-projects
+// roster and the per-project selectors a workflow that splits its targets
+// across jobs spells out — never written here a second time. CI is where
+// "green" is defined; a copy of that list in this file would be a second
+// definition, and the two would agree only until someone edited one of them.
+// That is the failure this script is meant to catch, so it must not contain an
+// instance of it.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
@@ -42,30 +44,23 @@ export const PACKAGES_DIR = "packages";
 export const CI_WORKFLOW = ".github/workflows/ci.yml";
 
 /**
- * The targets CI runs, taken from every `moon run …:<target>` and
- * `moon ci …:<target>` invocation in the workflow (the `...` prefix means
- * "all projects"). Both spellings name the same roster — that is the drift
- * this derivation pins — so every invocation found contributes its targets.
+ * Joins shell line continuations and drops whole-line comments, so every
+ * parser below reads one logical line per invocation.
  *
  * Three things a legal edit to `ci.yml` can do, each handled explicitly so
- * none of them silently narrows the list this script enforces:
+ * none of them silently narrows what the parsers find:
  *   - a shell line continuation (a trailing `\`) splits one invocation across
  *     physical lines — those lines are joined into one logical line first;
  *   - the run step can be split into more than one `moon run …` invocation —
- *     every one found contributes its targets, not just the first;
+ *     every one found contributes, not just the first;
  *   - a comment can mention "moon run" in prose — whole-line comments (a
  *     line whose first non-whitespace character is `#`) are dropped before
- *     any of the above, so they can never seed or pollute the list.
- *
- * Within one invocation, stripping the `...:` prefix and stopping at the
- * first token that is not a project-scoped target (once a target has been
- * seen) still applies, so a trailing flag like `--parallel` does not become a
- * target.
+ *     any of the above, so they can never seed or pollute the result.
  *
  * @param {string} workflowText contents of `.github/workflows/ci.yml`
- * @returns {string[]} target names, deduplicated, in the order first seen
+ * @returns {string[]} physical lines joined at continuations, comments dropped
  */
-export function parseCiTargets(workflowText) {
+function logicalLinesOf(workflowText) {
   const logicalLines = [];
   let pending = null;
   for (const rawLine of workflowText.split("\n")) {
@@ -80,42 +75,90 @@ export function parseCiTargets(workflowText) {
     pending = null;
     logicalLines.push(line);
   }
+  return logicalLines;
+}
 
-  const targets = [];
-  const seen = new Set();
-  for (const line of logicalLines) {
-    // Moon: `moon run ...:lint ...:test ...:typecheck` or `moon ci :lint :test` —
-    // the same roster under two commands, both read.
+/**
+ * Every selector the workflow's `moon run`/`moon ci` invocations name, split
+ * by scope:
+ *
+ *   - `roster` — targets named for ALL projects, spelled `...:target` (the
+ *     form `moon run` uses) or `:target` (the form `moon ci` uses);
+ *   - `perProject` — targets named for ONE project, spelled `project:target`.
+ *     Moon has no "all projects except" selector, so a workflow that splits
+ *     its targets across jobs spells each job's roster project by project;
+ *     this map is where those spellings land.
+ *
+ * Both scopes come from the same lines — that is the drift this derivation
+ * pins, and why they are parsed together rather than by two readers that
+ * could disagree about what a line says. Within one invocation, the loop
+ * stops at the first token that is neither a flag-before-any-selector nor a
+ * selector, so a trailing flag like `--parallel` contributes nothing.
+ *
+ * @param {string} workflowText contents of `.github/workflows/ci.yml`
+ * @returns {{roster: string[], perProject: Map<string, Set<string>>}}
+ *   roster targets deduplicated in first-seen order; perProject keyed by
+ *   project id with the set of targets named for it
+ */
+export function parseCiSelectors(workflowText) {
+  const roster = [];
+  const rosterSeen = new Set();
+  const perProject = new Map();
+
+  for (const line of logicalLinesOf(workflowText)) {
+    // Moon: `moon run ...:lint ...:test ...:typecheck` or
+    // `moon ci archkeep:lint archkeep:test --base=…` — both commands read.
     const moonMatch = /moon\s+(?:run|ci)\s+(.*)$/.exec(line);
     if (!moonMatch) continue;
     // Tracked per line, not globally: a second `moon run` invocation must be
     // free to skip its OWN leading flags even though earlier lines already
-    // pushed targets — the stop-at-a-flag rule is local to one invocation.
-    const targetsOnThisLine = [];
+    // pushed selectors — the stop-at-a-flag rule is local to one invocation.
+    let sawSelector = false;
     for (const word of moonMatch[1].trim().split(/[\s,]+/)) {
-      // Skip flags (e.g. --force) that appear before this line's target list.
-      // Once a target has been seen ON THIS LINE, any flag breaks the loop —
+      // Skip flags (e.g. --force) that appear before this line's selectors.
+      // Once a selector has been seen ON THIS LINE, any flag breaks the loop —
       // that is the stop condition for a trailing flag like --parallel.
-      if (word.startsWith("--") && targetsOnThisLine.length === 0) continue;
-      // Strip the all-projects prefix Moon spells two ways — `...:target` (the
-      // form the `moon run` line uses) and `:target` (the form the `moon ci`
-      // line uses). Project-qualified targets (`archkeep:e2e`) are skipped
-      // first: they are not part of the every-project roster this gate holds
-      // projects to, and Moon itself fails a run that names a target no
-      // project declares.
-      if (/^[a-z][a-z0-9-]*:/i.test(word)) continue;
-      const target = word.replace(/^(?:\.{3})?:/, "");
-      if (!/^[a-z][a-z0-9:-]*$/i.test(target)) break;
-      targetsOnThisLine.push(target);
-    }
-    for (const target of targetsOnThisLine) {
-      if (!seen.has(target)) {
-        seen.add(target);
-        targets.push(target);
+      if (word.startsWith("--") && !sawSelector) continue;
+      // `...:target` / `:target` — the every-project roster.
+      const rosterMatch = /^(?:\.{3})?:([a-z][a-z0-9:-]*)$/i.exec(word);
+      if (rosterMatch) {
+        sawSelector = true;
+        if (!rosterSeen.has(rosterMatch[1])) {
+          rosterSeen.add(rosterMatch[1]);
+          roster.push(rosterMatch[1]);
+        }
+        continue;
       }
+      // `project:target` — named for that project only. A bare `:target`
+      // cannot reach here (the roster match above takes it), so the left
+      // half is a project id by construction.
+      const projectMatch = /^([a-z][a-z0-9-]*):([a-z][a-z0-9:-]*)$/i.exec(word);
+      if (projectMatch) {
+        sawSelector = true;
+        const targets = perProject.get(projectMatch[1]) ?? new Set();
+        targets.add(projectMatch[2]);
+        perProject.set(projectMatch[1], targets);
+        continue;
+      }
+      break;
     }
   }
-  return targets;
+  return { roster, perProject };
+}
+
+/**
+ * The targets CI runs for ALL projects, taken from every
+ * `moon run …:<target>` and `moon ci …:<target>` invocation in the workflow.
+ * Both spellings name the same roster — that is the drift this derivation
+ * pins — so every invocation found contributes its targets. Selectors that
+ * name one project (`archkeep:e2e`) are not part of this roster;
+ * {@link parseCiSelectors} returns them beside it.
+ *
+ * @param {string} workflowText contents of `.github/workflows/ci.yml`
+ * @returns {string[]} target names, deduplicated, in the order first seen
+ */
+export function parseCiTargets(workflowText) {
+  return parseCiSelectors(workflowText).roster;
 }
 
 /**
@@ -135,11 +178,13 @@ export function parseCiTargets(workflowText) {
  * @param {object} input
  * @param {string[]} input.packageDirs directory names directly under `packages/`
  * @param {{name: string, root: string, targets: string[]}[]} input.projects what the workspace tool reports
- * @param {string[]} input.ciTargets targets the CI workflow runs
+ * @param {{roster: string[], perProject: Map<string, Set<string>>}} input.ciSelectors
+ *   what CI names, split by scope — see {@link parseCiSelectors}. A project is
+ *   held to the union of the all-projects roster and the selectors that name it.
  * @param {string[]} [input.extraRequiredRoots] project roots required beyond `packages/*`
  * @returns {{lines: string[], failures: string[]}}
  */
-export function evaluate({ packageDirs, projects, ciTargets, extraRequiredRoots = [] }) {
+export function evaluate({ packageDirs, projects, ciSelectors, extraRequiredRoots = [] }) {
   const lines = [];
   const failures = [];
 
@@ -166,13 +211,33 @@ export function evaluate({ packageDirs, projects, ciTargets, extraRequiredRoots 
       return;
     }
 
-    const declared = ciTargets.filter((t) => project.targets.includes(t));
-    const missing = ciTargets.filter((t) => !project.targets.includes(t));
+    // What CI names for this project: the all-projects roster, plus every
+    // selector that names it. A project in neither is held to nothing — the
+    // state that reads as a clean workspace while running zero tasks.
+    const covered = [
+      ...new Set([...ciSelectors.roster, ...(ciSelectors.perProject.get(project.name) ?? [])]),
+    ];
+    const declared = covered.filter((t) => project.targets.includes(t));
+    const missing = covered.filter((t) => !project.targets.includes(t));
+
+    if (covered.length === 0) {
+      failures.push(
+        `${project.name} (${expectedRoot}) is named in no \`moon run\`/\`moon ci\` ` +
+          `selector in ${CI_WORKFLOW}: no all-projects roster covers it and no ` +
+          `project-qualified selector names it. Moon has no "all projects except" ` +
+          `selector, so a workflow that splits its targets across jobs spells each ` +
+          `job's roster project by project — and one that forgets this project ` +
+          `skips it in silence, every target running zero times while the run still ` +
+          `exits 0. Add its selectors to the invocation that should own it.`,
+      );
+      lines.push(`FAIL ${project.name} — named in no CI selector`);
+      return;
+    }
 
     if (declared.length === 0) {
       failures.push(
         `${project.name} (${expectedRoot}) declares none of the targets CI runs ` +
-          `(${ciTargets.join(", ")}). The workspace tool skips a project with no ` +
+          `for it (${covered.join(", ")}). The workspace tool skips a project with no ` +
           `matching target in silence, so nothing checks this ${kind} and the run ` +
           `still exits 0.`,
       );
@@ -264,8 +329,8 @@ function main() {
     process.exit(1);
   }
 
-  const ciTargets = parseCiTargets(readFileSync(workflowPath, "utf8"));
-  if (ciTargets.length === 0) {
+  const ciSelectors = parseCiSelectors(readFileSync(workflowPath, "utf8"));
+  if (ciSelectors.roster.length === 0 && ciSelectors.perProject.size === 0) {
     console.error(
       `No \`moon run …\`/\`moon ci …\` invocation was found in ` +
         `${CI_WORKFLOW}. Either CI stopped running the workspace's targets, or the ` +
@@ -280,7 +345,7 @@ function main() {
   const { lines, failures } = evaluate({
     packageDirs,
     projects,
-    ciTargets,
+    ciSelectors,
     // `scripts/` holds the gate scripts — outside the packages glob the scan
     // above reads, so its project is required by name rather than discovered.
     extraRequiredRoots: ["scripts"],
