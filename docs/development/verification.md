@@ -116,3 +116,19 @@ graph got wrong: every consumed-but-external byte is a declared input
 precisely so a hash change forces a re-run. Remote caching is deliberately
 not configured; the repository is small enough that correctness of the graph
 is worth more than seconds the cache would save.
+
+## The performance record
+
+Every run of CI and Analysis is followed by the `Perf record` workflow
+(`perf.yml`), which parses the logs the run already produced into a
+machine-readable record: per-moon-task durations from the moon step's
+progress lines, per-vitest-file durations (unit and E2E split), and job wall
+times from the jobs API. The record rides as an artifact (`ci-perf-<run
+id>`) with a human summary in the workflow's step summary.
+
+The workflow is a `workflow_run` follower on purpose: it can never sit on
+the critical path it measures. It is not a gate and joins neither aggregate;
+removing it breaks no contract — it only blinds the next CI/CD optimization
+decision, which this repository makes on measurement, not intuition. A run
+whose logs cannot be parsed produces a record whose `gaps` array names what
+is missing, never an empty one.
