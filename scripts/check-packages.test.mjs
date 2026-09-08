@@ -14,7 +14,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { evaluate, parseCiTargets } from "./check-packages.mjs";
+import { evaluate, parseCiSelectors, parseCiTargets } from "./check-packages.mjs";
 
 test("reads the target list out of the workflow's moon run ...: invocation", () => {
   const workflow = `
@@ -96,7 +96,7 @@ test("an empty packages directory is declared rather than passed in silence", ()
   const { lines, failures } = evaluate({
     packageDirs: [],
     projects: [],
-    ciTargets: ["lint", "test"],
+    ciSelectors: { roster: ["lint", "test"], perProject: new Map() },
   });
   assert.deepEqual(failures, []);
   assert.equal(lines[0], "0 packages — declared empty");
@@ -109,7 +109,7 @@ test("a directory with no manifest fails instead of being skipped as invisible",
   const { failures } = evaluate({
     packageDirs: ["orphan"],
     projects: [],
-    ciTargets: ["lint", "test"],
+    ciSelectors: { roster: ["lint", "test"], perProject: new Map() },
   });
   assert.equal(failures.length, 1);
   assert.match(failures[0], /packages\/orphan/);
@@ -120,7 +120,7 @@ test("a project declaring none of the CI targets fails instead of being skipped"
   const { failures } = evaluate({
     packageDirs: ["noscript"],
     projects: [{ name: "noscript", root: "packages/noscript", targets: ["serve"] }],
-    ciTargets: ["lint", "test"],
+    ciSelectors: { roster: ["lint", "test"], perProject: new Map() },
   });
   assert.equal(failures.length, 1);
   assert.match(failures[0], /declares none of the targets CI runs/);
@@ -130,7 +130,7 @@ test("a project declaring every CI target passes", () => {
   const { lines, failures } = evaluate({
     packageDirs: ["graph"],
     projects: [{ name: "graph", root: "packages/graph", targets: ["lint", "test"] }],
-    ciTargets: ["lint", "test"],
+    ciSelectors: { roster: ["lint", "test"], perProject: new Map() },
   });
   assert.deepEqual(failures, []);
   assert.deepEqual(lines, ["ok   graph — lint, test"]);
@@ -143,7 +143,7 @@ test("a project declaring some CI targets passes, and the log names the gap", ()
   const { lines, failures } = evaluate({
     packageDirs: ["graph"],
     projects: [{ name: "graph", root: "packages/graph", targets: ["lint", "test"] }],
-    ciTargets: ["lint", "test", "build"],
+    ciSelectors: { roster: ["lint", "test", "build"], perProject: new Map() },
   });
   assert.deepEqual(failures, []);
   assert.deepEqual(lines, ["ok   graph — lint, test (no build)"]);
@@ -156,7 +156,7 @@ test("a project whose root is not the directory it sits in does not vouch for it
   const { failures } = evaluate({
     packageDirs: ["orphan"],
     projects: [{ name: "orphan", root: "tools/orphan", targets: ["lint", "test"] }],
-    ciTargets: ["lint", "test"],
+    ciSelectors: { roster: ["lint", "test"], perProject: new Map() },
   });
   assert.equal(failures.length, 1);
   assert.match(failures[0], /invisible|no manifest/);
@@ -169,7 +169,7 @@ test("every package directory is judged, not just the first", () => {
       { name: "good", root: "packages/good", targets: ["lint", "test"] },
       { name: "noscript", root: "packages/noscript", targets: ["serve"] },
     ],
-    ciTargets: ["lint", "test"],
+    ciSelectors: { roster: ["lint", "test"], perProject: new Map() },
   });
   assert.equal(failures.length, 2);
 });
@@ -193,7 +193,7 @@ test("an extra required root is judged like a package directory", () => {
   const { lines, failures } = evaluate({
     packageDirs: [],
     projects: [{ name: "gate-scripts", root: "scripts", targets: ["lint", "test"] }],
-    ciTargets: ["lint", "test"],
+    ciSelectors: { roster: ["lint", "test"], perProject: new Map() },
     extraRequiredRoots: ["scripts"],
   });
   assert.deepEqual(failures, []);
@@ -211,7 +211,7 @@ test("an extra required root no project claims fails instead of passing in silen
   const { failures } = evaluate({
     packageDirs: [],
     projects: [],
-    ciTargets: ["lint"],
+    ciSelectors: { roster: ["lint"], perProject: new Map() },
     extraRequiredRoots: ["scripts"],
   });
   assert.equal(failures.length, 1);
@@ -222,9 +222,91 @@ test("an extra required root declaring no CI target fails instead of being skipp
   const { failures } = evaluate({
     packageDirs: [],
     projects: [{ name: "gate-scripts", root: "scripts", targets: ["serve"] }],
-    ciTargets: ["lint"],
+    ciSelectors: { roster: ["lint"], perProject: new Map() },
     extraRequiredRoots: ["scripts"],
   });
   assert.equal(failures.length, 1);
   assert.match(failures[0], /declares none of the targets/);
+});
+
+// --- Per-project selectors (the shape a workflow that splits its targets
+// across jobs spells, since Moon has no "all projects except" selector) ---
+
+test("parseCiSelectors splits the every-project roster from per-project selectors", () => {
+  // `...:lint` is every project's; `archkeep:e2e` is one project's. The same
+  // line must feed both scopes, parsed together so the two cannot disagree
+  // about what a line says.
+  const workflow = `- run: moon ci archkeep:e2e archkeep:lint :test --base origin/main\n`;
+  assert.deepEqual(parseCiSelectors(workflow), {
+    roster: ["test"],
+    perProject: new Map([["archkeep", new Set(["e2e", "lint"])]]),
+  });
+});
+
+test("per-project selectors union with the roster, deduplicated", () => {
+  // A workflow may name a project's target both ways — `...:lint` for the
+  // roster and `gate-scripts:lint` for one job — and the project is held to
+  // the union once, not counted twice.
+  const { lines, failures } = evaluate({
+    packageDirs: ["graph"],
+    projects: [{ name: "graph", root: "packages/graph", targets: ["lint", "test"] }],
+    ciSelectors: {
+      roster: ["lint"],
+      perProject: new Map([["graph", new Set(["lint", "test"])]]),
+    },
+  });
+  assert.deepEqual(failures, []);
+  assert.deepEqual(lines, ["ok   graph — lint, test"]);
+});
+
+test("a project named by a per-project selector alone is covered by it", () => {
+  // The shape the split workflow produces: a project whose only coverage is
+  // the selectors of the job that owns it. Coverage through that job is real
+  // coverage — the gate must accept it as it accepts roster coverage.
+  const { lines, failures } = evaluate({
+    packageDirs: ["native"],
+    projects: [{ name: "native", root: "packages/native", targets: ["lint", "test"] }],
+    ciSelectors: {
+      roster: [],
+      perProject: new Map([["native", new Set(["lint", "test"])]]),
+    },
+  });
+  assert.deepEqual(failures, []);
+  assert.deepEqual(lines, ["ok   native — lint, test"]);
+});
+
+test("a project no selector names fails instead of running zero tasks in silence", () => {
+  // The silent direction this gate exists for, in the split-workflow shape:
+  // Moon has no "all projects except" selector, so a job roster spelled
+  // project by project can forget a project entirely — every target running
+  // zero times while the run still exits 0. Byte-for-byte identical to green,
+  // which is why this must fail here and not read as a clean tree.
+  const { failures } = evaluate({
+    packageDirs: ["forgotten"],
+    projects: [{ name: "forgotten", root: "packages/forgotten", targets: ["lint", "test"] }],
+    ciSelectors: {
+      roster: [],
+      perProject: new Map([["other", new Set(["lint", "test"])]]),
+    },
+  });
+  assert.equal(failures.length, 1);
+  assert.match(failures[0], /named in no `moon run`\/`moon ci`/);
+  assert.match(failures[0], /skips it in silence/);
+});
+
+test("the same project selector union keeps partial coverage visible", () => {
+  // Partial coverage through per-project selectors is reported like a
+  // roster partial: the ok line names what reaches the project. What the
+  // note names is a covered target the project does not declare — a target
+  // CI runs that skipped this project — which is the gap a reviewer reads.
+  const { lines, failures } = evaluate({
+    packageDirs: ["native"],
+    projects: [{ name: "native", root: "packages/native", targets: ["lint"] }],
+    ciSelectors: {
+      roster: [],
+      perProject: new Map([["native", new Set(["lint", "test"])]]),
+    },
+  });
+  assert.deepEqual(failures, []);
+  assert.deepEqual(lines, ["ok   native — lint (no test)"]);
 });

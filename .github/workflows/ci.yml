@@ -46,6 +46,13 @@ jobs:
       # than in a consumer's CI later. If the published floor ever moves,
       # `packages/*/package.json` is the contract to change first and this
       # matrix follows it — never the reverse.
+      # The IDENTICAL claim covers what a Node runtime can mean to: the JS
+      # packages and the rules crate, whose targets fuse cargo and node in
+      # one script, so both legs run all of each. The three native-toolchain
+      # SDK projects run once, in Verify (native toolchains) below — they
+      # ship no JavaScript, so a Node version has nothing to tell them, and
+      # the split is what leaves each leg's four cores to the JS suite
+      # instead of sharing them with cargo and the Go toolchain.
       matrix:
         node: [24, 22]
     steps:
@@ -157,7 +164,7 @@ jobs:
       # repository's history; the script's header names them.
       - run: node scripts/check-artifact-hygiene.mjs
 
-      # The Rust rule SDK's `lint` target runs `cargo clippy`, and the hosted
+      # The rules crate's `lint` target runs `cargo clippy`, and the hosted
       # runner's Rust toolchain ships without that component — measured against
       # the ubuntu-24.04 runner image's own software list, which names Cargo,
       # Rust, Rustdoc and Rustup (and, under packages, a standalone Rustfmt)
@@ -167,78 +174,36 @@ jobs:
       # standalone binary the image lists beside it.
       #
       # The wasm32 target is added for the same reason and buys something no
-      # component does: that SDK's `typecheck` target type-checks the crate a
-      # second time for `wasm32-unknown-unknown`, which is the only pass that
-      # reads the `#[cfg(target_arch = "wasm32")]` ABI exports every artifact
-      # runs on (`../../packages/archkeep-rule-sdk-rust/moon.yml` measures what
-      # the host pass misses). It installs a std for the target and compiles
-      # nothing extra of this repository's — the rebuild that
+      # component does: the rules crate's `typecheck` target type-checks the
+      # whole dependency crate a second time for `wasm32-unknown-unknown`,
+      # which is the only pass that reads the `#[cfg(target_arch = "wasm32")]`
+      # ABI exports every artifact runs on. It installs a std for the target
+      # and compiles nothing extra of this repository's — the rebuild that
       # `packages/archkeep-rule-sdk-rust/rebuild-example.sh` argues CI should
       # not do stays out.
-      - name: Add the Rust components and target the SDK's targets run
+      - name: Add the Rust components and target the rules crate's typecheck
         run: |
           rustup component add clippy rustfmt
           rustup target add wasm32-unknown-unknown
 
-      # [EXPERIMENT johnitvn/exp-cargo-cache — H1 of the CI/CD optimization
-      # program] The two Rust crates compile cold on every full-suite run:
-      # measured P50 across main pushes, the rust-family moon tasks cost
-      # ~96-125s per leg with an empty target dir on every runner. This step
-      # caches cargo's own build state (registry + target dirs) for both
-      # crates; cargo still content-fingerprints every input and Moon's
-      # affected selection is untouched, so no verdict is replayed — the
-      # graph still decides what runs, and `--locked` still decides what
-      # resolves. The moon tasks re-run in full; only cargo's recompile of
-      # unchanged crates is elided.
-      - name: Cache the Rust crates' cargo state
+      # [EXPERIMENT johnitvn/exp-native-split — H3-lite + H1 of the CI/CD
+      # optimization program] The legs keep this crate because its targets are
+      # part of the Node-matrix contract: archkeep-rules ships JavaScript
+      # (engines.node >= 22, held by the 22 leg) and each of its targets fuses
+      # cargo and Node in one script, so it cannot move to the native job
+      # without un-verifying that floor. Its cargo half compiles cold on every
+      # run otherwise — the rust-family moon tasks measured ~96-125s per leg on
+      # main pushes — so cargo's own build state (registry + target dirs) is
+      # cached for it here; the SDK crate it path-depends on compiles into THIS
+      # workspace's target dir and rides the same entry. cargo still
+      # content-fingerprints every input and Moon's affected selection is
+      # untouched, so no verdict is replayed — the graph still decides what
+      # runs, and --locked still decides what resolves. The moon tasks re-run
+      # in full; only cargo's recompile of unchanged crates is elided.
+      - name: Cache the rules crate's cargo state
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: |
-            packages/archkeep-rule-sdk-rust
-            packages/archkeep-rules
-
-      # The Python SDK's `lint` target runs Ruff, and the version is pinned
-      # here rather than taken from the runner image's preinstalled copy so a
-      # new Ruff release cannot rewrite the verdicts on its own schedule.
-      # `packages/archkeep-rule-sdk-python/ruff.toml` argues the rule roster.
-      - name: Install the pinned Ruff the Python SDK's lint target runs
-        uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
-        with:
-          version: "0.15.16"
-
-      # The Go SDK's targets run on a pinned toolchain instead of whichever
-      # Go the runner image ships this month — the same determinism the
-      # Node matrix buys, and `go-version-file` keeps the floor owned by the
-      # module that requires it.
-      - name: Pin the Go toolchain the Go SDK's targets run
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: packages/archkeep-rule-sdk-go/go.mod
-
-      # golangci-lint is downloaded and checksum-pinned rather than taken from
-      # the runner image (whose copy moves underneath every job) and rather
-      # than an installer action (a second moving piece when the release
-      # tarball's digest is already the pin). The digest was read off the
-      # v2.12.2 release artifact itself. The `lint` target in
-      # `packages/archkeep-rule-sdk-go/moon.yml` argues the linter roster and
-      # why `go vet` is not run beside it.
-      - name: Install the pinned golangci-lint the Go SDK's lint target runs
-        run: |
-          set -euo pipefail
-          dir="$RUNNER_TEMP/golangci-lint"
-          mkdir -p "$dir"
-          curl --silent --show-error --fail --location \
-            --output "$dir/golangci-lint.tar.gz" \
-            "https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz"
-          echo "8df580d2670fed8fa984aac0507099af8df275e665215f5c7a2ae3943893a553  $dir/golangci-lint.tar.gz" | sha256sum --check --strict
-          tar -xzf "$dir/golangci-lint.tar.gz" -C "$dir"
-          # /usr/local/bin, not $GITHUB_PATH: Moon composes a task's PATH
-          # from its toolchain dirs and drops the runner's per-step PATH
-          # additions (measured: the first run failed with "golangci-lint:
-          # command not found" inside the task this install had put on the
-          # step's PATH). A system location is on every PATH a task can
-          # build.
-          sudo mv "$dir/golangci-lint-2.12.2-linux-amd64/golangci-lint" /usr/local/bin/golangci-lint
+          workspaces: packages/archkeep-rules
 
       # The old line here was `moon run --force`, argued as "skips Moon's VCS
       # affected detection (which needs full git history, unavailable in the
@@ -299,9 +264,9 @@ jobs:
             case "$MOON_BASE" in
               refs/heads/*) MOON_BASE="origin/${MOON_BASE#refs/heads/}" ;;
             esac
-            pnpm exec moon ci --base="$MOON_BASE" ...:lint ...:test ...:typecheck
+            pnpm exec moon ci --base="$MOON_BASE" archkeep:lint archkeep:test archkeep:typecheck archkeep-mcp:lint archkeep-mcp:test archkeep-mcp:typecheck archkeep-vscode:lint archkeep-vscode:test archkeep-vscode:typecheck archkeep-rule-sdk-ts:lint archkeep-rule-sdk-ts:test archkeep-rule-sdk-ts:typecheck archkeep-rules:lint archkeep-rules:test archkeep-rules:typecheck gate-scripts:lint gate-scripts:test gate-scripts:typecheck
           else
-            pnpm exec moon run ...:lint ...:test ...:typecheck
+            pnpm exec moon run archkeep:lint archkeep:test archkeep:typecheck archkeep-mcp:lint archkeep-mcp:test archkeep-mcp:typecheck archkeep-vscode:lint archkeep-vscode:test archkeep-vscode:typecheck archkeep-rule-sdk-ts:lint archkeep-rule-sdk-ts:test archkeep-rule-sdk-ts:typecheck archkeep-rules:lint archkeep-rules:test archkeep-rules:typecheck gate-scripts:lint gate-scripts:test gate-scripts:typecheck
           fi
 
       # The tool, run on the tree that ships it. Everything above proves the
@@ -457,6 +422,136 @@ jobs:
             pnpm exec moon run archkeep:integration
           fi
 
+  verify-native:
+    name: Verify (native toolchains)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # The three native-toolchain SDK projects — archkeep-rule-sdk-rust,
+      # archkeep-rule-sdk-go and archkeep-rule-sdk-python — run their targets
+      # in this job instead of inside the two Node legs. The split is
+      # [EXPERIMENT johnitvn/exp-native-split — H3-lite of the CI/CD
+      # optimization program], measured against a same-day control before it
+      # earns its keep; the numbers live in the pull request that lands it.
+      #
+      # Why these three and not archkeep-rules: the SDKs ship no JavaScript —
+      # none has a package.json — so their targets have no Node-runtime
+      # behavior to verify, and Node here is only what pnpm and Moon need
+      # (the workspace dev floor, .node-version's 24). The rules crate ships
+      # JS beside its Rust (engines.node >= 22) and fuses cargo and node in
+      # one script per target, so it stays in the legs where the 22 leg can
+      # still hold that floor.
+      #
+      # Why the rosters are spelled project by project: Moon has no
+      # "all projects except" selector, so once the legs stop naming `...:lint`
+      # for everyone, each job must name its own. The price of that spelling
+      # is a new silent state — a project named in neither job's list runs
+      # zero tasks and still exits 0 — and scripts/check-packages.mjs is the
+      # gate that turns it red: it reads every project-qualified selector out
+      # of this workflow and fails a project no invocation names.
+      #
+      # The three SDKs install their pinned toolchains below
+      # with the same pins the legs carried before the split, and the Rust
+      # SDK gets the cargo cache the legs no longer need for it: this job
+      # runs those compiles once per run instead of twice, which is the
+      # saving being measured.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The Rust SDK's `lint` target runs `cargo clippy` and `cargo fmt`, and
+      # its `typecheck` target runs a second pass for wasm32-unknown-unknown —
+      # the only pass that reads the `#[cfg(target_arch = "wasm32")]` ABI
+      # exports every artifact runs on. The hosted runner's toolchain ships
+      # without clippy (the legs' copy of this step argues it against the
+      # runner image's own software list); the target std installs without
+      # compiling anything extra of this repository's.
+      - name: Add the Rust components and target the SDK's typecheck
+        run: |
+          rustup component add clippy rustfmt
+          rustup target add wasm32-unknown-unknown
+
+      # Same cargo state cache as the legs' rules-crate step, pointed at the
+      # SDK workspace: a separate entry keyed to this directory, so the two
+      # jobs never fight over one key. Moon's affected selection and cargo's
+      # content fingerprinting are untouched — the cache only elides cargo's
+      # recompile of unchanged crates.
+      - name: Cache the Rust SDK's cargo state
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: packages/archkeep-rule-sdk-rust
+
+      # The Python SDK's `lint` target runs Ruff, and the version is pinned
+      # here rather than taken from the runner image's preinstalled copy so a
+      # new Ruff release cannot rewrite the verdicts on its own schedule.
+      # `packages/archkeep-rule-sdk-python/ruff.toml` argues the rule roster.
+      - name: Install the pinned Ruff the Python SDK's lint target runs
+        uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
+        with:
+          version: "0.15.16"
+
+      # The Go SDK's targets run on a pinned toolchain instead of whichever
+      # Go the runner image ships this month — the same determinism the
+      # Node matrix buys, and `go-version-file` keeps the floor owned by the
+      # module that requires it.
+      - name: Pin the Go toolchain the Go SDK's targets run
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: packages/archkeep-rule-sdk-go/go.mod
+
+      # golangci-lint is downloaded and checksum-pinned rather than taken from
+      # the runner image (whose copy moves underneath every job) and rather
+      # than an installer action (a second moving piece when the release
+      # tarball's digest is already the pin). The digest was read off the
+      # v2.12.2 release artifact itself. The `lint` target in
+      # `packages/archkeep-rule-sdk-go/moon.yml` argues the linter roster and
+      # why `go vet` is not run beside it.
+      - name: Install the pinned golangci-lint the Go SDK's lint target runs
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/golangci-lint"
+          mkdir -p "$dir"
+          curl --silent --show-error --fail --location \
+            --output "$dir/golangci-lint.tar.gz" \
+            "https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz"
+          echo "8df580d2670fed8fa984aac0507099af8df275e665215f5c7a2ae3943893a553  $dir/golangci-lint.tar.gz" | sha256sum --check --strict
+          tar -xzf "$dir/golangci-lint.tar.gz" -C "$dir"
+          # /usr/local/bin, not $GITHUB_PATH: Moon composes a task's PATH
+          # from its toolchain dirs and drops the runner's per-step PATH
+          # additions (measured: the first run failed with "golangci-lint:
+          # command not found" inside the task this install had put on the
+          # step's PATH). A system location is on every PATH a task can
+          # build.
+          sudo mv "$dir/golangci-lint-2.12.2-linux-amd64/golangci-lint" /usr/local/bin/golangci-lint
+
+      # The same derivation as verify-core's moon step above — same base
+      # SHA, same merge-queue spelling swap, same affected semantics. What
+      # differs is the roster: this job names the three native SDK projects,
+      # spelled out because Moon has no exclusion selector (the comment at
+      # the top of the job owns the argument).
+      - name: Run the native targets the change can have moved
+        env:
+          MOON_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+        run: |
+          if [ -n "$MOON_BASE" ]; then
+            case "$MOON_BASE" in
+              refs/heads/*) MOON_BASE="origin/${MOON_BASE#refs/heads/}" ;;
+            esac
+            pnpm exec moon ci --base="$MOON_BASE" archkeep-rule-sdk-rust:lint archkeep-rule-sdk-rust:test archkeep-rule-sdk-rust:typecheck archkeep-rule-sdk-go:lint archkeep-rule-sdk-go:test archkeep-rule-sdk-go:typecheck archkeep-rule-sdk-python:lint archkeep-rule-sdk-python:test
+          else
+            pnpm exec moon run archkeep-rule-sdk-rust:lint archkeep-rule-sdk-rust:test archkeep-rule-sdk-rust:typecheck archkeep-rule-sdk-go:lint archkeep-rule-sdk-go:test archkeep-rule-sdk-go:typecheck archkeep-rule-sdk-python:lint archkeep-rule-sdk-python:test
+          fi
+
   verify-e2e:
     name: Verify (E2E ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
@@ -552,7 +647,7 @@ jobs:
     # Visible, and enforced: scripts/ci-drift-pins.test.mjs reads this file and
     # fails when a job sits outside `needs`, or when `needs` names a job that
     # does not exist.
-    needs: [verify-core, verify-e2e]
+    needs: [verify-core, verify-e2e, verify-native]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -118,15 +118,20 @@ above. Locally, the full form:
 moon run ...:lint ...:test ...:typecheck
 ```
 
-On a pull request, CI runs the affected form of the same roster instead, and
-Moon decides what a change can have moved — through each task's declared
-`inputs` and the projects' `dependsOn` graph. A one-package change runs that
-package; a dependency change runs its consumers; an ESLint-config change runs
-every lint that reads it and no typecheck; a documentation-only change runs no
-Moon target at all, and says so in the log:
+On a pull request, CI runs the affected form of the same roster instead, split
+across the two jobs that own it, and Moon decides what a change can have moved —
+through each task's declared `inputs` and the projects' `dependsOn` graph. A
+one-package change runs that package; a dependency change runs its consumers; an
+ESLint-config change runs every lint that reads it and no typecheck; a
+documentation-only change runs no Moon target at all, and says so in the log.
+Moon has no "all projects except" selector, so each job spells its own roster —
+`verify-core`'s legs carry the JS packages plus the rules crate, and
+`verify-native` carries the three native-toolchain SDKs once per run instead of
+once per Node leg:
 
 ```bash
-moon ci ...:lint ...:test ...:typecheck --base="$MOON_BASE"
+moon ci archkeep:lint archkeep:test archkeep:typecheck archkeep-mcp:lint archkeep-mcp:test archkeep-mcp:typecheck archkeep-vscode:lint archkeep-vscode:test archkeep-vscode:typecheck archkeep-rule-sdk-ts:lint archkeep-rule-sdk-ts:test archkeep-rule-sdk-ts:typecheck archkeep-rules:lint archkeep-rules:test archkeep-rules:typecheck gate-scripts:lint gate-scripts:test gate-scripts:typecheck --base="$MOON_BASE"
+moon ci archkeep-rule-sdk-rust:lint archkeep-rule-sdk-rust:test archkeep-rule-sdk-rust:typecheck archkeep-rule-sdk-go:lint archkeep-rule-sdk-go:test archkeep-rule-sdk-go:typecheck archkeep-rule-sdk-python:lint archkeep-rule-sdk-python:test --base="$MOON_BASE"
 ```
 
 **This one needs more than Node.** Four of the eight packages are custom-rule
