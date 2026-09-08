@@ -103,6 +103,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parsePeerFloorMajor } from "./peer-floor.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -222,6 +223,8 @@ function fixtureFiles(packageName, peers, packageManager) {
     "libs/app/app.go": 'package app\n\nimport "example.test/core"\n\nvar _ = core.Name\n',
   };
 }
+
+/**
 
 /**
  * The same two-project shape as `fixtureFiles`, described as a native
@@ -1284,6 +1287,96 @@ try {
   //    law. Last on this consumer because it re-points `nx.json` at the pack
   //    and reuses the tree check 7 already made violating.
   verifyPresetSelectedCheck(consumer, "Nx path", packageName);
+
+  // --- the Nx-floor consumer: the same fixture again, with `nx` resolved to
+  // the OLDEST major `peerDependencies.nx` permits. The range above installs
+  // the newest Nx every run, so "supports >=21" is only ever half-tested:
+  // the claim's other half — that the plugin still loads, still draws the
+  // graph edge, and still returns the right verdicts on major 21 — has no
+  // witness here unless one is installed on purpose. The fixture re-derives
+  // the floor from the manifest (parsePeerFloorMajor) rather than holding a
+  // copy, so the lane follows the claim instead of a second definition of
+  // it; the exact version is resolved from the registry so the fixture
+  // installs what a floor-pinned consumer would get today.
+  //
+  // The checks are the plugin's core contract subset — load, graph edge,
+  // clean verdict, violating verdict — not the whole roster: the preset and
+  // custom-rule lanes exercise the tool's own options and are unchanged by
+  // which Nx runs them, so duplicating them here would double the lane's
+  // cost for no added claim. The floor-vs-newest pair is the point.
+  const nxFloorMajor = parsePeerFloorMajor(peers.nx ?? "");
+  check(
+    "the nx peer range still claims a floor — 'minimum supported' stays testable",
+    nxFloorMajor !== null,
+    `peerDependencies.nx: ${peers.nx ?? "(absent)"} → parsed floor: ${nxFloorMajor ?? "none"}`,
+  );
+  if (nxFloorMajor !== null) {
+    const viewed = run("npm", ["view", `nx@${nxFloorMajor}`, "version", "--json"], workdir);
+    let floorVersion = null;
+    if (viewed.status === 0) {
+      try {
+        // A major-range query answers with an array; its last entry is the
+        // newest patch of the oldest supported line.
+        const versions = JSON.parse(viewed.stdout ?? "[]");
+        floorVersion = Array.isArray(versions) ? versions.at(-1) : versions;
+      } catch {
+        // Falls through to the check below.
+      }
+    }
+    check(
+      `the registry resolves nx@${nxFloorMajor} — the floor lane can install the claim it tests`,
+      typeof floorVersion === "string" && floorVersion.length > 0,
+      `npm view exited ${viewed.status}: ${(viewed.stderr ?? viewed.stdout ?? "").slice(0, 400)}`,
+    );
+    if (typeof floorVersion === "string" && floorVersion.length > 0) {
+      note(`Nx floor lane: nx@${floorVersion} (peer range ${peers.nx})`);
+      const consumerNxFloor = join(workdir, "consumer-nx-floor");
+      mkdirSync(consumerNxFloor);
+      const filesFloor = fixtureFiles(packageName, { ...peers, nx: floorVersion }, packageManager);
+      filesFloor["package.json"] = filesFloor["package.json"].replace('"*"', tarballRef);
+      write(consumerNxFloor, filesFloor);
+      writeFileSync(
+        join(consumerNxFloor, "pnpm-workspace.yaml"),
+        "packages: []\nallowBuilds:\n  lefthook: false\n  nx: false\n",
+        "utf8",
+      );
+      commitTree(consumerNxFloor, "the clean tree", true);
+      const installedFloor = run("pnpm", ["install", "--no-frozen-lockfile"], consumerNxFloor);
+      if (installedFloor.status !== 0) {
+        console.error(installedFloor.stdout ?? "");
+        console.error(installedFloor.stderr ?? "");
+        console.error("the packed tarball could not be installed into the Nx-floor workspace.");
+        process.exit(1);
+      }
+      note(`installed into ${consumerNxFloor}`);
+
+      const floorGraphFile = join(workdir, "graph-floor.json");
+      const floorGraphed = run(
+        "pnpm",
+        ["exec", "nx", "graph", `--file=${floorGraphFile}`],
+        consumerNxFloor,
+      );
+      let floorEdges = "graph was not produced";
+      let floorDrewEdge = false;
+      if (floorGraphed.status === 0) {
+        const floorGraph = JSON.parse(readFileSync(floorGraphFile, "utf8"));
+        const floorDeps = floorGraph.graph?.dependencies ?? {};
+        floorEdges = JSON.stringify(floorDeps);
+        floorDrewEdge = (floorDeps.app ?? []).some((edge) => edge.target === "core");
+      } else {
+        floorEdges = `${floorGraphed.stdout ?? ""}\n${floorGraphed.stderr ?? ""}`;
+      }
+      check(
+        `Nx ${floorVersion} draws the Go edge app -> core — the minimum supported major runs the plugin`,
+        floorDrewEdge,
+        `dependencies: ${floorEdges}`,
+      );
+      verifyCleanAndLspChecks(consumerNxFloor, "Nx floor path", packageName);
+      verifyViolatingCheck(consumerNxFloor, "Nx floor path", () =>
+        run("pnpm", ["exec", "nx", "reset"], consumerNxFloor),
+      );
+    }
+  }
 
   // --- the native consumer: same physical shape, `archkeep.json` instead of
   // `nx.json`, no `nx` requested at all. See this file's header for why this
