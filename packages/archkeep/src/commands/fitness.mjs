@@ -122,8 +122,8 @@ export function declaresFitness(config) {
  * exit over a run the fold could not read. A verdict outside the four states
  * is refused as a no-verdict whose single reason names it (`refused`), never
  * folded past. The literals stay hand-rolled per site by decision — the
- * carrier folds are the pinned baseline INV-2 names, not a table to be
- * converged (`docs/architecture/refactor/AUTHORITY-MAP.md`).
+ * carrier folds are the pinned baseline, not a table to be
+ * converged (`docs/reference/exit-codes.md`'s fold-site statement).
  *
  * `overall.decisions` is validated for the same reason the delta fold
  * validates buckets the fold itself does not count first: `result.functions`

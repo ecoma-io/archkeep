@@ -57,7 +57,7 @@
  *      declared constraint. `check`, `fitness`, `delta` and `change` are the
  *      verbs whose verdicts carry this code, plus `rules verify` — the
  *      artifact-integrity fold, a bounded verification surface, not a fifth
- *      architecture carrier (PD-8; `docs/reference/exit-codes.md` owns the
+ *      architecture carrier (`docs/reference/exit-codes.md` owns the
  *      roster). Every other verb only ever reads.
  *   2  usage error — unknown command, unknown flag, missing argument, path
  *      outside the tree
@@ -105,7 +105,8 @@ import { containmentViolation } from "./src/containment.mjs";
 import { UsageError } from "./src/errors.mjs";
 // Verb imports route through the capability facades: each
 // `<word>-capability.mjs` module is its word's explicit verb roster — pure
-// re-exports, zero judgment (PD-18, docs/architecture/refactor/DECISIONS.md).
+// re-exports, zero judgment. The vocabulary's roster lives in
+// docs/concepts/architecture.md's "The 24 commands".
 // Non-verb helper modules keep their direct imports.
 import {
   discoverCommand,
@@ -1331,7 +1332,7 @@ async function runWaivers(options, { cwd, env }) {
  * (D-09). `check` folds the same `fail` into its own exit 1 by presence, so the
  * two faces agree; the verbs whose verdict carries that code are `check`,
  * `fitness`, `delta` and `change`, plus the `rules verify` artifact-integrity
- * fold (PD-8; `docs/reference/exit-codes.md` owns the roster).
+ * fold (`docs/reference/exit-codes.md` owns the roster).
  *
  * @param {{format: string, output: string|null, config: string|null, paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext

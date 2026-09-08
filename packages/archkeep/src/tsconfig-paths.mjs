@@ -114,13 +114,12 @@ function probeDirectory(target, base, root) {
  * need no filesystem: the table and its base come from the resolver's own
  * parsed context, and existence arrives as a predicate.
  *
- * One of the FOUR finding families — PD-13 (2026-09-06) outcome (c): no
+ * One of the FOUR finding families: no
  * Finding supertype exists, and the relationship pin lives on
- * `./rules/index.mjs`'s `violationOf` header. These findings stay this
+ * `./rules/index.mjs`'s `violationOf` header (stated in
+ * `../../../docs/concepts/evidence.md`'s "Four finding families"). These findings stay this
  * family's own shape and fold into the one verdict lane as count keys into
- * `verdictFor` (`./verdict.mjs`). The canonical statement is the
- * "Finding — the unowned concept" section of
- * `../../../docs/architecture/refactor/SEMANTIC-MODEL.md`.
+ * `verdictFor` (`./verdict.mjs`).
  *
  * @param {{ paths: Record<string, unknown>,
  *   base: string,

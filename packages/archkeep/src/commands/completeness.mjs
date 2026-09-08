@@ -33,8 +33,8 @@
  * refusal contract (`./coverage-verdict.mjs`): `coverageVerdict` refuses
  * `no-verdict` (exit 3), and no status here is derived from it or folds
  * into it. Two models of "did we see everything", owned by different
- * waves — register R1 in `docs/architecture/refactor/SEMANTIC-MODEL.md`
- * keeps them separate.
+ * waves — register R1 in `../../../../docs/concepts/evidence.md`'s "Register
+ * R1" keeps them separate.
  *
  * @module
  */

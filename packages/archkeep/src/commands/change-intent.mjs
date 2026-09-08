@@ -10,8 +10,8 @@
  * as the reviewable answer to "what did this change do to the architecture?".
  *
  * Which "intent" this is: one of four unrelated surfaces sharing the word —
- * PD-13 outcome (c), four surfaces, never one type
- * (`../../../../docs/architecture/refactor/DECISIONS.md`). This module is
+ * four surfaces, never one type
+ * (`../../../../docs/concepts/architecture.md`, "The 24 commands"). This module is
  * the declared-change grammar: one change's expected architectural
  * consequences, verified by the `change` command against the actual delta.
  * The other three: the workspace-declared law (`../architecture-intent/` —

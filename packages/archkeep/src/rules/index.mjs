@@ -425,20 +425,18 @@ export function exemptResolvedFile(site, exemptedFiles) {
 }
 
 /**
- * Builds one `Violation` — the rules lane's canonical violation record (PD-13
- * (2026-09-06) in `../../../../docs/architecture/refactor/DECISIONS.md`: the
- * Violation concept ruled outcome (a), this constructor its one home).
+ * Builds one `Violation` — the rules lane's canonical violation record (the
+ * relationship pin below, stated in `docs/concepts/evidence.md`).
  *
  * This is also one of the FOUR finding families — `violationOf` here,
  * `judgeEdge` (`./edge-constraints.mjs`), `compareGoWork` (`../go-work.mjs`)
  * and `judgeTsconfigPaths` (`../tsconfig-paths.mjs`) — and no Finding
- * supertype exists (PD-13 outcome (c)): what binds the four is the
- * relationship pin. Each family folds into the one verdict lane as count
- * keys into `verdictFor` (`../verdict.mjs`), and `../commands/check.mjs`'s
- * markdown fold is the documented seam where `judgeEdge`'s verdicts are
- * reshaped into the exact record this function builds. The canonical
- * statement is the "Finding — the unowned concept" section of
- * `../../../../docs/architecture/refactor/SEMANTIC-MODEL.md`.
+ * supertype exists: what binds the four is the relationship pin, stated in
+ * `../../../../docs/concepts/evidence.md`'s "Four finding families". Each
+ * family folds into the one verdict lane as count keys into `verdictFor`
+ * (`../verdict.mjs`), and `../commands/check.mjs`'s markdown fold is the
+ * documented seam where `judgeEdge`'s verdicts are reshaped into the exact
+ * record this function builds.
  */
 function violationOf(site, sourceProject, targetProject, messageId, data = {}, constraint = null) {
   return {

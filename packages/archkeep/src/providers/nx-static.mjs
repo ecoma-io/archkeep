@@ -2,10 +2,10 @@
  * The Nx provider's static acquisition — the graph built from the tree's own
  * tracked `project.json` files, with no Nx process asked.
  *
- * This is the acquisition `../lsp/workspace-index.mjs` composed inline until
- * the Phase 7 collapse: a language server is spawned by an editor, in a
- * directory, with nothing else — no `nx` binary to resolve, and a spawn per
- * index build would put `nx graph` on every file save. So beside
+ * This is the acquisition `../lsp/workspace-index.mjs` composes: a language
+ * server is spawned by an editor, in a directory, with nothing else — no `nx`
+ * binary to resolve, and a spawn per index build would put `nx graph` on
+ * every file save. So beside
  * `./nx.mjs`'s `readProjectGraph` (which asks Nx itself and is what
  * `../../cli.mjs`'s `check` runs) this module builds the same `{nodes,
  * dependencies}`-shaped starting point — here just the nodes; the caller

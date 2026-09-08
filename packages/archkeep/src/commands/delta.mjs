@@ -479,8 +479,8 @@ function deltaFoldInputProblem(classification, custom) {
  * The input latch runs first: a bucket the fold cannot read is refused as a
  * no-verdict whose single reason names it (`refused`), never folded past as a
  * silently-empty count. The literals stay hand-rolled per site by decision —
- * the carrier folds are the pinned baseline INV-2 names, not a table to be
- * converged (`docs/architecture/refactor/AUTHORITY-MAP.md`).
+ * the carrier folds are the pinned baseline, not a table to be converged
+ * (`docs/reference/exit-codes.md`'s fold-site statement).
  *
  * Pure and exported for the fold's own tests; `deltaCommand` is its only
  * production caller.

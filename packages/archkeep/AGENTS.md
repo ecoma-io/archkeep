@@ -123,8 +123,8 @@ graph --file=` for it — the only place the package resolves and spawns the
   `nativeProvider.discover`/`buildGraph` (a model that will not load becomes
   a named, self-clearing index gap, never a silently empty index), on an Nx
   tree it composes `src/providers/nx-static.mjs`'s `readStaticProjectGraph`
-  — the static acquisition the index used to hold inline is the provider
-  layer's since the Phase 7 collapse, so discovery is a provider's on every
+  — the static acquisition the index used to hold inline now lives in the
+  provider layer, so discovery is a provider's on every
   shape — and in both shapes `nodeTypeOf` and `buildDependencies` come from
   `src/providers/native/`, not defined a second time. `lsp.mjs` itself holds
   only the stdio wiring.

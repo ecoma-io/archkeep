@@ -1,6 +1,6 @@
 /**
- * LSP golden-response corpus (Phase 7, GAP-E) — the language-server refactor's
- * differential.
+ * LSP golden-response corpus — the language server's differential against
+ * what an editor actually receives.
  *
  * The CLI corpus beside this file records what the CLI prints; this one
  * records what the server puts on the wire, captured from a REAL spawned
@@ -11,13 +11,13 @@
  * changes what an editor would see cannot land silently: it lands as a
  * golden diff that has to be re-blessed on the pull request.
  *
- * The corpus exists to be recorded BEFORE `src/lsp/workspace-index.mjs`'s
- * private Nx discovery collapses into the provider seam (MIGRATION-PLAN Phase
- * 7), and its load-bearing case is the invariant's silent direction: a
- * refactor that starts publishing `[]` where findings exist — or anything at
- * all where `[]` is the claim — differs from these bytes. Byte-for-byte
- * identical to a clean workspace is exactly what an empty result must never
- * be mistaken for.
+ * The fixture is an Nx-shaped tree, so the corpus exercises the index's
+ * static acquisition path (`../lsp/workspace-index.mjs` composing
+ * `../providers/nx-static.mjs`) end to end, and its load-bearing case is the
+ * invariant's silent direction: a refactor that starts publishing `[]` where
+ * findings exist — or anything at all where `[]` is the claim — differs from
+ * these bytes. Byte-for-byte identical to a clean workspace is exactly what
+ * an empty result must never be mistaken for.
  *
  * ## Validation levels
  *
@@ -68,10 +68,10 @@ const GOLDEN_DIR = fileURLToPath(new URL("./goldens-lsp/", import.meta.url));
 const UPDATING = process.env.ARCHKEEP_UPDATE_GOLDENS === "1";
 
 // ---------------------------------------------------------------------------
-// Fixture — an Nx-shaped tree, the shape whose private acquisition path the
-// Phase 7 collapse replaces. The vocabulary is invented here for the same
-// reason it is invented in every suite: this tool runs in workspaces it has
-// never seen (`../../AGENTS.md`).
+// Fixture — an Nx-shaped tree, the shape whose static acquisition path the
+// index composes (`../providers/nx-static.mjs`). The vocabulary is invented
+// here for the same reason it is invented in every suite: this tool runs in
+// workspaces it has never seen (`../../AGENTS.md`).
 // ---------------------------------------------------------------------------
 
 /** The boundary law the fixture is judged by, as a source file. */

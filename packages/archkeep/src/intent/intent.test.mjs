@@ -6,8 +6,8 @@
  * longer holds, regardless of which implementation detail changed.
  *
  * Which "intent" this is: one of four unrelated surfaces sharing the word —
- * PD-13 outcome (c), four surfaces, never one type
- * (`../../../../docs/architecture/refactor/DECISIONS.md`). This directory is
+ * four surfaces, never one type
+ * (`../../../../docs/concepts/architecture.md`, "The 24 commands"). This directory is
  * the v1.0 evidence-manifest registry: `intent-manifest.json` declares every
  * v1.0 intent with content-addressed evidence, this file is its executable
  * gate, and Contract K's determinism guard beside it
