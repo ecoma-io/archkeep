@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.27.0](https://github.com/ecoma-io/archkeep/compare/v0.26.0...v0.27.0) (2026-09-08)
+
+
+### Features
+
+* **archkeep:** freeze the 1.0 semantic contract and carry the debt verdict's judged marker ([#800](https://github.com/ecoma-io/archkeep/issues/800)) ([8266c53](https://github.com/ecoma-io/archkeep/commit/8266c532ea1b64c087ce01c62fbdd559f4123f8d))
+
+
+### Documentation
+
+* **archkeep:** close the refactor control plane — delete refactor docs, migrate durable knowledge ([#796](https://github.com/ecoma-io/archkeep/issues/796)) ([5b40477](https://github.com/ecoma-io/archkeep/commit/5b40477c63897b923cb728b811be5a694d0a0ea6))
+* refine README.md ([#802](https://github.com/ecoma-io/archkeep/issues/802)) ([9e1e311](https://github.com/ecoma-io/archkeep/commit/9e1e311b253b5c127a38d9f4b117d40aa7aec527))
+
 ## [0.26.0](https://github.com/ecoma-io/archkeep/compare/v0.25.0...v0.26.0) (2026-09-08)
 
 
