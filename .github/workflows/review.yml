@@ -1,0 +1,101 @@
+name: Review
+
+# Dogfood: the organisation's `review` action (ecoma-io/action-agents) reviews
+# this repository's own pull requests — the enrollment recorded in that
+# repository's docs/dogfood.md at v0.11.2, in the rollout's dry-run posture:
+# the run artifact is the whole output and no comment is written to any pull
+# request. The flip to live is one line, taken only after the first-run
+# checklist has passed twice.
+#
+# The ref is the released exact tag, not `@main` and not the floating `@v0.11`:
+# the operator must know which bytes run before any of them do, and adopting a
+# later fix is a deliberate re-pin, never an accident of a moving tag
+# (action-agents docs/dogfood.md, "Refs and secrets" and "Incident rules").
+#
+# KNOWN CONFLICT, left standing on purpose: `workflow-action-not-pinned-to-sha`
+# (.github/semgrep/workflows.yaml) requires every `uses:` to carry a full
+# 40-hex SHA, so this tag pin is reported by the Semgrep job — and by CodeQL's
+# `actions` queries — and analysis-gate runs red while the file stands. The
+# conflict between the rollout's exact-tag policy and this repository's
+# supply-chain rule is a maintainer decision; weakening either silently is
+# not an option. The pinning test this file's `pnpm test` lane runs holds the
+# ref as a reasoned exemption in `scripts/ci-drift-pins.test.mjs`
+# (PINNED_REF_EXEMPTIONS); the Semgrep half of the conflict is deliberately
+# untouched.
+#
+# No policy file: review runs on built-in defaults (strictness medium,
+# strategy standard, language en, maxDiffLines 5000, no ignore), and an absent
+# file is policy-empty for review, not a misconfiguration. The first question
+# is whether the default reviewer's findings are worth reading on this
+# repository, unconfounded by local rubric.
+#
+# `security-events: write` and the SARIF upload are deliberately absent: the
+# Code Scanning surface is action-agents' own merge-enforcement story, and a
+# target that later wants alerts in its Security tab adds the upload step and
+# that grant together, never either alone.
+
+on:
+  pull_request:
+    # No `edited`: a re-worded description does not change the code under
+    # review. No `workflow_dispatch`: without a pull request there is nothing
+    # to review.
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# The workflow-level floor grants nothing; the review job below restates its
+# reads and holds every write — a job-level `permissions` block REPLACES this
+# one rather than merging with it, so a job added later inherits read-only
+# instead of silently widening.
+permissions: read-all
+
+# One review per pull request: a rapid push sequence replaces the queued
+# review rather than stacking reviews of stale heads.
+concurrency:
+  group: review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The action's own needs: the working tree is the review's subject, and
+    # the one write is the marker comment — a surface this workflow holds
+    # closed until the dry-run flip. One grant narrower than any workflow that
+    # carries the SARIF upload.
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # Unlike triage, whose reads all go through the API, review's subject IS
+      # the working tree — this checkout is the snapshot the action reads. No
+      # credential left in the workspace the checkout fills with pull-request
+      # content: under `pull_request` that content is untrusted input, and a
+      # fork's pull request gets neither secrets nor a write token.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - id: review
+        uses: ecoma-io/action-agents/review@v0.11.2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          api-url: ${{ secrets.ECOMA_LLM_BASE_URL }}
+          api-key: ${{ secrets.ECOMA_LLM_API_KEY }}
+          model: review
+          dry-run: "true"
+
+      # The path is the exact file the run declared via its `artifact-file`
+      # output — set on green runs and on the red boundary's record alike, and
+      # empty on terminals that declare none, which the `if` covers both ways.
+      # The record directory is hidden by design, so `include-hidden-files:
+      # true` is load-bearing: upload-artifact prunes hidden files by default.
+      # `if-no-files-found: warn` keeps a declared write that lands nowhere
+      # loud instead of green over nothing.
+      - name: Upload the run artifact
+        if: always() && steps.review.outputs.artifact-file != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: review-run-artifact
+          path: ${{ steps.review.outputs.artifact-file }}
+          include-hidden-files: true
+          if-no-files-found: warn

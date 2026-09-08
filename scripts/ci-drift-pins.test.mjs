@@ -147,10 +147,35 @@ test("#230 — each workflow's conformance-gated publish jobs share one byte-ide
   }
 });
 
-// Exemptions from #234's pinning requirements. Empty today, and kept as data
-// so an exemption must carry its reason beside it — a bare allowlist entry
-// would be exactly the unchecked exception this test exists to prevent.
-const PINNED_REF_EXEMPTIONS = /** @type {{workflow: string, ref: string, reason: string}[]} */ ([]);
+// Exemptions from #234's pinning requirements. Kept as data so an exemption
+// must carry its reason beside it — a bare allowlist entry would be exactly
+// the unchecked exception this test exists to prevent.
+const PINNED_REF_EXEMPTIONS = /** @type {{workflow: string, ref: string, reason: string}[]} */ ([
+  {
+    workflow: "triage.yml",
+    ref: "ecoma-io/action-agents/triage@v0.11.2",
+    reason:
+      "Dogfood enrollment (action-agents' docs/dogfood.md, #803): the rollout pins the " +
+      "released exact tag — never @main, never the floating @v0.11 — so the bytes a run " +
+      "executes are known before any of them do, and a later fix lands as a deliberate " +
+      "re-pin recorded in the rollout log. Digest-pinning would satisfy this file's regex " +
+      "but divorce the ref from the tag the rollout's incident rules and log name. The " +
+      "Semgrep rule `workflow-action-not-pinned-to-sha` still reports this ref, so " +
+      "analysis-gate runs red while the tag stands — that conflict is #803's open decision.",
+  },
+  {
+    workflow: "review.yml",
+    ref: "ecoma-io/action-agents/review@v0.11.2",
+    reason:
+      "Dogfood enrollment (action-agents' docs/dogfood.md, #803): the rollout pins the " +
+      "released exact tag — never @main, never the floating @v0.11 — so the bytes a run " +
+      "executes are known before any of them do, and a later fix lands as a deliberate " +
+      "re-pin recorded in the rollout log. Digest-pinning would satisfy this file's regex " +
+      "but divorce the ref from the tag the rollout's incident rules and log name. The " +
+      "Semgrep rule `workflow-action-not-pinned-to-sha` still reports this ref, so " +
+      "analysis-gate runs red while the tag stands — that conflict is #803's open decision.",
+  },
+]);
 
 test("#234 — every action reference in every workflow is pinned to a full commit SHA", () => {
   const files = listWorkflows();
