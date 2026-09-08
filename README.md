@@ -1,5 +1,12 @@
 <p align="center">
-  <img src=".github/assets/banner.png" alt="Archkeep — an architecture authority for human and agentic software development: a deterministic authority that keeps the architecture your team declared aligned with the code your team keeps changing" width="100%" />
+  <a href="https://github.com/ecoma-io/archkeep/actions/workflows/ci.yml"><img src="https://github.com/ecoma-io/archkeep/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/ecoma-io/archkeep/actions/workflows/analysis.yml"><img src="https://github.com/ecoma-io/archkeep/actions/workflows/analysis.yml/badge.svg" alt="Analysis" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache 2.0" /></a>
+  <a href="https://www.npmjs.com/package/@ecoma-io/archkeep"><img src="https://img.shields.io/npm/dm/@ecoma-io/archkeep.svg" alt="npm downloads per month" /></a>
+</p>
+
+<p align="center">
+  <img src=".github/assets/logo.png" alt="Archkeep — an architecture authority for human and agentic software development: a deterministic authority that keeps the architecture your team declared aligned with the code your team keeps changing" width="64px" />
 </p>
 
 <h1 align="center">Archkeep</h1>
@@ -13,48 +20,41 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ecoma-io/archkeep/actions/workflows/ci.yml"><img src="https://github.com/ecoma-io/archkeep/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/ecoma-io/archkeep/actions/workflows/analysis.yml"><img src="https://github.com/ecoma-io/archkeep/actions/workflows/analysis.yml/badge.svg" alt="Analysis" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache 2.0" /></a>
-  <a href="https://www.npmjs.com/package/@ecoma-io/archkeep"><img src="https://img.shields.io/npm/dm/@ecoma-io/archkeep.svg" alt="npm downloads per month" /></a>
-</p>
-
-<p align="center">
-  <a href="#in-30-seconds"><strong>In&nbsp;30&nbsp;seconds&nbsp;→</strong></a> ·
-  <a href="docs/doctrine/why.md">Why&nbsp;it&nbsp;exists</a> ·
-  <a href="docs/doctrine/architecture-authority.md">The&nbsp;authority&nbsp;model</a> ·
-  <a href="docs/doctrine/roadmap.md">Roadmap</a> ·
-  <a href="docs/README.md">Docs</a> ·
-  <a href="https://ecoma.io">About&nbsp;Ecoma</a>
+  <a href="docs/README.md">Document</a> ·
+  <a href="https://github.com/ecoma-io/archkeep/issues/new?template=bug_report.yml">Report Bug</a> ·
+  <a href="https://github.com/ecoma-io/archkeep/issues/new?template=feature_request.yml">Feature Request</a>
 </p>
 
 ---
 
-## In 30 seconds
+## What Archkeep is
 
-- **What it is.** An **architecture authority** — the system a repository consults to learn whether
-  the code that exists agrees with the architecture the team declared. Not a linter, not a
-  dependency-graph viewer, not an AI reviewer: a deterministic authority that keeps the intended
-  architecture and the observed one from quietly parting ways.
-- **The problem.** Declared architecture lives in heads, docs and Slack threads; the repository's
-  real architecture lives in its imports. Nothing compares the two — until a change crosses a line
-  nobody encoded anywhere, and the build stays green. Coding agents multiply the rate at which this
-  happens.
-- **The mechanism.** You declare intent as reviewed files. Archkeep reads every import site
-  statically, computes evidence (graphs, coverage counts, provenance), and one command — `check` —
-  issues the authoritative verdict. Same tree, same config, same verdict.
-- **Why agents care.** Humans, CI and coding agents consume the **same** authority: agents read the
-  governing constraints before editing, verify with `check`, and cannot weaken the law or accept
-  their own proposals — there is no override anywhere.
-- **Where it runs.** An Nx plugin, a Moonrepo provider, or bare `archkeep.json` discovery — the
-  verdict does not change with the provider. Eight languages, analyzed statically; your lint-only
-  CI needs no Go, Cargo, uv, JDK or .NET installed.
+<p align="center">
+  <img src=".github/assets/banner.png" alt="Archkeep — an architecture authority for human and agentic software development: a deterministic authority that keeps the architecture your team declared aligned with the code your team keeps changing" width="100%" />
+</p>
 
-```bash
-npm install -D @ecoma-io/archkeep && npx archkeep check
-```
+Archkeep is a deterministic architecture governance system for humans and
+coding agents. You declare the architecture you intend; Archkeep reads what
+your repository actually imports — statically, with none of those
+languages' toolchains needed — and answers one question with a machine-computed
+verdict:
 
-## Architecture doesn't break. It erodes.
+> Does the code that exists agree with the architecture that was declared?
+
+And the same question in the form agentic development makes urgent:
+
+> When a coding agent changes a repository, how does the system **deterministically verify** that
+> the change still conforms to the architecture the team declared?
+
+It is worth saying what Archkeep is **not**, because its neighbours each own
+something else: not a linter (style and language rules stay with your linters),
+not a dependency visualizer (it holds law, not just a picture), not an AI judge
+(every verdict is computed, never guessed), not an Nx replacement (Nx and Moon
+are providers of the project graph — a repository with neither still gets the
+full verdict). [Architecture authority](docs/doctrine/architecture-authority.md)
+owns that boundary.
+
+### Architecture doesn't break. It erodes.
 
 Every repository starts with an architecture somebody can hold in their head.
 The layers are obvious. The boundaries are obvious. The three engineers who
@@ -103,7 +103,7 @@ Dependency tools draw the graph but carry no law about what the graph may do.
 And the hand-written scripts teams bolt on to compensate rot quietly beside
 the pipelines they police.
 
-## The mental model
+### The mental model
 
 Archkeep turns architecture from something people remember into something the
 repository can compute. One chain, six links:
@@ -151,30 +151,7 @@ For the chain to govern anything, it has to be:
 - **explainable** — verdicts cite the rule, the constraint row, the recorded decision behind them
 - **evolvable** — drift, debt and history tracked, so exceptions stay decisions instead of decaying into accidents
 
-## What Archkeep is
-
-Archkeep is a deterministic architecture governance system for humans and
-coding agents. You declare the architecture you intend; Archkeep reads what
-your repository actually imports — statically, with none of those
-languages' toolchains needed — and answers one question with a machine-computed
-verdict:
-
-> Does the code that exists agree with the architecture that was declared?
-
-And the same question in the form agentic development makes urgent:
-
-> When a coding agent changes a repository, how does the system **deterministically verify** that
-> the change still conforms to the architecture the team declared?
-
-It is worth saying what Archkeep is **not**, because its neighbours each own
-something else: not a linter (style and language rules stay with your linters),
-not a dependency visualizer (it holds law, not just a picture), not an AI judge
-(every verdict is computed, never guessed), not an Nx replacement (Nx and Moon
-are providers of the project graph — a repository with neither still gets the
-full verdict). [Architecture authority](docs/doctrine/architecture-authority.md)
-owns that boundary.
-
-## One enforcement authority
+### One enforcement authority
 
 Every surface Archkeep exposes produces evidence, records, or a verdict — and
 exactly one of them decides:
@@ -187,7 +164,7 @@ exactly one of them decides:
 | `rules verify`                                                                                                                                                                                               | Are the shipped rule artifacts what they claim?         | a verdict on catalog integrity                      | digest-level verification         |
 | `graph`, `diff`, `drift`, `history`, `trajectory`, `evolution`, `health`, `debt`, `report`, `impact`, `explain`, `context`, `provenance`, `adr`, `decisions`, `waivers`, `discover`, `reconcile`, `scenario` | evidence, analysis, governance records, projections     | descriptive — they inform, they never gate          | findings without the exit code    |
 
-`check` is the gate — the enforcement authority, and the only command whose verdict fold spans all four exit codes.
+`check` is the gate, and the only command holding all four exit codes.
 `fitness`, `delta`, `change` and `rules verify` are verdict-carriers on their
 own questions — a failing fitness function, a non-waived introduced violation,
 an unfulfilled change declaration, a rule artifact that fails integrity — and
@@ -196,7 +173,7 @@ they answer under the same verdict vocabulary and exit table
 evidences, and gets out of the way. The asymmetry is the design: **analysis is
 everywhere; authority is in one place.**
 
-## A governance lifecycle, not a lint run
+### A governance lifecycle, not a lint run
 
 Enforcement is one stage of what Archkeep does. The commands form a loop:
 
@@ -217,7 +194,7 @@ request reviews. `check` is the gate; most other commands describe, evidence,
 and get out of the way. The whole lifecycle:
 [governance lifecycle](docs/concepts/governance-lifecycle.md).
 
-## Watch it work
+### Watch it work
 
 Your declared intent — one file at the workspace root, in the shape
 [`@nx/enforce-module-boundaries`](docs/concepts/policies.md) already speaks:
@@ -274,7 +251,7 @@ policy  module-boundaries.config.mjs — fingerprint 3f9c…
 Those counts are the point: "no violations" is a claim about coverage as much
 as correctness.
 
-## Where it sits among your tools
+### Where it sits among your tools
 
 Every tool answers a different question, and they compose:
 
@@ -304,7 +281,7 @@ enforcers at the same constraint file and they answer from one table, with the
 same violation ids ([how](docs/getting-started/first-policy.md)). Dependency
 analyzers draw your graph; Archkeep is the law the graph is judged against.
 
-## Agentic development: the same authority, no shortcuts
+### Agentic development: the same authority, no shortcuts
 
 Agentic coding increases the rate at which architectural decisions get made;
 humans cannot manually review every one. That is the project's founding thesis
@@ -363,7 +340,7 @@ A [language server](docs/integrations/vscode.md) publishes the same verdicts
 into editors, with the same invariant: an empty Problems panel means _no
 violation_, nothing else.
 
-## Polyglot, because architecture is above language boundaries
+### Polyglot, because architecture is above language boundaries
 
 A real system is a Go backend, a Rust service, a TypeScript frontend and a
 Python worker — and it still has one architecture: domain boundaries, ownership
@@ -381,7 +358,7 @@ Every analyzer's known parse limits are documented, and every limit errs toward
 naming text the file really contains rather than staying silent —
 [per language](docs/reference/languages.md).
 
-## A verdict that refuses to shrug
+### A verdict that refuses to shrug
 
 The dangerous failure is not a false alarm — it is the quiet one: reporting
 nothing when a violation exists, byte-for-byte identical to a clean workspace.
@@ -406,7 +383,7 @@ Archkeep is built so that cannot pass silently:
   are reported as blind spots; coverage the run knows it did not provide is
   reported as gaps, each with its kind — never folded into a clean result.
 
-## Capabilities
+### Capabilities
 
 Grouped the way the [concepts](docs/concepts/architecture.md) own them:
 
@@ -438,7 +415,7 @@ Grouped the way the [concepts](docs/concepts/architecture.md) own them:
   discovery from an `archkeep.json` marker with neither installed
   ([configuration](docs/reference/configuration.md)).
 
-## Evidence, not promises
+### Evidence, not promises
 
 The claims above are kept narrow on purpose: **deterministic, reproducible,
 evidence-backed** — not "formally verified", and not "proven correct". What
@@ -515,31 +492,6 @@ Bringing an existing repository under governance starts with
 > **Coming from Lattice?** This is the same tool under a new name:
 > [what breaks and what does not](docs/getting-started/upgrading-from-lattice.md).
 
-## Status and roadmap
-
-Archkeep ships today on the **0.x line**
-([`@ecoma-io/archkeep`](https://www.npmjs.com/package/@ecoma-io/archkeep));
-until 1.0, a minor release may carry a behavior change, named in the
-changelog.
-
-The [roadmap](docs/doctrine/roadmap.md) is a **maturity model, not a feature
-list**: five phases — **Authority** (deterministic enforcement), **Evidence**
-(canonical architecture state), **Governance** (decisions, waivers, ADRs — on
-the authority, never beside it), **Change Intelligence** (impact, scenarios,
-advisory reasoning over evidence) and **Agentic Architecture** (agents as
-consumers of the same authority) — each with explicit exit criteria and the
-evidence that must back it.
-
-**1.0 is a trustworthiness milestone, not a feature count**: the point where
-the authority core is hardened enough — deterministic, reproducible,
-coverage-explicit, provider-independent, conformance-proven — to be trusted
-with a stability promise. The intelligence capabilities of the later phases
-(architectural impact analysis, scenario evaluation, the evidence-grounded
-advisor) are documented direction, not shipped capability; the deterministic
-`scenario` command ships today as a read-only what-if, marked `virtual` and
-`notAuthoritative`. There is no second line and no next generation: every
-phase lands on `main`, on the same authority contract.
-
 ## Documentation
 
 Read it in this order, or jump to what you need:
@@ -566,6 +518,7 @@ Archkeep is actively dogfooded within the Ecoma ecosystem:
 
 - **[ecoma-io/loom](https://github.com/ecoma-io/loom)** — a TypeScript/Vue monorepo using Moonrepo, where Archkeep enforces module-boundary constraints through `module-boundaries.config.mjs` and runs as part of `lint`, with mutation-based tests verifying violations are caught.
 - **[ecoma-io/action-agents](https://github.com/ecoma-io/action-agents)** — a GitHub Actions and automation repository with a native workspace, where Archkeep validates project boundaries via `archkeep.json` and `module-boundaries.config.mjs`, and runs `archkeep check` as a blocking CI gate.
+- **[ecoma-io/release-craft](https://github.com/ecoma-io/release-craft)** — General-purpose release engine for releasing software monorepo using Moonrepo, where Archkeep enforces module-boundary constraints through `module-boundaries.config.mjs` and runs as part of `lint`, with mutation-based tests verifying violations are caught..
 
 Both consume Archkeep as a pinned dependency.
 
@@ -581,13 +534,3 @@ else: [CONTRIBUTING.md](CONTRIBUTING.md) ·
 
 [Apache License 2.0](LICENSE) — © Mai Ngọc Hóa (John Martin) and the Archkeep
 contributors. Apache-2.0 for its explicit patent grant.
-
----
-
-<p align="center">
-  <sub>
-    Maintained by <a href="https://ecoma.io">Ecoma</a> ·
-    <a href="https://ecoma.io">Website</a> ·
-    <a href="https://github.com/ecoma-io">Github</a>
-  </sub>
-</p>
