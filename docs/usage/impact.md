@@ -88,7 +88,7 @@ the project is unconstrained, not the command having failed to look.
 | 2    | Usage error: wrong argument count, unknown flag, or project not found in the graph. |
 | 3    | The graph has incomplete coverage, or the unregistered-plugin refusal fired.        |
 
-`impact` never exits 1. That exit code belongs to `check` alone.
+`impact` never exits 1. Exit 1 belongs to the verdict-carrier roster — `check`, `fitness`, `delta`, `change` and `rules verify` ([docs/reference/exit-codes.md](../reference/exit-codes.md)).
 
 ## The unregistered-plugin refusal
 

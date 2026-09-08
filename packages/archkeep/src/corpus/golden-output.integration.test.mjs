@@ -23,7 +23,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -149,6 +149,20 @@ const VERB_PLAN = [
 // Comparators
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Fixture-root normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * The fixture root differs per process (see makeFixture); the committed
+ * goldens must not.  Both the golden-write side and every compare side map
+ * the root to a placeholder first, so the bytes compared are identical
+ * across runs, machines, and concurrent processes.
+ */
+function normalizeFixtureRoot(stdout) {
+  return Buffer.from(stdout.toString().replaceAll(root, "<fixture-root>"));
+}
+
 /**
  * Default: byte-identity (GAP-A level 3). Both stdout buffers compared
  * verbatim via vitest's toEqual.
@@ -271,12 +285,13 @@ let diffBaseline;
 let scenarioFile;
 
 function makeFixture() {
-  // Use a deterministic path so the workspace root in CLI output is identical
-  // across runs.  Clean any previous fixture first.
-  const FIXTURE_ROOT = join(tmpdir(), "archkeep-golden-fixture");
-  if (existsSync(FIXTURE_ROOT)) rmSync(FIXTURE_ROOT, { recursive: true, force: true });
-  root = FIXTURE_ROOT;
-  mkdirSync(root, { recursive: true });
+  // A per-process root: two vitest processes over this tree (a terminal
+  // beside an agent's background run) must not share one fixture, or each
+  // clobbers the other's captures and every verb reads a half-written tree —
+  // the race #801 recorded. Within one process the root is fixed for the
+  // whole run, so GAP-B's repeated cold starts stay comparable; across
+  // processes, normalizeFixtureRoot maps the root out of the bytes compared.
+  root = mkdtempSync(join(tmpdir(), "archkeep-golden-fixture-"));
 
   // Materialise the determinism-sweep fixture
   const files = determinismSweepFiles(
@@ -414,7 +429,7 @@ for (const verb of VERB_PLAN) {
 
         if (UPDATING) {
           mkdirSync(GOLDEN_DIR, { recursive: true });
-          writeFileSync(goldenFile, result.stdout);
+          writeFileSync(goldenFile, normalizeFixtureRoot(result.stdout));
           return; // skip assertion when updating
         }
 
@@ -430,7 +445,7 @@ for (const verb of VERB_PLAN) {
         }
 
         expect(result.status).toBe(expectedExit(verb.name));
-        comparatorFor(verb)(result.stdout, golden, fmt);
+        comparatorFor(verb)(normalizeFixtureRoot(result.stdout), golden, fmt);
       });
     }
   });

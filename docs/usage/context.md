@@ -94,7 +94,7 @@ two runs over an unchanged tree produce byte-identical bytes.
 | 2    | Usage error: wrong argument count, unknown flag, or project not found in the graph. |
 | 3    | Coverage is incomplete, or the unregistered-plugin refusal fired.                   |
 
-`context` never exits 1. That exit code belongs to `check` alone.
+`context` never exits 1. Exit 1 belongs to the verdict-carrier roster — `check`, `fitness`, `delta`, `change` and `rules verify` ([docs/reference/exit-codes.md](../reference/exit-codes.md)); `context` is descriptive.
 
 ## The unregistered-plugin refusal
 

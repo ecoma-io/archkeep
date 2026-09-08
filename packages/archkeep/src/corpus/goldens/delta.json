@@ -6,7 +6,7 @@
   },
   "command": "delta",
   "workspace": {
-    "root": "/tmp/archkeep-golden-fixture",
+    "root": "<fixture-root>",
     "provider": "native",
     "marker": "archkeep.json",
     "provenance": {
@@ -28,7 +28,7 @@
   },
   "result": {
     "baseline": {
-      "path": "/tmp/archkeep-golden-fixture/.archkeep-delta.json",
+      "path": "<fixture-root>/.archkeep-delta.json",
       "tool": {
         "name": "@ecoma-io/archkeep",
         "version": "0.26.0"

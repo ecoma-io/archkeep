@@ -606,13 +606,45 @@ describe("deltaCommand event output", () => {
     expect(event.fitness.verdictDeltas).toEqual([
       { constraint: CONSTRAINT_ID, base: "pass", head: "fail" },
     ]);
-    expect(event.debt).toEqual({ introduced: [], resolved: [], note: expect.any(String) });
+    expect(event.debt).toEqual({
+      judged: false,
+      introduced: [],
+      resolved: [],
+      note: expect.any(String),
+    });
     // Each side names a STATE — the snapshot identity of the graph that side
     // was judged over — and the baseline's storage path is disclosed one
     // level up, outside the identity.
     expect(event.evidence).toBe("/invented/base.json");
     expect(event.base.snapshot).toMatch(/^[0-9a-f]{64}$/);
     expect(event.head.snapshot).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("marks debt as unjudged when architecture intent cannot be judged", async () => {
+    const law = config();
+    const baseline = baselineOf({ law, root: gitRoot });
+    const dir = join(eventsDir, "intent-unjudgeable");
+    const result = await deltaCommand(
+      "/invented/base.json",
+      contextOf({ records: [crossingRecord()], root: gitRoot }),
+      {
+        config: law,
+        readBaseline: baseline.readBaseline,
+        now: NOW,
+        eventOut: dir,
+        loadIntentOverride: async () => {
+          throw new Error("intent boom");
+        },
+      },
+    );
+    expect(result.eventWrite).toEqual({ id: expect.any(String), duplicate: false });
+    const [event] = readEvents(dir);
+    expect(event.debt).toEqual({
+      judged: false,
+      introduced: [],
+      resolved: [],
+      note: "architecture intent could not be judged — no debt ids emitted (intent boom)",
+    });
   });
 
   it("keeps the event id stable when the baseline is relocated — identity never names a path", async () => {

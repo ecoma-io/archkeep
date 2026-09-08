@@ -6,7 +6,7 @@
   },
   "command": "context",
   "workspace": {
-    "root": "/tmp/archkeep-golden-fixture",
+    "root": "<fixture-root>",
     "provider": "native",
     "marker": "archkeep.json",
     "provenance": {

@@ -12,6 +12,39 @@ named here and the refusals that hold on the way;
 boundary every capability stays inside. When a claim in this file needs a
 finish line, that file is the one that binds.
 
+## The strategy, in three tiers
+
+The maturity model below orders capabilities by trust; this section orders
+_work_ into three tiers, and the tiers are what the roadmap actually promises:
+
+| Tier                     | What ships                                                                                                                                                                                                                                                                                     | When it changes                          |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| **Foundation · 1.0**     | The Authority, Evidence and Governance phases — the deterministic core. 1.0's structural criteria are Phase 1 and Phase 2's exit criteria ([read below](#what-10-waits-for-and-how-each-condition-is-read)); Phase 3 ships to the status its own section records and freezes at what it states | Only by a contract change                |
+| **1.x · demand-driven**  | Anything a consumer's need justifies, on the frozen core                                                                                                                                                                                                                                       | One decision at a time, from issues      |
+| **Future · conditional** | The intelligence capabilities, the agentic loop, and federation                                                                                                                                                                                                                                | Only when the gate before each one holds |
+
+- **Foundation — stable at 1.0.** The finest detail is in the phases below;
+  the tier's commitment is that the foundation ships stable, not that it ships
+  everything. [1-0-semantic-contract.md](1-0-semantic-contract.md) is the freeze
+  manifest: it names which surfaces become compatibility commitments at 1.0 and
+  points each at its binding home. This document owns the staged path _to_ that
+  freeze and the conditions that decide when it holds.
+- **1.x — demand-driven.** After 1.0 the core is frozen, not inert. A consumer
+  need that does not change an existing claim — a field, a command, a rule, a
+  route, an adapter — can add it, and focused performance, diagnostics and
+  ergonomics work is acceptable when the current contract stays byte-for-byte
+  stable for unchanged inputs. Neither class is scheduled here: features live in
+  issues, and each change is classified against the post-1.0 policy the freeze
+  manifest owns ([1-0-semantic-contract.md](1-0-semantic-contract.md#future-changes-after-10)),
+  never in a second copy of it.
+- **Future research — conditional.** Architectural Impact Analysis, Scenario
+  Evaluation, the Evidence-Grounded Advisor, the closed agentic loop, and
+  federation are later maturity on the same development line. Each is gated by
+  the one before it, [the capability trust levels](#capability-trust-levels)
+  and [later maturity](#later-maturity-architecture-intelligence-in-three-capabilities)
+  name the order, none may hold the foundation hostage, and none starts without
+  explicit maintainer authorization — the roadmap stages direction, not mandate.
+
 ## The thesis
 
 Archkeep is an **architecture governance system for human and agentic software
@@ -100,8 +133,8 @@ provider, workspace shape, or language toolchain happened to be present.
   extended by `architecture-intent.json` when a workspace declares it.
   ([concepts/boundaries.md](../concepts/boundaries.md),
   [concepts/policies.md](../concepts/policies.md)) — **hardened**.
-- **The verdict system.** `check` is the gate and the only command holding all
-  four exit codes; `fitness`, `delta` and `change` are verdict-carriers on
+- **The verdict system.** `check` is the enforcement authority — the only command whose verdict fold
+  spans all four exit codes; `fitness`, `delta` and `change` are verdict-carriers on
   their own questions under the same boundary law as `check`, and
   `rules verify` is the verdict-carrier for the rule catalog's
   **artifact-integrity** law — a different law, sharing only the status
@@ -518,10 +551,14 @@ separates 0.x from 1.0 here is not
 a missing feature; it is evidence, and evidence is something the project
 accumulates rather than something it implements.
 
-### The 1.0 exit criteria
+### What 1.0 waits for, and how each condition is read
 
 The structural criteria are the phases' own: [Phase 1](#phase-1--authority)
-and [Phase 2](#phase-2--evidence) exit criteria read met, and with them:
+and [Phase 2](#phase-2--evidence) exit criteria read met, and with them.
+Surfaces that freeze at 1.0 are the freeze manifest's list
+([1-0-semantic-contract.md](1-0-semantic-contract.md#what-is-frozen)); they are
+not restated here — this section owns the conditions that decide when the
+freeze holds:
 
 - **Exactly one enforcement authority.** `check` is the gate; `fitness`,
   `delta` and `change` are verdict-carriers on their own questions under the
@@ -613,13 +650,17 @@ starts at the stable cut
 
 ### How 1.0 is approached
 
-Stable 1.0 is approached through a release candidate, named by one
+Stable 1.0 is named by the freezes [1-0-semantic-contract.md](1-0-semantic-contract.md)
+records, and it is approached through a release candidate, named by one
 `Release-As:` commit when the conditions above read met — the 2026-08-28
 candidates are parked and the release line returned to 0.x in the interim
-(maintainer decision, 2026-08-29). The conditions decide when the contract
-stops being a candidate and becomes the version that holds.
+(maintainer decision, 2026-08-29). Nothing on this page cuts a release:
+the freeze manifest prepares a candidate, the conditions decide when the
+contract stops being a candidate and becomes the version that holds, and
 [docs/development/release.md](../development/release.md#release-stages-the-0x-line-and-the-parked-candidate)
-owns the mechanics.
+owns the mechanics. The manifest's open decisions
+([1-0-semantic-contract.md](1-0-semantic-contract.md#open-10-decisions)) are the
+things this page deliberately does not decide.
 
 ## Later maturity: architecture intelligence, in three capabilities
 
@@ -732,7 +773,7 @@ affected`. _Future:_ full Architectural Impact Analysis enumerating every
 The loop is the story of where the three capabilities sit and why a Scenario
 and a Decision are never the same event.
 
-## What this roadmap refuses
+## What this roadmap refuses, and the freeze
 
 - **Dates.** A date on an open-source roadmap is a promise nobody is paid to
   keep. Order is the commitment; time is not.
@@ -748,3 +789,8 @@ and a Decision are never the same event.
   whether it holds — is refused by the boundary in
   [architecture-authority.md](architecture-authority.md). The
   roadmap stages breadth and reading; it never stages that line.
+- **Frozen surfaces changing outside a contract change.** The freeze manifest
+  ([1-0-semantic-contract.md](1-0-semantic-contract.md#what-is-frozen)) names
+  what is frozen at 1.0. This roadmap never schedules work that would change
+  one of those surfaces without the contract-change path the manifest's
+  post-1.0 policy requires.

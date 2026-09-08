@@ -409,13 +409,14 @@ Nothing that cannot enforce reports success — see the invariant in
   silence the paths check exactly where the table is most broken.
   `check` also states what it inspected — imports, files, projects — beside
   every verdict, because "no violations" is a claim about coverage too. `check`
-  is the only command that holds FOUR exit codes (0/1/2/3); `fitness`, `delta`,
-  `change` and `rules verify` are the other verbs whose verdict carries exit 1
-  — a failing fitness function is a finding, not a print job (D-09); so is a
-  non-waived violation `delta` classifies as introduced; so is a change that
-  produced consequences its declaration did not cover; so is a rule artifact
-  that fails catalog integrity — and each of the four exits 3 where it could
-  not look. Blind spots ride that lane too, with one class line
+  is the only command whose verdict fold spans all four exit codes (0/1/2/3);
+  `fitness`, `delta`, `change` and `rules verify` are the other
+  verdict-carrier verbs — each exits 1 on findings for its own question and 3
+  where it could not look, but none holds exit 2 in its own fold, because a
+  failing fitness function is a finding, not a print job; so is a non-waived
+  violation `delta` classifies as introduced; so is a change that produced
+  consequences its declaration did not cover; and so is a rule artifact that
+  fails catalog integrity. Blind spots ride that lane too, with one class line
   (`src/analysis/contract.md` owns it): an unresolvable LITERAL specifier
   that references the workspace's own surface — path-like, `#` subpath,
   `paths` alias — withholds the verdict (#595 — a concrete question about the

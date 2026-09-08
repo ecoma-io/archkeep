@@ -6,7 +6,7 @@
   },
   "command": "trajectory",
   "workspace": {
-    "root": "/tmp/archkeep-golden-fixture",
+    "root": "<fixture-root>",
     "provider": "native",
     "marker": "archkeep.json",
     "provenance": {
@@ -30,7 +30,7 @@
     ]
   },
   "result": {
-    "dir": "/tmp/archkeep-golden-fixture/.archkeep-history",
+    "dir": "<fixture-root>/.archkeep-history",
     "observations": {
       "count": 1,
       "basis": "graph_snapshots",

@@ -6,7 +6,7 @@
   },
   "command": "change",
   "workspace": {
-    "root": "/tmp/archkeep-golden-fixture",
+    "root": "<fixture-root>",
     "provider": "native",
     "marker": "archkeep.json",
     "provenance": {
@@ -28,7 +28,7 @@
   },
   "result": {
     "intent": {
-      "file": "/tmp/archkeep-golden-fixture/.archkeep-change.json",
+      "file": "<fixture-root>/.archkeep-change.json",
       "version": "1",
       "base": {
         "commit": "1fd51709c377d99a6139891e1200291cf08aede9"
@@ -42,7 +42,7 @@
       }
     },
     "baseline": {
-      "path": "/tmp/archkeep-golden-fixture/.archkeep-delta.json",
+      "path": "<fixture-root>/.archkeep-delta.json",
       "tool": {
         "name": "@ecoma-io/archkeep",
         "version": "0.26.0"
@@ -87,6 +87,7 @@
       "decisions": []
     },
     "debt": {
+      "judged": true,
       "introduced": [],
       "resolved": []
     }

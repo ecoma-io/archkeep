@@ -16,7 +16,7 @@ carrying, how long has each item been carried, and how badly does it bite?_
 It is not a finance metaphor — age, count and severity only, no interest.
 
 It is a **report, not a gate**: it never changes a verdict and never exits 1.
-`check` remains the only command that fails a build; `debt` exists to make the
+The verdict-carrier commands fail a build; `debt` exists to make the
 same candid facts visible as a tracked, aging ledger.
 
 ## What the ledger lists

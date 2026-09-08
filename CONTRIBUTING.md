@@ -448,6 +448,14 @@ CLI, configuration, output shapes, exit codes, and the _meaning_ of all of
 them — is defined in [AGENTS.md](AGENTS.md#the-compatibility-contract), and
 an agent classifies its change against that gate before implementing.
 
+A change that touches a surface the 1.0 freeze manifest
+([docs/doctrine/1-0-semantic-contract.md](docs/doctrine/1-0-semantic-contract.md#what-is-frozen))
+names is classified against that manifest's
+[compatibility classification](docs/doctrine/1-0-semantic-contract.md#compatibility-classification)
+before implementation — a frozen surface changing its report on an unchanged
+workspace is a contract change, not an ordinary pull request. In pre-1.0
+stabilization mode that is the same bar the candidate line holds:
+
 On the candidate line, a maintainer can still explicitly authorize a change
 that breaks the contract — that is an exception, made in the open on the
 pull request, never inferred from a missing test or a missing sentence. It

@@ -1,7 +1,7 @@
 architecture governance report — every surface reached a verdict
 
 provenance
-  root        /tmp/archkeep-golden-fixture
+  root        <fixture-root>
   provider    native (archkeep.json)
   policy      module-boundaries.config.mjs
   commit      1fd51709c377d99a6139891e1200291cf08aede9

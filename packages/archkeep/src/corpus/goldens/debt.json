@@ -6,7 +6,7 @@
   },
   "command": "debt",
   "workspace": {
-    "root": "/tmp/archkeep-golden-fixture",
+    "root": "<fixture-root>",
     "provider": "native",
     "marker": "archkeep.json",
     "provenance": {
@@ -31,10 +31,10 @@
     ]
   },
   "result": {
-    "dir": "/tmp/archkeep-golden-fixture/.archkeep-history",
+    "dir": "<fixture-root>/.archkeep-history",
     "snapshots": 1,
     "agings": false,
-    "sampleTime": "2026-09-07T06:50:29.512Z",
+    "sampleTime": "2026-09-08T10:33:14.692Z",
     "entries": [],
     "resolved": [],
     "total": 0,

@@ -496,7 +496,7 @@ describe("the summary's disposition latch (#739)", () => {
       providerChanged: false,
     },
     findings: { introduced: [], resolved: [], unknown: [] },
-    debt: { introduced: [], resolved: [] },
+    debt: { judged: true, introduced: [], resolved: [] },
     fitness: { verdictDeltas: [] },
   });
 

@@ -192,8 +192,8 @@ disagreement point between the surfaces that happen to share the name.
 | `diff`       | Compares two graph snapshots, with optional rule-impact analysis                                                   | no               |
 | `delta`      | Classifies violations between a captured evidence baseline and head                                                | yes — exits 1    |
 | `change`     | Reconciles a declared change intent against the architectural delta                                                | yes — exits 1    |
-| `drift`      | Compares the observed architecture against the declared intent                                                     | no               |
 | `discover`   | Reports observed facts; `--propose` derives candidate architecture, never written                                  | no               |
+| `drift`      | Compares the observed architecture against the declared intent                                                     | no               |
 | `reconcile`  | Scores the observed side against the declared model; `--propose` derives repair edits                              | no               |
 | `waivers`    | Lists term-bound suppressions; a waived violation stays a finding in `check`                                       | no               |
 | `fitness`    | Judges the workspace's named quality gates (folded into `check` by presence)                                       | no               |
