@@ -7,21 +7,17 @@ name: Review
 # request. The flip to live is one line, taken only after the first-run
 # checklist has passed twice.
 #
-# The ref is the released exact tag, not `@main` and not the floating `@v0.11`:
-# the operator must know which bytes run before any of them do, and adopting a
-# later fix is a deliberate re-pin, never an accident of a moving tag
-# (action-agents docs/dogfood.md, "Refs and secrets" and "Incident rules").
-#
-# KNOWN CONFLICT, left standing on purpose: `workflow-action-not-pinned-to-sha`
-# (.github/semgrep/workflows.yaml) requires every `uses:` to carry a full
-# 40-hex SHA, so this tag pin is reported by the Semgrep job — and by CodeQL's
-# `actions` queries — and analysis-gate runs red while the file stands. The
-# conflict between the rollout's exact-tag policy and this repository's
-# supply-chain rule is a maintainer decision; weakening either silently is
-# not an option. The pinning test this file's `pnpm test` lane runs holds the
-# ref as a reasoned exemption in `scripts/ci-drift-pins.test.mjs`
-# (PINNED_REF_EXEMPTIONS); the Semgrep half of the conflict is deliberately
-# untouched.
+# The ref is digest-pinned to the commit the released tag v0.11.2 names — the
+# maintainer decision recorded on #804. The rollout's policy is the released
+# exact version, never `@main` and never a floating tag: the operator must
+# know which bytes run before any of them do, and adopting a later fix is a
+# deliberate re-pin, never an accident of a moving tag (action-agents
+# docs/dogfood.md, "Refs and secrets" and "Incident rules"). Digest-pinning
+# honors that intent and satisfies this repository's supply-chain rule
+# (`workflow-action-not-pinned-to-sha`, .github/semgrep/workflows.yaml):
+# a tag is a pointer upstream can repoint, so the immutable commit is what
+# the `uses:` resolves, with the tag readable beside it. Renovate's
+# action-pinning preset keeps the pair current; a bump is the re-pin.
 #
 # No policy file: review runs on built-in defaults (strictness medium,
 # strategy standard, language en, maxDiffLines 5000, no ignore), and an absent
@@ -76,7 +72,7 @@ jobs:
           fetch-depth: 1
 
       - id: review
-        uses: ecoma-io/action-agents/review@v0.11.2
+        uses: ecoma-io/action-agents/review@605c38f60a26b7bcc56e9cd24852d5b38babbe70 # v0.11.2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           api-url: ${{ secrets.ECOMA_LLM_BASE_URL }}
