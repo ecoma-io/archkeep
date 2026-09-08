@@ -1,6 +1,6 @@
 {
   "name": "@ecoma-io/archkeep",
-  "version": "0.25.0",
+  "version": "0.26.0",
   "private": true,
   "description": "Architecture authority for human and agentic software development — deterministic, evidence-backed enforcement of declared architecture.",
   "keywords": [

@@ -1,6 +1,6 @@
 {
   "name": "@ecoma-io/archkeep-mcp",
-  "version": "0.25.0",
+  "version": "0.26.0",
   "description": "The Archkeep MCP server — the engine's commands as structured agent capabilities, over stdio",
   "keywords": [
     "mcp",
