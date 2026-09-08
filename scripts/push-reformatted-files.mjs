@@ -43,6 +43,8 @@ import { readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { GOLDEN_JSON_FILES } from "./sync-goldens.mjs";
+
 /**
  * The files the release lane repairs on release-please's own branch, and then
  * pushes as one commit.
@@ -73,6 +75,13 @@ export const REFORMAT_FILES = [
   "packages/archkeep-rule-sdk-ts/package.json",
   "packages/archkeep-rule-sdk-rust/Cargo.lock",
   "packages/archkeep-rules/Cargo.lock",
+  // The golden-output corpus is another non-formatting repair carried back by
+  // this same signed push. `sync-goldens.mjs` rewrites the engine version these
+  // references embed on a release bump (the same chain-link class as the two
+  // Cargo.lock entries above); without them here the repair would be written
+  // to the checkout, `git diff --quiet` would see it, and the push would still
+  // skip them — leaving the release pull request red on the byte-identity gate.
+  ...GOLDEN_JSON_FILES,
 ];
 
 /**

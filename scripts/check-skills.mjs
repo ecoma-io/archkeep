@@ -63,6 +63,7 @@ export const TS_SDK_PACKAGE_JSON = "packages/archkeep-rule-sdk-ts/package.json";
 export const MCP_PACKAGE_JSON = "packages/archkeep-mcp/package.json";
 export const PYTHON_SDK_PYPROJECT = "packages/archkeep-rule-sdk-python/pyproject.toml";
 export const RULES_PACKAGE_JSON = "packages/archkeep-rules/package.json";
+export const GOLDEN_CORPUS_DIR = "packages/archkeep/src/corpus/goldens";
 
 // Every version-bearing path the chain compares — the eleven files
 // docs/skills/versioning.md enumerates, aggregated from the constants above
@@ -337,6 +338,24 @@ export function selectMarketplaceVersion(catalogue, pluginName) {
 }
 
 /**
+ * The version a golden-output corpus envelope embeds for the engine — the
+ * number in its top-level `tool.version` slot, which `src/report/json.mjs`
+ * reads live from `packages/archkeep/package.json` at runtime. Returns `null`
+ * when the text is not a JSON envelope carrying that slot (a text golden, a
+ * SARIF golden whose `version` is the spec's 2.1.0, or an envelope with no
+ * tool block). Shared with `scripts/sync-goldens.mjs`, the chain-link that
+ * rewrites the slot on a version bump — one parser, two callers, the same
+ * arrangement `tomlSectionVersion` has with the cargo lockfile sync.
+ *
+ * @param {string} text full contents of a golden file
+ * @returns {string | null}
+ */
+export function goldenToolVersion(text) {
+  const match = /"tool"\s*:\s*\{\s*"name"\s*:\s*"[^"]+",\s*"version"\s*:\s*"([^"]+)"/.exec(text);
+  return match ? match[1] : null;
+}
+
+/**
  * Judges the skill facts and returns verdict lines and failures.
  *
  * @param {object} input
@@ -356,6 +375,9 @@ export function selectMarketplaceVersion(catalogue, pluginName) {
  *   agent capability interface, published to npm and versioned with the engine it
  *   composes through `./commands`
  * @param {string} input.pySdkVersion version from the Python SDK's pyproject.toml `[project]` section
+ * @param {string|null} input.goldenVersion the version the golden-output corpus embeds for
+ *   the engine, read from `check.json`'s `tool.version` slot. null when the corpus is
+ *   unreadable — which FAILS check 18 rather than skipping it
  * @param {{dir: string, name: string|null, description: string|null, compatibility: string|null, hostFields: string[], text?: string}[]} input.skills
  *   parsed frontmatter plus the full SKILL.md text for each skill
  * @param {Record<string, string>|null} [input.agentsSkillsFiles] every file under
@@ -384,6 +406,7 @@ export function evaluate({
   tsSdkVersion,
   mcpVersion,
   pySdkVersion,
+  goldenVersion,
   skills,
   agentsSkillsFiles = null,
   skillsFiles = null,
@@ -887,6 +910,32 @@ export function evaluate({
     }
   }
 
+  // 18. The golden-output corpus must record the version package.json
+  // declares. The corpus reference files embed the engine's own version in
+  // their `tool.version` slot (and `diff`/`delta`/`change` echo it a second
+  // time), so a version bump drifts them against the live CLI output the
+  // byte-identity gate compares them to. release-please bumps the manifest
+  // and has no mechanism to re-emit the goldens, so the drift is repaired by
+  // `scripts/sync-goldens.mjs` in the release lane; this check is the gate
+  // that fails when the repair stops being applied, the same pact check 15
+  // holds with `scripts/sync-cargo-lock.mjs`. `check.json` is the single
+  // representative: every verb embeds the same one number, so one canonical
+  // reference is enough to prove the chain, and reading it avoids a scan of
+  // dozens of files.
+  if (goldenVersion !== packageVersion) {
+    failures.push(
+      `${join(GOLDEN_CORPUS_DIR, "check.json")} records tool.version "${goldenVersion}" but ` +
+        `package.json declares "${packageVersion}". The golden corpus drifts with every ` +
+        `version bump (release-please writes the manifest and no golden), and the ` +
+        `byte-identity gate (golden-output.integration.test.mjs) fails on the release ` +
+        `pull request until ` +
+        `\`node scripts/sync-goldens.mjs\` is run in the release lane's repair step.`,
+    );
+    lines.push(
+      `FAIL golden corpus — version mismatch (${goldenVersion} vs package ${packageVersion})`,
+    );
+  }
+
   return { lines, failures };
 }
 
@@ -894,7 +943,7 @@ export function evaluate({
  * Reads the filesystem and returns the facts `evaluate` needs.
  * This is the only function that touches the outside world.
  *
- * @returns {{skillDirs: string[], packageVersion: string, rootVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, cargoVersion: string, cargoLockVersion: string, tsSdkVersion: string, mcpVersion: string, pySdkVersion: string, skills: object[], agentsSkillsFiles: Record<string, string>|null, skillsFiles: Record<string, string>|null, trackedFiles: string[]|null, authoring: string, overview: string}}
+ * @returns {{skillDirs: string[], packageVersion: string, rootVersion: string, pluginVersion: string, marketplaceVersion: string, codexPluginVersion: string, vscodeVersion: string, cargoVersion: string, cargoLockVersion: string, tsSdkVersion: string, mcpVersion: string, pySdkVersion: string, goldenVersion: string|null, skills: object[], agentsSkillsFiles: Record<string, string>|null, skillsFiles: Record<string, string>|null, trackedFiles: string[]|null, authoring: string, overview: string}}
  */
 export function readSkillFacts() {
   const pkgPath = join(root, PACKAGE_JSON);
@@ -955,6 +1004,15 @@ export function readSkillFacts() {
   const pySdkVersion = existsSync(pyprojectPath)
     ? tomlSectionVersion(readFileSync(pyprojectPath, "utf8"), "[project]")
     : "?";
+
+  // The version the golden-output corpus embeds for the engine, read from the
+  // single canonical reference (`check.json` — every verb embeds the same one
+  // number). `null` when the corpus is unreadable, which evaluate treats as a
+  // mismatch rather than silently passing.
+  const goldenPath = join(root, GOLDEN_CORPUS_DIR, "check.json");
+  const goldenVersion = existsSync(goldenPath)
+    ? (goldenToolVersion(readFileSync(goldenPath, "utf8")) ?? null)
+    : null;
 
   const skillsDir = join(root, SKILLS_DIR);
   const skillDirs = existsSync(skillsDir)
@@ -1039,6 +1097,7 @@ export function readSkillFacts() {
     tsSdkVersion,
     mcpVersion,
     pySdkVersion,
+    goldenVersion,
     skills,
     agentsSkillsFiles,
     skillsFiles,

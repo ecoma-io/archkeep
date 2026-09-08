@@ -331,6 +331,7 @@ describe("evaluate", () => {
     tsSdkVersion: "0.4.0",
     mcpVersion: "0.4.0",
     pySdkVersion: "0.4.0",
+    goldenVersion: "0.4.0",
     agentsSkillsFiles: { "arch-context/SKILL.md": "canonical" },
     skillsFiles: { "arch-context/SKILL.md": "canonical" },
     trackedFiles: ["docs/concepts/adr.md", "skills/arch-check/SKILL.md"],
@@ -584,6 +585,22 @@ describe("evaluate", () => {
     assert.ok(
       result.failures.some((f) => f.includes("Cargo.lock") && f.includes("0.3.0")),
       "a lock left behind by the bump must fail the chain",
+    );
+  });
+
+  it("fails when the golden corpus has not been synced with the manifest version", () => {
+    // The 0.26.0 release pull request, replayed: release-please bumped the
+    // manifest, nothing re-emitted the goldens, and the byte-identity gate
+    // failed on `tool.version` expected 0.25.0 vs received 0.26.0. Red here is
+    // red while the repair is still a commit (`sync-goldens.mjs` in the lane).
+    const result = evaluate({
+      ...baseFacts,
+      goldenVersion: "0.25.0",
+      skills: allGood(),
+    });
+    assert.ok(
+      result.failures.some((f) => f.includes("golden corpus") && f.includes("0.25.0")),
+      "a golden corpus left behind by the bump must fail the chain",
     );
   });
 
