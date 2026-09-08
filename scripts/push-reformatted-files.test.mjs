@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
 
 import { REFORMAT_FILES, requestGit, treePayload } from "./push-reformatted-files.mjs";
+import { GOLDEN_JSON_FILES } from "./sync-goldens.mjs";
 
 test("treePayload embeds each file's bytes as inline content with a trailing newline", () => {
   const root = mkdtempSync(join(tmpdir(), "r0b-tree-"));
@@ -106,6 +107,7 @@ test("the reformat list is every file the lane repairs", () => {
     "packages/archkeep-rule-sdk-ts/package.json",
     "packages/archkeep-rule-sdk-rust/Cargo.lock",
     "packages/archkeep-rules/Cargo.lock",
+    ...GOLDEN_JSON_FILES,
   ]);
 });
 

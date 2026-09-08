@@ -260,6 +260,7 @@ jobs:
             packages/archkeep-rule-sdk-ts/package.json
 
           node scripts/sync-cargo-lock.mjs
+          node scripts/sync-goldens.mjs
 
           if git diff --quiet; then
             echo "nothing to repair; nothing to push"
