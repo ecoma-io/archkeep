@@ -21,15 +21,17 @@ export default defineConfig({
     // kills the whole suite before a single test runs when the host is busy.
     testTimeout: 120_000,
     hookTimeout: 120_000,
-    // Serial execution: the artifact is packed once per run, and pnpm install
-    // mutates the consumer's node_modules. Parallel tests sharing a consumer
-    // directory would race; separate consumers are possible but slower. The
-    // parallelism CI buys instead is `--shard`, which splits the FILES across
-    // runners and leaves each runner serial — see the `verify-e2e` job in
-    // `../../../.github/workflows/ci.yml`.
-    // Vitest 4 moved pool options to the top level; `fileParallelism: false`
+    // File-level parallelism is safe here because concurrent files share
+    // nothing a race could reach: every consumer a file touches lives in its
+    // own mkdtemp directory (`helpers/consumer.mjs` — temp dir, `git init`,
+    // its own install per consumer; `helpers/artifact.mjs` packs into one the
+    // same way). A file's own tests still run in order, so a scenario that
+    // mutates its consumer stays serial where the sequencing matters.
+    // Cross-runner parallelism is `--shard`, which splits the FILES across
+    // runners — see the `verify-e2e` job in `../../../.github/workflows/ci.yml`.
+    // Vitest 4 moved pool options to the top level; `fileParallelism` here
     // replaces the old `poolOptions.forks.maxForks: 1`.
     pool: "forks",
-    fileParallelism: false,
+    fileParallelism: true,
   },
 });
