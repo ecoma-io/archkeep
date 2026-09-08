@@ -1,5 +1,5 @@
-intent     /tmp/archkeep-golden-fixture/.archkeep-change.json — base 1fd51709
-baseline   /tmp/archkeep-golden-fixture/.archkeep-delta.json — 1fd51709, 2 records, 3 projects
+intent     <fixture-root>/.archkeep-change.json — base 1fd51709
+baseline   <fixture-root>/.archkeep-delta.json — 1fd51709, 2 records, 3 projects
 head       1fd51709, 3 projects
 reconciliation ✔ MATCHED — the delta is exactly the declared change
 workspace law  0 live violations under the current law — informational; archkeep check remains the authoritative verdict

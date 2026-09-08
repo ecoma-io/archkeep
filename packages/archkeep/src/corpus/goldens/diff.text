@@ -1,4 +1,4 @@
-baseline  /tmp/archkeep-golden-fixture/.archkeep-graph.json — 3 projects, 2 edges
+baseline  <fixture-root>/.archkeep-graph.json — 3 projects, 2 edges
 head      3 projects, 2 edges
 ✔ no boundary-rule impact
 ✔ no changes between baseline and head (2 imports in 3 files across 3 projects; per-edge rule-impact covers only depConstraints (3 of 15 violation types; standing edges adjacent to a tags-changed project are re-judged under both sides' tags). A dependency with no rule-impact may still violate npm-ban, circular-dependency, lazy-load, or other rules that require import-site details. Run check for the complete verdict.)

@@ -1,4 +1,4 @@
-history  /tmp/archkeep-golden-fixture/.archkeep-history
+history  <fixture-root>/.archkeep-history
 1 snapshot, 0 transitions (2 imports in 3 files across 3 projects)
 0  0001-71341a04.json  71341a04
 ✔ one snapshot, no transitions yet — capture again after an architectural change

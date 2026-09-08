@@ -6,7 +6,7 @@
   },
   "command": "diff",
   "workspace": {
-    "root": "/tmp/archkeep-golden-fixture",
+    "root": "<fixture-root>",
     "provider": "native",
     "marker": "archkeep.json",
     "provenance": {
@@ -30,7 +30,7 @@
   },
   "result": {
     "baseline": {
-      "path": "/tmp/archkeep-golden-fixture/.archkeep-graph.json",
+      "path": "<fixture-root>/.archkeep-graph.json",
       "projects": 3,
       "edges": 2,
       "toolVersion": "0.26.0",
