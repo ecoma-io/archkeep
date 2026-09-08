@@ -1,0 +1,85 @@
+name: Triage
+
+# Dogfood: the organisation's `triage` action (ecoma-io/action-agents) runs on
+# this repository's own issues and pull requests — the enrollment recorded in
+# that repository's docs/dogfood.md at v0.11.2, in the rollout's dry-run
+# posture: every decision lands in the run record and nothing is written to
+# any thread.
+#
+# The ref is digest-pinned to the commit the released tag v0.11.2 names — the
+# maintainer decision recorded on #804. The rollout's policy is the released
+# exact version, never `@main` and never a floating tag: the operator must
+# know which bytes run before any of them do, and adopting a later fix is a
+# deliberate re-pin, never an accident of a moving tag (action-agents
+# docs/dogfood.md, "Refs and secrets" and "Incident rules"). Digest-pinning
+# honors that intent and satisfies this repository's supply-chain rule
+# (`workflow-action-not-pinned-to-sha`, .github/semgrep/workflows.yaml):
+# a tag is a pointer upstream can repoint, so the immutable commit is what
+# the `uses:` resolves, with the tag readable beside it. Renovate's
+# action-pinning preset keeps the pair current; a bump is the re-pin.
+#
+# No config file yet — phase 1 of the rollout's config ladder reads no sheet,
+# so the classification has nowhere to go but the record. The write grants
+# below are held without being exercised: the sheet can go live at phase 2
+# with no permissions diff riding along.
+
+on:
+  issues:
+    types: [opened, edited, reopened, labeled]
+  pull_request:
+    types: [opened, edited, synchronize, ready_for_review, reopened, labeled]
+  workflow_dispatch:
+
+# The workflow-level floor grants nothing; the job below restates its reads
+# and holds every write. A job-level `permissions` block REPLACES this one
+# rather than merging with it, so a job added later inherits read-only instead
+# of silently widening.
+permissions: read-all
+
+# One triage run per thread: a rapid sequence of edits replaces the queued run
+# rather than stacking classifications of stale text.
+concurrency:
+  group: triage-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # `pull-requests: write` is load-bearing even though triage only writes
+    # labels: GitHub refuses the issues-API label write on a pull request
+    # number without it. No `security-events` and no `actions` — the action
+    # never touches either.
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      # No checkout: a target references the released action by ref, and
+      # triage reads everything through the API, never the working tree. One
+      # less thing in the workspace.
+      - uses: ecoma-io/action-agents/triage@605c38f60a26b7bcc56e9cd24852d5b38babbe70 # v0.11.2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          api-url: ${{ secrets.ECOMA_LLM_BASE_URL }}
+          api-key: ${{ secrets.ECOMA_LLM_API_KEY }}
+          model: triage
+          # The rollout's starting posture, set explicitly rather than left to
+          # the default so the flip to live is a visible one-line diff in this
+          # repository's history.
+          dry-run: "true"
+
+      # The run record is a dry run's whole output — if it is missing, the run
+      # is red or the record write failed; it is never green over nothing. The
+      # record directory is hidden by design, so `include-hidden-files: true`
+      # is load-bearing: upload-artifact prunes hidden files by default and
+      # would match zero files while reporting success. `if-no-files-found:
+      # warn` keeps a declared write that lands nowhere loud.
+      - name: Upload the run record
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: triage-run-record
+          path: .triage-record/triage-record-*.json
+          include-hidden-files: true
+          if-no-files-found: warn
