@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.26.0](https://github.com/ecoma-io/archkeep/compare/v0.25.0...v0.26.0) (2026-09-08)
+
+
+### Features
+
+* **archkeep:** golden-output corpus and read-only byte-identity (gap-a gap-b) ([#767](https://github.com/ecoma-io/archkeep/issues/767)) ([7b8c85b](https://github.com/ecoma-io/archkeep/commit/7b8c85b69f2463ff91badf8188edef10e85ce59c))
+* **archkeep:** write R1's status-side boundary sentence into the completeness header ([#757](https://github.com/ecoma-io/archkeep/issues/757)) ([c329fc2](https://github.com/ecoma-io/archkeep/commit/c329fc2fbd6fa7c0b23e0f2c2b9c66655ba99e5c))
+
+
+### Bug Fixes
+
+* **archkeep:** fix nx family crash; port the 23.2.0 nested-ban behavior ([#789](https://github.com/ecoma-io/archkeep/issues/789)) ([d018d77](https://github.com/ecoma-io/archkeep/commit/d018d7702cb0780ef323bcec67fbf2f60f8de7ac)), closes [#788](https://github.com/ecoma-io/archkeep/issues/788)
+* **archkeep:** judge the decisions fitness leg on the verdict-shaped intent ([#743](https://github.com/ecoma-io/archkeep/issues/743)) ([3462e47](https://github.com/ecoma-io/archkeep/commit/3462e47c139071b84c78bb70dbb7f990dd899d85))
+* **archkeep:** latch delta and summary dispositions against unknown values ([#739](https://github.com/ecoma-io/archkeep/issues/739)) ([#741](https://github.com/ecoma-io/archkeep/issues/741)) ([73ef770](https://github.com/ecoma-io/archkeep/commit/73ef7705b76f5e22f1e050f8c2355ada9188ccb9))
+* **archkeep:** refuse evolution events outside the vocabulary at write time ([#744](https://github.com/ecoma-io/archkeep/issues/744)) ([0d30fb8](https://github.com/ecoma-io/archkeep/commit/0d30fb8dd2c4e71c0e320dd7712b0b11aec66152))
+* **archkeep:** refuse malformed verdict-fold inputs instead of folding them as zero ([#730](https://github.com/ecoma-io/archkeep/issues/730)) ([1e72eb0](https://github.com/ecoma-io/archkeep/commit/1e72eb0def0e8e8366ec9e69d44b6d095dfdab04))
+* **archkeep:** sync the golden-output corpus on release version bumps ([#793](https://github.com/ecoma-io/archkeep/issues/793)) ([68750c9](https://github.com/ecoma-io/archkeep/commit/68750c965730920549c9028ac6b0ce41cfb07b5e))
+* **vscode:** recognise a Moon workspace in the client's marker walk ([#742](https://github.com/ecoma-io/archkeep/issues/742)) ([a9a9ce1](https://github.com/ecoma-io/archkeep/commit/a9a9ce1ad612a6712bbc19388b4ce32caff905e4))
+
+
+### Documentation
+
+* architecture refactor control plane — Phase 0 cartography ([#727](https://github.com/ecoma-io/archkeep/issues/727)) ([2408482](https://github.com/ecoma-io/archkeep/commit/2408482181c212a7085fda164d13c0b0bc9ec3f8))
+* **archkeep:** adjudicate the Moon provider's five embedded policies (Phase 1-C) ([#734](https://github.com/ecoma-io/archkeep/issues/734)) ([e58b29d](https://github.com/ecoma-io/archkeep/commit/e58b29d6b0a70e7642b9c14fd259be76e6901073))
+* **archkeep:** close phase 3 — boundary enforcement exit record ([#766](https://github.com/ecoma-io/archkeep/issues/766)) ([c9f7b6d](https://github.com/ecoma-io/archkeep/commit/c9f7b6d01ad7d68952416c2a263c307f79089fbd))
+* **archkeep:** close phase 9 — scored maturity gate, GAP-C/D dispositions ([#792](https://github.com/ecoma-io/archkeep/issues/792)) ([9ab6089](https://github.com/ecoma-io/archkeep/commit/9ab6089ec0c914df038b19f6ec96a2520fefd47f))
+* **archkeep:** close riders D1-D6 — six measured sentences now state the truth (Phase 1-F) ([#733](https://github.com/ecoma-io/archkeep/issues/733)) ([3c8deb0](https://github.com/ecoma-io/archkeep/commit/3c8deb03e0f744551b2f42b6360f6c7c6c71c62a))
+* **archkeep:** correct the full-suite count in the CHK-8 evidence block ([#790](https://github.com/ecoma-io/archkeep/issues/790)) ([212bec5](https://github.com/ecoma-io/archkeep/commit/212bec5e796702fad8581db7309595efb746bd25))
+* **archkeep:** define the provider seam contract and close Phase 1 (1-D) ([#736](https://github.com/ecoma-io/archkeep/issues/736)) ([eee9d22](https://github.com/ecoma-io/archkeep/commit/eee9d22332d4c91836395e1b9ab44e0567f7eeb1))
+* **archkeep:** phase 5 closure and phase 6 entry baseline ([#774](https://github.com/ecoma-io/archkeep/issues/774)) ([e3c937e](https://github.com/ecoma-io/archkeep/commit/e3c937e1e98a4570d8a5a167e5061b2689d318e9))
+* **archkeep:** pin the four finding families to the one verdict lane (Phase 2-B) ([#745](https://github.com/ecoma-io/archkeep/issues/745)) ([71dddeb](https://github.com/ecoma-io/archkeep/commit/71dddeb7ff8ff20bcadbee4aacd1cc5d6634fd6f))
+* **archkeep:** pin the two edge-identity spellings to each other's headers (Phase 1-E) ([#732](https://github.com/ecoma-io/archkeep/issues/732)) ([63ed90d](https://github.com/ecoma-io/archkeep/commit/63ed90d46292135a482089930f4d135e7a5fc4ac))
+* **archkeep:** reconcile the program state table and tracking paragraph with main ([#758](https://github.com/ecoma-io/archkeep/issues/758)) ([91acf6b](https://github.com/ecoma-io/archkeep/commit/91acf6b6fac5c913dac7672b00bea786367cce93))
+* **archkeep:** record g-3/g-4/g-6/g-8 dispositions and close the gap roster ([#765](https://github.com/ecoma-io/archkeep/issues/765)) ([80ba22e](https://github.com/ecoma-io/archkeep/commit/80ba22e83ff5f728c8428124ecd752d6ab0c8d43))
+* **archkeep:** record Phase 4 extraction-candidates checkpoint (CHK-5) ([#769](https://github.com/ecoma-io/archkeep/issues/769)) ([c8aa86c](https://github.com/ecoma-io/archkeep/commit/c8aa86ceda7fa2f407ced7fef707c59d6897f51e))
+* **archkeep:** record the Phase 8 federation readiness runway ([#791](https://github.com/ecoma-io/archkeep/issues/791)) ([da24239](https://github.com/ecoma-io/archkeep/commit/da24239e4287ea144a439aef29531dc91579c612))
+* **archkeep:** record the wi-2 fold ruling as pd-15 and close phase 2 ([#759](https://github.com/ecoma-io/archkeep/issues/759)) ([7fd2828](https://github.com/ecoma-io/archkeep/commit/7fd28286921c305dae64f8b411fdab0bc8cfe5fa))
+* **archkeep:** state the intra-src dag and decide pressure edges ([#764](https://github.com/ecoma-io/archkeep/issues/764)) ([c85888b](https://github.com/ecoma-io/archkeep/commit/c85888bf926abfcf0f40e289b6cd9ba829ed0c58))
+* **archkeep:** the WI-5 ladder preamble counts provenance ([#749](https://github.com/ecoma-io/archkeep/issues/749)) ([63d4013](https://github.com/ecoma-io/archkeep/commit/63d401377e634c5719ac5ea60d036def72ea06fd))
+* close refactor decisions and lock phase 1 execution baseline ([#729](https://github.com/ecoma-io/archkeep/issues/729)) ([2b33ff4](https://github.com/ecoma-io/archkeep/commit/2b33ff46667a47a311a1d07dbb4ed99df911fa39))
+* record the 2-A canonical semantic audit's adjudication (closes OQ-5/7/10/15) ([#740](https://github.com/ecoma-io/archkeep/issues/740)) ([d9c9e08](https://github.com/ecoma-io/archkeep/commit/d9c9e08ceb1262cf15d9273d921ff1f32b1bb1b6))
+* verify the rules verify fold contract from source (Phase 1-B) ([#731](https://github.com/ecoma-io/archkeep/issues/731)) ([b31aaa6](https://github.com/ecoma-io/archkeep/commit/b31aaa6497f7ac2eb62167718235f22b535dd942))
+
 ## [0.25.0](https://github.com/ecoma-io/archkeep/compare/v0.24.1...v0.25.0) (2026-09-05)
 
 
