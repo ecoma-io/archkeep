@@ -480,8 +480,8 @@ function changeFoldInputProblem(reconciliation, constraints, unprovenReasons) {
  * before any list, so a malformed one reaching it unguarded can name the
  * whole run unproven or matched for reasons the counts never supported. The
  * literals stay hand-rolled per site by decision — the carrier folds are the
- * pinned baseline INV-2 names, not a table to be converged
- * (`docs/architecture/refactor/AUTHORITY-MAP.md`).
+ * pinned baseline, not a table to be converged
+ * (`docs/reference/exit-codes.md`'s fold-site statement).
  *
  * @param {{matched: object[], unexpected: object[], missingExpected: object[]}} reconciliation
  * @param {{verdict: string}[]} constraints Judged `fitnessVerdict` rows —

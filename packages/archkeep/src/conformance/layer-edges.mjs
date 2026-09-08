@@ -2,8 +2,8 @@
  * The masked static-import-edge extractor the layer-direction scans share.
  *
  * `layer-direction.test.mjs` (#649, `src/lsp` → `src/commands`) grew it
- * inline; the G-1/G-5/G-2 gates (`layer-direction-imports.test.mjs`,
- * umbrella #725) need the identical judgment, and a judgment duplicated is
+ * inline; the G-1/G-5/G-2 gates (`layer-direction-imports.test.mjs`)
+ * need the identical judgment, and a judgment duplicated is
  * a judgment that drifts — so the regex array and the extraction function
  * live here, moved whole from the #649 gate, and both scans import them.
  * Nothing here decides anything: it reports the relative specifiers a

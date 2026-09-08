@@ -59,6 +59,46 @@ reference clock, while a command whose verdict must stay reproducible emits a
 decision with no time at all. The clock is injectable, so a test drives the
 same code with a fixed time and never asserts from the wall clock.
 
+## Four finding families, one verdict lane
+
+The one vocabulary is fed by four families of judgment, and no single module
+owns "what a finding _is_". Each family builds its own shape and message
+wording, then all four fold into the one verdict lane as count keys into
+`verdictFor` (`packages/archkeep/src/verdict.mjs`). There is no Finding
+supertype, and deliberately: a canonical Finding object would give the four
+surfaces a second way to disagree about a single finding. What binds them
+instead is the relationship pin at `violationOf` (`src/rules/index.mjs`) — the
+rules lane's canonical `Violation` record — and the documented normalization
+seam, `src/commands/check.mjs`'s markdown-pairing fold, where `judgeEdge`'s
+verdicts are reshaped into the exact record `violationOf` builds. A Finding
+that grows judgment fields, lifecycle state, or surface-specific rendering
+stays rejected at review.
+
+The four families:
+
+| family                   | constructor                                     |
+| ------------------------ | ----------------------------------------------- |
+| the rules lane           | `violationOf` — `src/rules/index.mjs`           |
+| graph-edge constraint    | `judgeEdge` — `src/rules/edge-constraints.mjs`  |
+| go.work drift            | `compareGoWork` — `src/go-work.mjs`             |
+| tsconfig `paths` hygiene | `judgeTsconfigPaths` — `src/tsconfig-paths.mjs` |
+
+Each stays its own family's shape; there is no fold that converts one into
+another. That is what makes the "no Finding supertype" claim a load-bearing
+fact about the engine, not a naming choice.
+
+## Register R1 — two models of "did we see everything"
+
+`EVALUATION_STATUS` (`src/commands/completeness.mjs`) and the coverage-refusal
+contract `coverageVerdict` (`src/commands/coverage-verdict.mjs`) are two
+unrelated vocabularies that share the word "complete", and they must not be
+conflated. The evaluation statuses grade how completely the _composed
+evaluation_ satisfied the gates; the refusal contract decides whether the run
+saw enough input to make any claim at all (its `no-verdict` / exit 3 on a
+findings-free incomplete run). Neither is derived from the other, and the two
+are kept in separate registers on purpose — they answer different questions
+that only collide textually.
+
 ## What this is not
 
 Evidence does not reason. It does not decide whether a finding _is_ one — the

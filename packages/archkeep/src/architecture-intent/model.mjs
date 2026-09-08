@@ -12,8 +12,8 @@
  * is a deterministic comparison (`./judge.mjs`). NO LLM/AI anywhere in the core.
  *
  * Which "intent" this is: one of four unrelated surfaces sharing the word —
- * PD-13 outcome (c), four surfaces, never one type
- * (`../../../../docs/architecture/refactor/DECISIONS.md`). This module is
+ * four surfaces, never one type
+ * (`../../../../docs/concepts/architecture.md`, "The 24 commands"). This module is
  * the workspace-declared law: the grammar, validation, and loading of
  * `architecture-intent.json`, judged against the observed graph by `check`
  * and `drift`. The other three: the v1.0 evidence-manifest registry

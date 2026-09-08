@@ -1,9 +1,8 @@
 /**
- * The layer directions the architecture declares and, until the scans in
- * this file, only promised — the audit registered the unscanned ones as
- * gaps G-1, G-5 and G-2 (`BOUNDARIES.md` "Declared but unscanned"; full
- * definitions in `VALIDATION-MATRIX.md`'s "Architectural test gaps";
- * umbrella #725):
+ * The layer directions the architecture declares, as gates rather than
+ * promises: the unscanned claims became the scans here — G-1 that core never
+ * reaches providers, G-5 that report renders and decides nothing, G-2 that
+ * commands never imports lsp:
  *
  *  - **G-1** — core (`src/rules/`, `src/analysis/`, `src/report/`) never
  *    imports `src/providers/`. Intent A claims providers observe and never
@@ -180,7 +179,7 @@ describe("layer direction imports — G-1: core never imports providers", () => 
         ({ from, specifier, resolved }) =>
           `${from} imports ${specifier} (resolves to ${resolved}) — G-1: core (rules, analysis, ` +
           `report) must not import src/providers: providers observe and never decide, and the ` +
-          `layers that judge sit above the layer that acquires (BOUNDARIES.md, umbrella #725)`,
+          `layers that judge sit above the layer that acquires`,
       ),
     ).toEqual([]);
   });
@@ -235,11 +234,8 @@ describe("layer direction imports — G-5: report renders, decides nothing", () 
    * message vocabulary, data crossing, not rule LAW: the renderer reads
    * templates to name kinds it already holds; it filters, scores and
    * decides nothing. It stays on the roster — not waved through — because
-   * the edge bends the declared layering all the same, and whether it is
-   * kept (with this reason) or broken (the tables re-homed out of
-   * `rules/`) is the pressure-point decision the Phase 3 DAG record owes
-   * `BOUNDARIES.md`'s "Measured pressure points". Until that decision
-   * lands, the roster keeps the gate honest in both directions: a SECOND
+   * the edge bends the declared layering all the same: the roster keeps the
+   * gate honest in both directions — a SECOND
    * forbidden edge fails the scan naming itself, and this edge silently
    * vanishing fails the roster — a declaration that outlived the tree is
    * the same drift as a violation, only quieter.
@@ -268,7 +264,7 @@ describe("layer direction imports — G-5: report renders, decides nothing", () 
         ({ from, specifier, resolved }) =>
           `${from} imports ${specifier} (resolves to ${resolved}) — G-5: report renders and ` +
           `decides nothing; rule/config law lives in src/rules and src/config.mjs, and a ` +
-          `renderer that imports it decides (BOUNDARIES.md, umbrella #725). A new edge ` +
+          `renderer that imports it decides. A new edge ` +
           `against the ban needs a recorded decision, not a quiet pass`,
       ),
     ).toEqual([]);
@@ -317,7 +313,7 @@ describe("layer direction imports — G-2: commands never imports lsp", () => {
         ({ from, specifier, resolved }) =>
           `${from} imports ${specifier} (resolves to ${resolved}) — G-2: the #649 gate holds ` +
           `lsp -> commands and this holds commands -> lsp, so the CLI face and the editor ` +
-          `face cannot reach into each other from either side (BOUNDARIES.md, umbrella #725)`,
+          `face cannot reach into each other from either side`,
       ),
     ).toEqual([]);
   });

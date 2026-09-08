@@ -22,13 +22,11 @@ merges the declared tags with a `layer:<value>` tag synthesized from the
 deduplicated and sorted. Because a project's tags are inputs to judgment, the
 architecture refactor's provider audit recorded the synthesis among the five
 policies embedded in `transformMoonGraph` awaiting adjudication (the
-providers-observe law is the one in question; the finding and the five items
-are the refactor control plane's). This record is the adjudication's outcome
-for this item, 2026-09-05. The number is simply the next free one: the
-refactor's PD-10
-([`docs/architecture/refactor/DECISIONS.md`](../architecture/refactor/DECISIONS.md#program-decisions))
-had earlier rejected a would-be ADR-0009 **for event identity** — a rejection
-of that subject, not a reservation of the number.
+providers-observe law is the one in question). This record is the
+adjudication's outcome for this item, 2026-09-05. The number is simply the next free one: the
+refactor's program-decisions register (PD-10) had earlier rejected a
+would-be ADR-0009 **for event identity** — a rejection of that subject, not
+a reservation of the number.
 
 ## Decision
 

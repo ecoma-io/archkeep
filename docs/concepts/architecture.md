@@ -7,7 +7,36 @@ plugin. The analysis is the same each time; only the delivery changes.
 
 ## The pipeline
 
-A `check` run is a straight line:
+One law, one direction. The engine is a straight one-way line from input to
+verdict, and the pipeline's single non-negotiable is that record flows never
+feed back into evaluation:
+
+```
+input adapters      providers (nx / moon / native) read the workspace's own files
+        ↓
+workspace          discovery and the project model the providers compose
+        ↓
+observation        the analyzers read every import site, and never judge
+        ↓
+canonical state    graphs, snapshots, provenance — the one spelling facts have
+        ↓
+policy / rules     the declared constraint table, judged against the records
+        ↓
+evaluation         the rules layer is pure: records + config in, verdict out
+        ↓
+verdict            the one vocabulary / one Decision constructor / one EXIT table
+        ↓
+projections        the command surfaces read the verdict; they never re-decide
+```
+
+The line is drawn so that every stage to the right of `evaluation` consumes
+the verdict without ever entering it. A stage that lets a record flow change
+how `check` judges — feeds the law back through the verdict, or re-derives a
+canonical fact in a projection — would turn the one-way line into a loop, and a
+loop is a second authority. That is the stop condition any structural change
+against this pipeline is held to.
+
+A `check` run is the straight line, concretely:
 
 ```
 find root → read options → load config → read graph + files →
@@ -136,8 +165,25 @@ not a second command list.
 
 The implementation mirrors the vocabulary one-to-one: each capability word
 owns a facade module, `packages/archkeep/src/commands/<word>-capability.mjs`
-— an explicit re-export roster of that word's verbs and nothing else
-(PD-18, `docs/architecture/refactor/DECISIONS.md`).
+— an explicit re-export roster of that word's verbs and nothing else. The
+facade is pure by construction: it has nowhere to hide a judgment, so the
+vocabulary's code referent is visible to the import graph, not just to a
+comment. `cli.mjs` routes its verb imports through the facades rather than
+around them — every verb but `adr`, whose CLI entry reaches its prefix
+`adr-for-workspace.mjs` preamble driver directly, so the workspace-root and
+tracked-file resolution that verb needs is composed once beside the
+`adrCommand` it then feeds (the driver's header owns why that one voice
+routes around, and calling it through the facade afterward would add nothing
+but an indirection).
+
+The same "surface, never a second object" rule governs the words the engine
+carries. **`intent` is not one type** — the word names four distinct surfaces
+that never merge: the workspace-declared law (`src/architecture-intent/`), the
+v1.0 evidence-manifest registry (`src/intent/`), the declared-change grammar a
+`change` run verifies (`src/commands/change-intent.mjs`), and the run
+envelope's intent shape `delta`/`change` build. Four concepts, one word, and
+deliberately no shared `Intent` object — a shared type would be a second
+disagreement point between the surfaces that happen to share the name.
 
 | command      | what it does                                                                                                       | finds violations |
 | ------------ | ------------------------------------------------------------------------------------------------------------------ | ---------------- |

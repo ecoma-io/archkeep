@@ -1,9 +1,7 @@
 /**
  * Entry-surface imports — G-4: `cli.mjs`/`lsp.mjs` are faces, not judges.
- * The Phase 3 audit registered the gap (`VALIDATION-MATRIX.md` "G-4
- * `cli.mjs`/`lsp.mjs` wiring-only", umbrella #725) and proved the claim by
- * reading the import rosters by hand; this file makes it a gate, because a
- * roster read once is a claim that goes stale with the next edit.
+ * This file makes the claim a gate, because a roster read once is a claim
+ * that goes stale with the next edit.
  *
  * What the gate actually holds is NOT the row's literal title — the matrix
  * itself records that `cli.mjs` is not wiring-only (it owns the process
@@ -166,7 +164,7 @@ describe("entry surface imports — G-4: cli.mjs and lsp.mjs compose, never judg
           `${from} imports ${specifier} (resolves to ${resolved}) — G-4: an entry file composes ` +
           `the package through src/commands (CLI face) and src/lsp (editor face) and must not ` +
           `reach into the layers that judge, acquire or render; a finding here is a duty the ` +
-          `command layer was supposed to own (VALIDATION-MATRIX.md G-4, umbrella #725)`,
+          `command layer was supposed to own`,
       ),
     ).toEqual([]);
   });

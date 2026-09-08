@@ -105,6 +105,63 @@ it changes the snapshot identity `history` keys transitions on — and so is
 array element order in the intent fingerprint. Before asserting
 order-invariance on any sequence, check which kind it is.
 
+### Validation tiers, and how a comparison proves a claim
+
+Every test here lands in one of four tiers that say how much it may be
+relaxed, so a refactor knows which assertions are safe to move and which are
+walls:
+
+- **T1 — invariant.** Fails when the tool goes quiet: silent-direction
+  positives, loudness/refusal, determinism, byte-identity, conservation,
+  vacuity guards. The refactor-blocking set: must stay green with no weakened
+  assertion.
+- **T2 — contract.** Pins an external contract: verbs/flags, exit codes,
+  envelope schema + roster, SARIF, LSP protocol, exports/subpaths, config
+  schema, rosters/version chains. Byte identity is a gate here and only here.
+- **T3 — behavior.** Module semantics over injected data.
+- **T4 — implementation detail.** Wording/shape a refactor may change freely
+  (renderers' pinned prose included). **Excluded from T4**: rule-message
+  templates and envelope bytes — upstream-parity- and schema-pinned text is
+  T2, and regenerating it is a contract change, not a review decision.
+
+Whenever a comparison runs -- a differential, a golden, a run-to-run identity
+check -- it runs at three levels, in this order:
+
+1. **Semantic golden** -- the meaning: verdict, violations, evidence,
+   provenance, coverage. Compared structurally over canonical fields, before
+   any byte is compared.
+2. **Contract golden** -- the bytes a contract freezes: the JSON envelope
+   (`schemaVersion` + field roster), SARIF, `--help`, declared protocol
+   messages. Byte identity is a gate here and only here.
+3. **Incidental bytes** -- formatting, key order, whitespace, path spellings
+   no contract names. Not a gate: a divergence at this level is re-blessable
+   by review with the reason recorded.
+
+A golden test that freezes level-3 detail as if it were level-2 -- with no
+contract or invariant naming those bytes -- is a stop condition. The golden
+corpus therefore commits full per-verb output but gates it only at levels 1
+and 2; level-3 drift inside a corpus diff is the reviewer's triage, never an
+automatic red.
+
+For a structural change to a verb, the output differentials that must run --
+over pinned fixture trees, old path vs new -- are (this is the roster a
+refactor PR cites rather than "tests pass"):
+
+1. `check` verdict + JSON + SARIF -- byte-identical at levels 1-2; level-3
+   drift triaged.
+2. `delta --capture` then `--compare` classification stability.
+3. `change` reconciliation verdicts.
+4. `explain` per-site agreement with `check` findings.
+5. `context`/`impact` agreement with `check` declared edges.
+6. `waivers` finding set vs `check` (suppression-removal path).
+7. `health`/`report` numbers vs their constituent commands.
+8. `history --capture` → `diff` roundtrip.
+9. `trajectory` classification vs `history`'s classifier.
+10. Exit-code matrix per verb -- the five exit-1 verbs' findings sides (check,
+    fitness, delta --compare, change, rules verify).
+11. `rules verify` tamper → exit 1.
+12. Envelope byte stability per verb -- level 2; the envelope is contract.
+
 ### Cross-command consistency — protecting the shared authority boundary
 
 Several commands answer overlapping questions over the same facts, and most of

@@ -338,6 +338,18 @@ to it:
 - **Not a product surface that edits the law.** Whatever reads or suggests,
   the constraint table stays code in the workspace, reviewed like code.
 
+**Federation is a runway, not a capability.** Nothing here ships a
+repository-spanning authority: there is no `FederationService`, no agreement
+protocol, no cross-repository vocabulary — until a concrete requirement names
+one. A second repository is a second consumer of the choice made by this
+workspace's own core (itself a consumer, never an architect), and federating
+two autocrats produces no more authority than either had alone. The substrate
+that would compose a federation today is the record spine: a first-class
+governance record (`ADR`/`decision`/`waiver`), the evidence a verdict cites,
+and the snapshot identity ADR 0008 fixes per family — each durable even if no
+federation ever arrives, so "no federation terms yet" is a decision that costs
+nothing until a requirement forces it.
+
 ## How the intelligence layer erodes the authority
 
 Five signals, in the order they would probably appear:

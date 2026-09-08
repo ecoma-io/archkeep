@@ -107,6 +107,43 @@ know which one they are holding.
   real `nx graph` or `moon project-graph`. `packages/archkeep/src/providers/native/README.md`
   owns this path's own semantics and declared limits.
 
+Whichever provider runs, it is held to one responsibility ladder that decides
+what it may do with the tree's facts:
+
+```
+Acquisition → Normalization → Bounded derivation → Canonical engine input → Evaluation
+```
+
+Acquisition and normalization are the provider's own work: reading the
+workspace's files or a `nx graph`/`moon project-graph` call, and reshaping it
+into the `{nodes, dependencies}` shape the engine evaluates. **Evaluation
+belongs to the evaluation authority alone.** "Bounded derivation" — a provider
+adding a derived fact that feeds a verdict — is permitted only when all four
+hold:
+
+- the source fact is **externally stated** (a manifest the workspace wrote),
+- the transformation is **deterministic**,
+- the transformation is **recorded** (an ADR or contract names it),
+- the provider never evaluates policy, never creates a verdict, never creates a
+  governance decision.
+
+The bounded-derivation verdicts that exist today, each recorded as class (b)
+(a recorded policy row — the provider states its source's own facts and
+decides nothing):
+
+| behavior                                                | record                                                                                                                                 |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `judgeCoverage` (native coverage gate)                  | `src/providers/native/coverage.mjs`; refuses coverage the `archkeep.json` contract does not attest                                     |
+| `moon:declared` targets synthesis (`moon.mjs`)          | declared targets become `{executor: "moon:declared"}` — the twin of native's `archkeep:declared`, feeding `hasBuildExecutor`           |
+| `nodeTypeFromLayer` unknown-layer fallback (`moon.mjs`) | Moon `layer` → node type, the same translation class as ADR 0009's tag synthesis; the `lib` fallback is recorded, not an extra verdict |
+| `isRoot` root-target edge suppression                   | reproduces Nx's own root-target rule; the twin is the pin, not a second opinion                                                        |
+| `nodeTypeOf`'s `lib` default (`native/discover.mjs`)    | a shared primitive fine since the LSP consumes it; its `lib` fallback is the pinned default                                            |
+| `isDotnetGeneratedOutput` (marker)                      | generated-output exclusion at discovery; a measured fact, decides nothing                                                              |
+
+None of these is a verdict. A provider that crosses from stating facts into
+judging them is the same second-authority error the doctrine's
+"providers observe, they do not decide" rule prohibits.
+
 Both providers, and `listFiles(root)` (`git ls-files`, in `src/workspace.mjs`
 — the graph JSON carries no file map, and a tree walk would need ignore rules
 that drift from `.gitignore`), reach outside the process only through
@@ -337,7 +374,7 @@ the server the workspace installed, starts it over stdio, and shows whether it i
 running.
 
 `packages/archkeep-mcp` is the agent client, and holds no analysis either: its
-eight MCP tools call the engine's own command functions in-process through the
+nine MCP tools call the engine's own command functions in-process through the
 engine package's `./commands` subpath (`packages/archkeep/commands.mjs`, a
 re-export in `nx.mjs`'s spirit), and return the same versioned JSON envelope
 `--format json` renders. Read-only, with one deliberate exception:

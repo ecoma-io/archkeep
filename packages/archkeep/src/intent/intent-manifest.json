@@ -52,7 +52,7 @@
           "type": "source-evidence",
           "path": "cli.mjs",
           "assertion": "Exit codes 0/1/3 distinguish clean/findings/cannot-look",
-          "sha256": "2b6590f4039464d3569727d0a73db61dd86c18648a519ee034ebcc2d845ecfc7"
+          "sha256": "536fef05cdf8d6ec8a5c364819d2dcbf61cdcf75b638463e98b89d6073e27851"
         }
       ],
       "status": "proven"
@@ -66,13 +66,13 @@
           "type": "behavioral-test",
           "path": "src/intent/intent.test.mjs",
           "assertion": "analysis output conforms to the frozen contract schema (no extra verdict/policy fields); analysis output is invariant under project tag changes (three workspaces differing only in project tag fields compared byte-for-byte)",
-          "sha256": "749414363ef9991ae3697fc00ab5969751666867792d4bb4dbe528ec47ccd740"
+          "sha256": "8c481f1230ae8700469816018fba99017a0014920b12bebdf262ceb241cba745"
         },
         {
           "type": "architecture-test",
           "path": "src/intent/intent.test.mjs",
           "assertion": "the gate walks every production analysis module and fails when judging vocabulary (judge/forbid/permit/allow/ban) appears in code",
-          "sha256": "749414363ef9991ae3697fc00ab5969751666867792d4bb4dbe528ec47ccd740"
+          "sha256": "8c481f1230ae8700469816018fba99017a0014920b12bebdf262ceb241cba745"
         },
         {
           "type": "source-evidence",
@@ -84,7 +84,7 @@
           "type": "source-evidence",
           "path": "AGENTS.md",
           "assertion": "src/graph/ is a lossy view of analysis, on purpose; src/analysis/ never judges",
-          "sha256": "552b54c1956370f024ffeecec95c0e0941a0c66d4a14094045b444a25a27f913"
+          "sha256": "51f38c4231f3ad9e52289b0d7def153c5e8583a578dd392bbbffa4ae6cd478ec"
         }
       ],
       "status": "proven"
@@ -136,7 +136,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "parseBaseline validates schemaVersion; refuses unknown versions",
-          "sha256": "4d44eea475cd4b06122a405718203d2e0018a163c1d42b17324400e7e4de5eea"
+          "sha256": "59e6e8f1cb0535cbec241f6daf99c10f5a679c798e66fcc1f4afb5329bc6497a"
         }
       ],
       "status": "proven"
@@ -156,7 +156,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "computeDiff returns structural diff; policyMismatch detected via fingerprint; computeRuleImpact for depConstraints-only context",
-          "sha256": "4d44eea475cd4b06122a405718203d2e0018a163c1d42b17324400e7e4de5eea"
+          "sha256": "59e6e8f1cb0535cbec241f6daf99c10f5a679c798e66fcc1f4afb5329bc6497a"
         }
       ],
       "status": "proven"
@@ -236,7 +236,7 @@
           "type": "behavioral-test",
           "path": "src/intent/intent.test.mjs",
           "assertion": "depConstraints verdicts from judgeEdge agree with evaluate in both directions (violating edge found by both, legal edge reported by neither); explain includes the same violations as evaluate at a given site",
-          "sha256": "749414363ef9991ae3697fc00ab5969751666867792d4bb4dbe528ec47ccd740"
+          "sha256": "8c481f1230ae8700469816018fba99017a0014920b12bebdf262ceb241cba745"
         },
         {
           "type": "behavioral-test",
@@ -266,7 +266,7 @@
           "type": "source-evidence",
           "path": "src/commands/diff.mjs",
           "assertion": "coverage.notes warns when ruleImpact is computed (depConstraints only, 3 of 15)",
-          "sha256": "4d44eea475cd4b06122a405718203d2e0018a163c1d42b17324400e7e4de5eea"
+          "sha256": "59e6e8f1cb0535cbec241f6daf99c10f5a679c798e66fcc1f4afb5329bc6497a"
         },
         {
           "type": "documentation",

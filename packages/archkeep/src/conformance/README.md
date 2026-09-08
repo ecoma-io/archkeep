@@ -52,13 +52,12 @@ plugin manifests to each other, and `verdict-layering.test.mjs` holds the
 verdict layer to its structural contract — one status→exit-code table in
 `../verdict.mjs`, and no `report/` import from either verdict module (#650).
 
-`layer-direction-imports.test.mjs` turns the rest of the declared layer law
-into the same kind of gate `layer-direction.test.mjs` (#649) already is, over
-import edges extracted once in `layer-edges.mjs`: core (`rules`, `analysis`,
-`report`) never imports `providers/` (G-1), `report/` imports no rule/config
-law (G-5), and `commands/` never imports `lsp/` (G-2) — the gaps the refactor
-audit registered as stated-but-unscanned (`docs/architecture/refactor/`), each
-proving its teeth on a planted violation before it asserts the tree.
+`layer-direction-imports.test.mjs` turns the declared layer law into the same
+kind of gate `layer-direction.test.mjs` (#649) already is, over import edges
+extracted once in `layer-edges.mjs`: core (`rules`, `analysis`, `report`)
+never imports `providers/` (G-1), `report/` imports no rule/config law (G-5),
+and `commands/` never imports `lsp/` (G-2) — each proving its teeth on a
+planted violation before it asserts the tree.
 
 `rule-sdks.integration.test.mjs` is a differential of a different kind, and it
 belongs here for the same reason the ESLint one does: it puts verdicts beside

@@ -141,8 +141,25 @@ its workspace-referencing counterpart, which withholds the verdict.
 `graph`, `diff`, `drift`, `discover`, `reconcile`, `waivers`,
 `history`, `trajectory`, `evolution`, `health`, `report`, `debt`, `impact`, `scenario`, `explain`, `context`, `decisions`,
 `provenance`, `adr`, and `rules list` are descriptive -- they never exit 1.
-They exit 0 when the run completes and 3 when coverage is incomplete. The
+They exit 0 when the run completes, and 3 when the run could not determine its
+answer: a command that carries a `no-verdict` lane maps it to 3, whether the
+lane is the shared coverage envelope (`graph`, `diff`, `discover`, `drift`,
+`reconcile`, `waivers`, `scenario`, `impact`, `explain`, `context`) or a
+fold-specific refusal (`history`, `evolution`, `health`, `report`, `debt`,
+`decisions`, `adr`). `trajectory` and `provenance` carry no such lane --
+their command folds always resolve to `status: "ok"`, so those two are
+strictly exit 0 on a completed run (their CLI drivers reach `EXIT.error` only
+on a usage or start failure, never on an incompleteness verdict). The
 envelope's `status` follows the same mapping: `"ok"` for 0, `"no-verdict"` for 3. `"findings"` never appears for a descriptive command.
+
+The four verdict verbs in this section -- `fitness`, `delta --compare`,
+`change`, and `rules verify`'s integrity fold -- each spell their own
+status-to-exit fold over the shared vocabulary, and that is the pinned
+baseline, not a gap awaiting unification. `verdictFor` is `check`'s fold and
+only `check`'s; routing the sibling carriers through it would change the
+semantics of what they classify (the sibling folds carry inputs `verdictFor`
+has no lane for). The folds stay hand-rolled per site by decision, and the
+envelope latch plus the exit-matrix suite pin them behaviorally.
 
 `fitness` is one exception: it is a verdict, not a print job (D-09). It exits 1
 on a failing function and 3 on an undetermined one -- the same two lanes
