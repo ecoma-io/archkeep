@@ -43,15 +43,28 @@ import { fileURLToPath } from "node:url";
 import { GOLDEN_CORPUS_DIR, PACKAGE_JSON, goldenToolVersion } from "./check-skills.mjs";
 
 /**
- * The `.json` golden files — the ones that embed the engine's version in their
+ * The `.json` golden files that embed the engine's version in their
  * `tool.version` slot (and `diff`/`delta`/`change` echo it a second time). The
  * `.sarif` goldens' `version` is the SARIF spec's 2.1.0 and the `.text` goldens
  * are static help, so neither carries the engine's number and neither belongs
- * here. Listed explicitly so the release lane's repair push (`REFORMAT_FILES`
- * in `push-reformatted-files.mjs`) carries exactly these back to the branch —
- * a verb added to the corpus lands here in the same change that adds its
- * golden, and check 18 (`check-skills.mjs`) plus the golden gate hold the
- * version of every one of them.
+ * here. Listed explicitly so the release lane's repair push carries exactly
+ * these back to the branch — `GOLDEN_CARRY_FILES` in
+ * `push-reformatted-files.mjs` is this list carried VERBATIM (byte-for-byte,
+ * no trailing-newline coercion, because their bytes are the reference the
+ * golden gate compares against). A verb added to the corpus lands here in the
+ * same change that adds its golden, and check 18 (`check-skills.mjs`) plus the
+ * golden gate hold the version of every one of them.
+ *
+ * `rules verify` is deliberately NOT in the list even though it is a `.json`
+ * golden: it has no `tool.version` slot to sync, and it is the one golden
+ * whose committed bytes are EMPTY (the verb exits 3 with no catalog and
+ * writes nothing). The repair push now carries goldens verbatim, but this
+ * empty reference has nothing to carry (a version-sync writes nothing to it),
+ * so listing it would only be a claim that a no-op happened. Measured on
+ * #728 (0.26.0): when it WAS carried, the trailing-newline coercion the push
+ * applied to its empty committed bytes turned into a one-byte `\n` and the
+ * byte-identity gate failed reading golden Buffer[10] against the CLI's empty
+ * Buffer[] on the very release PR the repair was meant to heal.
  */
 export const GOLDEN_JSON_FILES = [
   `${GOLDEN_CORPUS_DIR}/adr.json`,
@@ -74,7 +87,6 @@ export const GOLDEN_JSON_FILES = [
   `${GOLDEN_CORPUS_DIR}/provenance.json`,
   `${GOLDEN_CORPUS_DIR}/reconcile.json`,
   `${GOLDEN_CORPUS_DIR}/report.json`,
-  `${GOLDEN_CORPUS_DIR}/rules verify.json`,
   `${GOLDEN_CORPUS_DIR}/scenario.json`,
   `${GOLDEN_CORPUS_DIR}/trajectory.json`,
   `${GOLDEN_CORPUS_DIR}/waivers.json`,
@@ -160,7 +172,6 @@ export function main() {
   let anyRefused = false;
 
   for (const relative of GOLDEN_JSON_FILES) {
-    // `rules verify.json` is the one entry whose basename is not its filename.
     const path = join(root, relative);
     const text = readFileSync(path, "utf8");
     const outcome = syncGoldenVersion(text, packageVersion);
