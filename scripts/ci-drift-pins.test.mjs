@@ -15,8 +15,10 @@
 // job added outside `ci-gate.needs` widens what green means with nothing red.
 // Enforcement before these tests: comments only — plus, for SHA pinning, the
 // Semgrep rules in `.github/semgrep/workflows.yaml`, whose aggregate gate
-// (`analysis-gate`) is deliberately NOT required. These tests run in `pnpm
-// test`, under the check that IS required.
+// (`analysis-gate`) is a required check, as `ci-gate` is — measured against
+// the branch-rules API on 2026-09-09; when a sentence and the API diverge,
+// the API is the current answer. These tests run in `pnpm test`, under the
+// required `ci-gate`.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
