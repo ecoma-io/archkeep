@@ -17,59 +17,51 @@ waits on, and the later maturity beyond them.
 
 ---
 
-## By intent
+## Find your lane
 
-**I want to use Archkeep**
+Each lane is a path, not a pile: start at its first link, follow each page's
+own "Next" pointer, and drop into the full index below only when you need to
+know which exact page owns a topic.
 
-- [Install](getting-started/installation.md) — install, quick start, first project
-- [First policy](getting-started/first-policy.md) — write constraints, see a violation
-- [Checking in CI](usage/ci.md) — automated enforcement with SARIF
-- [Agent skills](skills/overview.md) — coding agent protocol
+**Get started** — install to first enforced boundary in one sitting:
 
-**I want to understand Archkeep**
+- [Install](getting-started/installation.md) → [first project](getting-started/first-project.md) → [first policy](getting-started/first-policy.md) → [run it in CI](usage/ci.md)
+- Coming from the old name: [upgrading-from-lattice.md](getting-started/upgrading-from-lattice.md)
 
-- [Why it exists](doctrine/why.md) — the problem and evidence
-- [Architecture model](concepts/architecture.md) — engine, faces, layers
-- [Graph](concepts/graph.md) — projects, edges, deterministic snapshots
-- [Boundaries](concepts/boundaries.md) — layers, scopes, constraints, violations
-- [Drift](concepts/drift.md) — intent vs observed architecture
-- [Governance lifecycle](concepts/governance-lifecycle.md) — intent → check → evidence
-- [Evolution](concepts/evolution.md) — the canonical event record, classification, append-only store
-- [Agentic development](concepts/agentic-development.md) — agents as consumers
+**Understand** — what the tool is and the model it enforces:
 
-**I want to understand the architecture-intelligence direction**
+- [Why it exists](doctrine/why.md) — the problem, with the measurement behind it
+- [What Archkeep is](doctrine/architecture-authority.md) — the system boundary and the intent/reality/state vocabulary
+- [The model](concepts/architecture.md) — engine, three faces, layers; then [graph](concepts/graph.md), [boundaries](concepts/boundaries.md), [drift](concepts/drift.md), and the [verdict vocabulary](concepts/evidence.md), whose [terminology authority](concepts/evidence.md#terminology-authority) decides what every other page may call a word
+- [Where it is going](doctrine/roadmap.md) — the trust ladder, and the conditions stable 1.0 waits on
 
-- [Impact analysis](doctrine/impact-analysis.md) — what a change touches, and why impact is not risk
-- [Scenario evaluation](doctrine/scenario-evaluation.md) — evaluating a change before it exists, without recording it
-- [Evidence-grounded advisor](doctrine/evidence-grounded-advisor.md) — a reasoning layer that explains, never decides
+**Use** — run it and read what it says:
 
-**I want to integrate Archkeep**
+- [Checking](usage/checking.md), [profiles](usage/profiles.md), [presets](usage/presets.md), [configuration](usage/configuration.md)
+- [Bringing an existing repository under governance](usage/migration.md) — the onboarding order
+- One page per command: the [usage index](#usage)
 
-- [Nx](integrations/nx.md) — registration, graph edges, affected, workspaceLayout
-- [Moon](integrations/moon.md) — tags, providers, conventions
-- [VS Code](integrations/vscode.md) — language server, settings
-- [MCP](integrations/mcp.md) — nine tools for coding agents
-- [Agent skills](skills/overview.md) — when agents ask before changing code
+**Integrate** — make it part of a platform:
 
-**I want to extend Archkeep**
+- [Nx](integrations/nx.md) · [Moon](integrations/moon.md) · [VS Code](integrations/vscode.md) · [MCP for coding agents](integrations/mcp.md)
+- [Agent skills](skills/overview.md) — the arch-* protocols agents load
 
-- [Custom rules](concepts/custom-rules.md) — WASM rules in your language
-- [Add a language](development/adding-a-language.md) — analyzer contract
-- [Add integration](development/adding-integration.md) — extension points
-- [Development architecture](development/architecture.md) — internals and testing
-- [Testing](development/testing.md) — suites, coverage, differential
-- [Verification](development/verification.md) — CI shape, lint tiers, per-project contracts
+**Extend** — grow what it can see and enforce:
 
-**I need exact reference**
+- [Custom rules](concepts/custom-rules.md), and their [exact contract](reference/custom-rules.md)
+- [Add a language](development/adding-a-language.md) · [add an integration](development/adding-integration.md)
 
-- [CLI reference](reference/cli.md) — commands, flags, exit codes
-- [Configuration](reference/configuration.md) — plugins, native, profiles
-- [Policy schema](reference/policy-schema.md) — every table key
-- [Exit codes](reference/exit-codes.md) — 0/1/2/3 contract
-- [JSON output](reference/json-output.md) — schemaVersion 2 envelope
-- [Gate attestation](reference/gate-attestation.md) — the external blocking-gate evidence shape
-- [Languages](reference/languages.md) — parse limits per language
-- [Violations](reference/violations.md) — fifteen violation types
+**Reference** — exact answers, looked up by surface:
+
+- [CLI](reference/cli.md) · [exit codes](reference/exit-codes.md) · [JSON envelope](reference/json-output.md) · [policy schema](reference/policy-schema.md) · [violations](reference/violations.md) · [languages](reference/languages.md) — full [reference index](#reference)
+
+**Develop** — the inside, for contributors:
+
+- [Architecture](development/architecture.md) · [testing](development/testing.md) · [verification](development/verification.md) · [release](development/release.md) — full [development index](#development)
+
+**Decisions** — why the tool is the way it is:
+
+- The [decision records](#decision-records) — numbered, immutable once accepted
 
 ## Getting started
 
@@ -82,28 +74,28 @@ waits on, and the later maturity beyond them.
 
 ## Concepts
 
-| page                                                        | what it answers                                                                                  |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| [architecture.md](concepts/architecture.md)                 | The engine, three faces, layer split, and the command capability vocabulary — technology-neutral |
-| [graph.md](concepts/graph.md)                               | Project graph, edge identity, deterministic snapshots                                            |
-| [boundaries.md](concepts/boundaries.md)                     | Layer/scope/license axes, constraint model, tag semantics, what "violation" is                   |
-| [policies.md](concepts/policies.md)                         | Three dialects, one table, stability contract                                                    |
-| [profiles.md](concepts/profiles.md)                         | Named law profiles: why they exist, precedence, and what is loud                                 |
-| [projects.md](concepts/projects.md)                         | What a project is, discovery, naming                                                             |
-| [drift.md](concepts/drift.md)                               | The four drift signals Archkeep detects, and which command surfaces each                         |
-| [evolution.md](concepts/evolution.md)                       | The canonical evolution event: identity, classification, dispositions, and the append-only store |
-| [governance-lifecycle.md](concepts/governance-lifecycle.md) | Why the commands exist as a system: intent → check → evidence → evolution → agent                |
-| [discovery.md](concepts/discovery.md)                       | The proposal-only line, the observed side, the four candidate classes                            |
-| [health.md](concepts/health.md)                             | What "architecture health" means, and the invariant behind every metric                          |
-| [evidence.md](concepts/evidence.md)                         | The one verdict vocabulary every judgment speaks, and the evidence each state requires           |
-| [provenance.md](concepts/provenance.md)                     | The origin record, the decision lifecycle, why `on` is optional, and why provenance never rules  |
-| [adr.md](concepts/adr.md)                                   | Architecture decision records: the filename identity, the strict dialect, the refusals           |
-| [waivers.md](concepts/waivers.md)                           | Temporary acceptance of a boundary breach, the lifecycle, and the deadline                       |
-| [fitness-functions.md](concepts/fitness-functions.md)       | Named quality gates — the verdict contract and what each condition judges                        |
-| [custom-rules.md](concepts/custom-rules.md)                 | A workspace's own wasm rules: one seam, evidence in, verdict out, and the refusals               |
-| [reconciliation.md](concepts/reconciliation.md)             | The inverse of drift: the model scored element by element, and proposed repairs                  |
-| [agentic-development.md](concepts/agentic-development.md)   | The three questions an agent asks, and the commands that answer them                             |
-| [integrations.md](concepts/integrations.md)                 | How integrations extend the core                                                                 |
+| page                                                        | what it answers                                                                                                                                                                                                                                                              |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [architecture.md](concepts/architecture.md)                 | The engine, three faces, layer split, and the command capability vocabulary — technology-neutral                                                                                                                                                                             |
+| [graph.md](concepts/graph.md)                               | Project graph, edge identity, deterministic snapshots                                                                                                                                                                                                                        |
+| [boundaries.md](concepts/boundaries.md)                     | Layer/scope/license axes, constraint model, tag semantics, what "violation" is                                                                                                                                                                                               |
+| [policies.md](concepts/policies.md)                         | Three dialects, one table, stability contract                                                                                                                                                                                                                                |
+| [profiles.md](concepts/profiles.md)                         | Named law profiles: why they exist, precedence, and what is loud                                                                                                                                                                                                             |
+| [projects.md](concepts/projects.md)                         | What a project is, discovery, naming                                                                                                                                                                                                                                         |
+| [drift.md](concepts/drift.md)                               | The four drift signals Archkeep detects, and which command surfaces each                                                                                                                                                                                                     |
+| [evolution.md](concepts/evolution.md)                       | The canonical evolution event: identity, classification, dispositions, and the append-only store                                                                                                                                                                             |
+| [governance-lifecycle.md](concepts/governance-lifecycle.md) | Why the commands exist as a system: intent → check → evidence → evolution → agent                                                                                                                                                                                            |
+| [discovery.md](concepts/discovery.md)                       | The proposal-only line, the observed side, the four candidate classes                                                                                                                                                                                                        |
+| [health.md](concepts/health.md)                             | What "architecture health" means, and the invariant behind every metric                                                                                                                                                                                                      |
+| [evidence.md](concepts/evidence.md)                         | The one verdict vocabulary every judgment speaks, the evidence each state requires — and the [terminology authority](concepts/evidence.md#terminology-authority) that decides what population, analyzed, ignored, untracked and not analyzed may mean anywhere in these docs |
+| [provenance.md](concepts/provenance.md)                     | The origin record, the decision lifecycle, why `on` is optional, and why provenance never rules                                                                                                                                                                              |
+| [adr.md](concepts/adr.md)                                   | Architecture decision records: the filename identity, the strict dialect, the refusals                                                                                                                                                                                       |
+| [waivers.md](concepts/waivers.md)                           | Temporary acceptance of a boundary breach, the lifecycle, and the deadline                                                                                                                                                                                                   |
+| [fitness-functions.md](concepts/fitness-functions.md)       | Named quality gates — the verdict contract and what each condition judges                                                                                                                                                                                                    |
+| [custom-rules.md](concepts/custom-rules.md)                 | A workspace's own wasm rules: one seam, evidence in, verdict out, and the refusals                                                                                                                                                                                           |
+| [reconciliation.md](concepts/reconciliation.md)             | The inverse of drift: the model scored element by element, and proposed repairs                                                                                                                                                                                              |
+| [agentic-development.md](concepts/agentic-development.md)   | The three questions an agent asks, and the commands that answer them                                                                                                                                                                                                         |
+| [integrations.md](concepts/integrations.md)                 | How integrations extend the core                                                                                                                                                                                                                                             |
 
 ## Usage
 
@@ -250,6 +242,7 @@ allowed to say it". That table:
 | `docs/getting-started/`                                                               | Installation, first project, first policy, and the upgrade off the Lattice name — which owns every consumer-facing consequence of the rename, so no other page restates one                                                                                 |
 | `docs/concepts/`                                                                      | The model: architecture, graph, boundaries, policies, profiles, projects, drift, evolution, discovery, evidence, provenance, adr, waivers, health, fitness functions, custom rules, reconciliation, governance lifecycle, agentic development, integrations |
 | `docs/concepts/discovery.md`                                                          | Discovery: the proposal-only line, what is observed, the four candidate classes, uncertainty markers                                                                                                                                                        |
+| [`docs/concepts/evidence.md`](concepts/evidence.md)                                   | The verdict vocabulary, the evidence each state requires, and the terminology authority map — when a page needs to say "ignored", "untracked", "not analyzed" or "complete", it says it the way this page's map says to                                     |
 | `docs/usage/`                                                                         | How a consumer runs it and reads its answers                                                                                                                                                                                                                |
 | [`docs/usage/migration.md`](usage/migration.md)                                       | The onboarding ORDER: observe → propose → review → write back → converge → enforce, and which step is allowed to decide what. Each step's detail stays with the page that owns the command                                                                  |
 | [`docs/usage/presets.md`](usage/presets.md)                                           | The shipped policy packs: what each style enforces, the tag vocabulary it expects, the two ways to consume one, and why changing a pack's rows is a breaking change                                                                                         |
