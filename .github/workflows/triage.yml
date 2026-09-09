@@ -28,7 +28,6 @@ on:
     types: [opened, edited, reopened, labeled]
   pull_request:
     types: [opened, edited, synchronize, ready_for_review, reopened, labeled]
-  workflow_dispatch:
 
 # The workflow-level floor grants nothing; the job below restates its reads
 # and holds every write. A job-level `permissions` block REPLACES this one
