@@ -91,6 +91,10 @@ name = "billing-core"
 version = "0.1.0"
 ```
 
+No toolchain installed? The Python option above is written by hand -- `mkdir`
+and one small file. The check itself never runs Go, Cargo or uv, so the rest of
+the walkthrough works without them.
+
 The native provider finds these by matching `projects.infer.manifests` against
 tracked files. One manifest per project root is the modeling assumption -- a
 nested second manifest inside one project yields no edge.

@@ -127,3 +127,8 @@ The reference page for the command is
 [`../reference/provenance.md`](../reference/provenance.md). The concept that
 defines the model and the determinism rules is
 [`../concepts/provenance.md`](../concepts/provenance.md).
+
+## Next
+
+- The chain one decision stands on: [decisions.md](decisions.md)
+- The registry the records live in: [adr.md](adr.md)

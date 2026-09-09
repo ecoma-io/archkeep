@@ -20,9 +20,10 @@ concept and the schema are
 }
 ```
 
-If you have not written a registry yet, four are shipped with the package —
-Clean Architecture, hexagonal, layered modular monolith and DDD bounded
-contexts — and [presets.md](presets.md) is how to adopt one.
+If you have not written a registry yet, six are shipped with the package —
+Clean Architecture, hexagonal, traditional layering, layered modular monolith,
+vertical slices and DDD bounded contexts — and [presets.md](presets.md) is how
+to adopt one.
 
 `boundaryConfig` still names the law in effect — only now it names it by
 looking the name up in the registry instead of opening a file. The default
@@ -91,3 +92,8 @@ server only ever reads a policy _file_, and a profile name is a selector — mov
 the policy into its own `.mjs`/`.json` file and drop the `profiles` option to
 use it in an editor. That refusal is one of the editor's named limits in
 [troubleshooting.md](troubleshooting.md).
+
+## Next
+
+- What each shipped pack contains: [presets.md](presets.md)
+- Run the law a profile resolves to: [checking.md](checking.md)

@@ -204,3 +204,8 @@ scores over time, no predictions. Those are the intelligence directions the
 repository's roadmap ([../doctrine/roadmap.md](../doctrine/roadmap.md)) stages
 for later maturity; this command stops at deterministic, revision-backed
 evolution evidence — the same line `history` draws, one revision source over.
+
+## Next
+
+- One snapshot at a time: [history.md](history.md)
+- The aggregate across all observations: [trajectory.md](trajectory.md)

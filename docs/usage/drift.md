@@ -76,3 +76,8 @@ intent    7768377ec47cb96206c55451864d5776ba01a330cc9d4536b559480f1f009e5d — 5
 observed  2 projects, 0 edges
 ✔ no drift — the observed architecture matches the intended one (2 projects and 0 edges)
 ```
+
+## Next
+
+- Score the same gap from the declared side: [reconcile.md](reconcile.md)
+- Adopt an intent if none is declared: [migration.md](migration.md)

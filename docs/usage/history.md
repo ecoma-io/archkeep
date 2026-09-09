@@ -147,3 +147,8 @@ a record in which all three signals fire in one transition: the two projects'
 tag sets changed (architecture), the declared boundary law changed (policy /
 intent), and the provider changed nx → moon. It is the proof that the evolution
 mechanism can represent a real architectural evolution a human can review.
+
+## Next
+
+- Which signals fired, how often: [trajectory.md](trajectory.md)
+- The narrative across a revision range: [evolution.md](evolution.md)

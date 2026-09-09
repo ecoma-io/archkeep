@@ -83,3 +83,8 @@ on the whole file graph — circular dependencies and lazy-load constraints are
 computed across all sites at once, not one site at a time. The full evaluation
 is pure and costs nothing to run; a partial one would give a wrong answer for
 those rules.
+
+## Next
+
+- Every constraint the project lives under: [context.md](context.md)
+- The vocabulary the verdict uses: [../reference/violations.md](../reference/violations.md)

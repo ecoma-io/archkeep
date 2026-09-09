@@ -58,5 +58,7 @@ Model Context Protocol — a separate optional install, described in
 
 ## Next
 
+The walkthrough continues in order:
+
 - Set up a workspace with no workspace tool: [first-project.md](first-project.md)
 - Write and run your first constraint table: [first-policy.md](first-policy.md)

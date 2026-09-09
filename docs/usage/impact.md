@@ -96,3 +96,8 @@ Same as `graph` and `diff`: on an Nx workspace whose `nx.json` does not
 register the Nx integration but whose tracked files include polyglot manifests under
 project roots, `impact` refuses loudly rather than returning an impact set whose
 dependents silently under-represent the real architecture.
+
+## Next
+
+- The constraints each dependent lives under: [context.md](context.md)
+- The judgment for one site in one of them: [explain.md](explain.md)

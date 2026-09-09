@@ -2,6 +2,12 @@
 
 The whole job is one command and one rule about how to read its exit code.
 
+This page is the pipeline face of the walkthrough that runs
+[installation.md](../getting-started/installation.md), then
+[first-project.md](../getting-started/first-project.md), then
+[first-policy.md](../getting-started/first-policy.md): with the workspace and
+its boundary law in hand, the gate is the one command below.
+
 ```shell
 pnpm exec archkeep check
 ```
@@ -262,7 +268,7 @@ If your workspace already runs `@nx/enforce-module-boundaries`, keep it. It stay
 authoritative for JavaScript, TypeScript and Vue; this tool covers the languages
 ESLint cannot parse. Point both at the same config file so there is one table
 rather than two that drift — see
-[getting-started.md](../getting-started/first-policy.md) § _If you already run
+[first-policy.md](../getting-started/first-policy.md) § _If you already run
 `@nx/enforce-module-boundaries`_.
 
 The conditions under which you could eventually drop the ESLint rule are
@@ -293,3 +299,8 @@ directions demonstrated: a controlled violation failing with exit 1, removing
 it restoring green — can publish that fact as a
 [gate attestation](../reference/gate-attestation.md), the evidence shape
 Archkeep's readiness report accepts for its external-adopting condition.
+
+## Next
+
+- Classify what a change introduced: [delta.md](delta.md)
+- When a run misbehaves: [troubleshooting.md](troubleshooting.md)

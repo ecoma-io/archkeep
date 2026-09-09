@@ -203,3 +203,8 @@ bytes (verifiable by the digest you paste beside them) and prints the row ready 
 paste — no typo-prone manual transcription from the catalog. The row leaves `params`
 out: parameter values are the workspace's law to choose, and `archkeep rules info`
 shows the schema a rule declares.
+
+## Next
+
+- The toolchain-free first tier: [fitness.md](fitness.md)
+- Official rules beside a shipped pack: [presets.md](presets.md)

@@ -288,3 +288,8 @@ movement (`addedEvents + removedEvents` against `abs(delta)`), how much
 history actually supports the claim (`observations.count` and
 `observations.withProvenance`) — and it gets `null`s, never zeros, wherever
 the directory cannot support an answer.
+
+## Next
+
+- The observations feeding the aggregate: [history.md](history.md)
+- The narrative across a revision range: [evolution.md](evolution.md)

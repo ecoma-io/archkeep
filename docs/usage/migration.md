@@ -297,3 +297,8 @@ migration through the boundary config file itself.
   proposal, not the law".
 - An incomplete read is never a clean answer — every step above refuses rather
   than describing a tree it could not finish reading.
+
+## Next
+
+- Wire the result as a gate: [ci.md](ci.md)
+- When a step misbehaves: [troubleshooting.md](troubleshooting.md)

@@ -68,3 +68,8 @@ archkeep graph --format json --output baseline.json
 # ... later, after changes ...
 archkeep diff baseline.json
 ```
+
+## Next
+
+- Compare a snapshot to the workspace: [diff.md](diff.md)
+- Read a directory of snapshots over time: [history.md](history.md)
