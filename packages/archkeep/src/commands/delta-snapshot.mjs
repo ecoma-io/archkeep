@@ -320,6 +320,10 @@ export function readEvidenceSnapshot(path, io = {}) {
  *
  * Refusals, each loud:
  * - unreadable/malformed JSON — named with the path and the parse error;
+ * - a `command` field — that marker belongs to a report envelope (the graph
+ *   family), so the document is not delta evidence at all; the family is
+ *   decided before the schemaVersion refusals, whose "newer version" advice
+ *   would be false for a file this binary itself wrote;
  * - a `schemaVersion` that is not the integer this format uses — a FUTURE
  *   version refuses too: a reader that half-understood a newer format would
  *   classify over evidence it misread;
@@ -357,6 +361,19 @@ export function parseEvidenceSnapshot(text, path) {
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error(
       `archkeep: the evidence snapshot '${path}' must be a JSON object, got ${describe(parsed)}`,
+    );
+  }
+
+  // A `command` field marks a report envelope — the graph family's document,
+  // not delta evidence. The family decides before the schemaVersion refusals
+  // below: that number is the OTHER format's version, so its "newer version;
+  // upgrade" advice would be false for a file this binary itself wrote (#810).
+  if (typeof parsed.command === "string") {
+    const pointer = parsed.command === "graph" ? " For graph snapshots use 'diff <baseline>'." : "";
+    throw new Error(
+      `archkeep: the evidence snapshot '${path}' has a 'command' field — it is not a delta ` +
+        `evidence snapshot, it is a '${parsed.command}' envelope. delta requires an evidence ` +
+        `snapshot (from 'delta --capture').${pointer}`,
     );
   }
 
