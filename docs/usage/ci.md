@@ -55,7 +55,7 @@ judged is still the consumer's.
 | code | meaning                                                                                                                                                                                  |
 | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `0`  | clean — **and** every selected file was analyzed                                                                                                                                         |
-| `1`  | findings — boundary violations, go.work drift, dead tsconfig aliases, architecture-intent findings, a failing fitness function, or a failing custom rule                                 |
+| `1`  | findings — boundary violations, declared-edge violations, go.work drift, dead tsconfig aliases, architecture-intent findings, a failing fitness function, or a failing custom rule       |
 | `2`  | usage error                                                                                                                                                                              |
 | `3`  | no verdict — the run could not start, a selected file could not be read, architecture intent could not be established, or a declared fitness function or custom rule could not be judged |
 

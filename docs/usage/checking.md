@@ -134,12 +134,12 @@ promise are in [json-output.md](../reference/json-output.md).
 
 ## Exit codes
 
-| code | meaning                                                                                                                                                         |
-| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `0`  | No findings, and every selected file was analyzed                                                                                                               |
-| `1`  | Boundary violation, `go.work` drift, dead tsconfig alias, an architecture-intent finding, a failing fitness function, or a failing custom rule                  |
-| `2`  | Usage error — invalid arguments, unknown flag, a path outside the workspace, or a path matching no tracked file                                                 |
-| `3`  | No verdict — the run could not look, coverage is incomplete, a declared fitness function or custom rule could not be judged, or intent could not be established |
+| code | meaning                                                                                                                                                                  |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `0`  | No findings, and every selected file was analyzed                                                                                                                        |
+| `1`  | Boundary violation, declared-edge violations, `go.work` drift, dead tsconfig alias, an architecture-intent finding, a failing fitness function, or a failing custom rule |
+| `2`  | Usage error — invalid arguments, unknown flag, a path outside the workspace, or a path matching no tracked file                                                          |
+| `3`  | No verdict — the run could not look, coverage is incomplete, a declared fitness function or custom rule could not be judged, or intent could not be established          |
 
 A violation an active waiver accepts is still exit `1`: waiving a boundary
 breach for a fixed term is a tracked decision, not a fix, so accepting it

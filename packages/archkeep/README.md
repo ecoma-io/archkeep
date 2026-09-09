@@ -167,7 +167,8 @@ a file it cannot edit ([overview.md](https://github.com/ecoma-io/archkeep/blob/m
   ([custom-rules.md](https://github.com/ecoma-io/archkeep/blob/main/docs/concepts/custom-rules.md),
   [writing one](https://github.com/ecoma-io/archkeep/blob/main/docs/usage/custom-rules.md)).
 - **Shipped policy packs** — six shipped packs: Clean Architecture, hexagonal,
-  layered, modular monolith, vertical slice and DDD bounded contexts, as
+  traditional layering, layered modular monolith, vertical slices and DDD
+  bounded contexts, as
   ready-made profile registries under
   this package's `presets/` directory. Copy one into your workspace, or point
   the `profiles` option straight at it; either way it is enforced by the same
