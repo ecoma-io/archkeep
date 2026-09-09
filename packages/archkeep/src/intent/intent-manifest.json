@@ -201,8 +201,8 @@
         {
           "type": "documentation",
           "path": "../../docs/concepts/agentic-development.md",
-          "assertion": "Section 'What context and impact do not check' warns agents about the semantic gap",
-          "sha256": "a42bca1e927a59d28160eb947a285c20d1a6cc9633a69c91a45e9d46bbe1686b"
+          "assertion": "Section 'What `context` and `impact` do not check' warns agents about the semantic gap",
+          "sha256": "81b1b57e19f3f5b4894f8273d33d731f80e6f8e80a513bd64208135852ed3bb8"
         }
       ],
       "status": "proven"
@@ -272,7 +272,7 @@
           "type": "documentation",
           "path": "../../docs/concepts/agentic-development.md",
           "assertion": "Section warns agents: violations:[] means allowed by constraint table, not free of all boundary violations",
-          "sha256": "a42bca1e927a59d28160eb947a285c20d1a6cc9633a69c91a45e9d46bbe1686b"
+          "sha256": "81b1b57e19f3f5b4894f8273d33d731f80e6f8e80a513bd64208135852ed3bb8"
         }
       ],
       "status": "proven"
