@@ -679,11 +679,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # `--yaml` is required whenever `--ref` is given — without it gh
-          # refuses the command outright, the guard reads false forever, and
-          # the dispatch never fires (#816).
-          if gh workflow view perf.yml --ref main --yaml > /dev/null 2>&1; then
-            gh workflow run perf.yml --ref main -f run_id="$GITHUB_RUN_ID" ||
+          # Two gh requirements, each of which silently disabled this
+          # dispatch on a live run (#816): `--yaml` is required whenever
+          # `--ref` is given, and `-R` names the repository explicitly —
+          # without it gh resolves the repo from the checkout's git remote,
+          # and this job checks nothing out.
+          if gh workflow view -R "$GITHUB_REPOSITORY" perf.yml --ref main --yaml > /dev/null 2>&1; then
+            gh workflow run -R "$GITHUB_REPOSITORY" perf.yml --ref main -f run_id="$GITHUB_RUN_ID" ||
               echo "::warning::perf dispatch failed — this run leaves no perf record (named gap)"
           else
             echo "perf.yml is not on main yet — this run leaves no perf record (named gap)"
