@@ -679,7 +679,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh workflow view perf.yml --ref main > /dev/null 2>&1; then
+          # `--yaml` is required whenever `--ref` is given — without it gh
+          # refuses the command outright, the guard reads false forever, and
+          # the dispatch never fires (#816).
+          if gh workflow view perf.yml --ref main --yaml > /dev/null 2>&1; then
             gh workflow run perf.yml --ref main -f run_id="$GITHUB_RUN_ID" ||
               echo "::warning::perf dispatch failed — this run leaves no perf record (named gap)"
           else
