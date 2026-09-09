@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "tool": {
     "name": "@ecoma-io/archkeep",
-    "version": "0.27.0"
+    "version": "0.27.1"
   },
   "command": "change",
   "workspace": {
@@ -45,7 +45,7 @@
       "path": "<fixture-root>/.archkeep-delta.json",
       "tool": {
         "name": "@ecoma-io/archkeep",
-        "version": "0.27.0"
+        "version": "0.27.1"
       },
       "provider": "native",
       "provenance": {
