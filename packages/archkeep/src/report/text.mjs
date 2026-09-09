@@ -774,7 +774,7 @@ function formatUntrackedFilesGap(gap) {
     `⚠ ${count} project-owned file${count === 1 ? "" : "s"} ${count === 1 ? "is" : "are"} ` +
     `not tracked by git — never read by this run, so no boundary verdict here covers ${them}\n` +
     `${lines.join("\n")}\n` +
-    `${DETAIL}git add ${them} so the next run reads ${them}, or let git ignore ${them}`
+    `${DETAIL}git add ${them} so the next run reads ${them}`
   );
 }
 

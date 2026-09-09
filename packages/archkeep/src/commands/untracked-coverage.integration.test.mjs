@@ -195,11 +195,17 @@ describe("#675 — a project-owned file the universe never read is named, never 
     expect(gap.files).toEqual(["libs/alpha/alpha-reach.go"]);
   });
 
-  it("the text report names the file the run never read", () => {
+  it("the text report names the file the run never read, and advises only git add", () => {
     const run = runCheckText(violating.root);
     expect(run.status).toBe(EXIT.ok);
     expect(run.stdout).toContain("libs/alpha/alpha-reach.go");
     expect(run.stdout).toMatch(/never read|untracked/u);
+    // #811: the advice must not recommend the ignore lane — an ignored file
+    // is outside every disclosure channel (no gap entry, `coverage.complete`
+    // true, nothing printed), so "or let git ignore it" resolved the warning
+    // by hiding the file from every future run.
+    expect(run.stdout).toContain("git add it so the next run reads it");
+    expect(run.stdout).not.toContain("let git ignore");
   });
 });
 
@@ -226,6 +232,20 @@ describe("#675 — the population the gap names, and the ones it does not", () =
     // Sorted by plain string comparison — the row's bytes must not vary with
     // the order the files were created or git happens to answer (E-F10).
     expect(gap.files).toEqual(["libs/gamma/first.go", "libs/gamma/second.go"]);
+  });
+
+  // #811: freezing the documented asymmetry between the two untracked lanes.
+  // An untracked NOT-ignored project-owned file is disclosed (the gap above);
+  // an untracked IGNORED one is out of the population entirely — no gap entry
+  // of any kind names it and no report line mentions it. If a future change
+  // adds an ignored-files gap kind or lets any row leak the path, this fails.
+  it("keeps an ignored project-owned file outside every disclosure channel", () => {
+    const { envelope } = runCheckJson(mixed.root);
+    for (const gap of envelope.coverage.coverageGaps ?? []) {
+      expect(gap.files ?? []).not.toContain("libs/beta/generated.go");
+    }
+    const text = runCheckText(mixed.root);
+    expect(text.stdout).not.toContain("libs/beta/generated.go");
   });
 
   it("does not name a gitignored file — the universe's ignore rules stay git's", () => {
