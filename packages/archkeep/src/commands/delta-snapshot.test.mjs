@@ -384,6 +384,43 @@ describe("parseEvidenceSnapshot", () => {
     expect(() => parseEvidenceSnapshot("42", "/number.json")).toThrow(/must be a JSON object/);
   });
 
+  it("refuses a graph envelope as the wrong family — never as a future version", () => {
+    // A graph report envelope (command: "graph") handed to delta. Its
+    // schemaVersion is the GRAPH format's number, so the schemaVersion
+    // refusal's "newer version; upgrade" advice would be false — the file was
+    // written by this very binary, and no upgrade reads a different family.
+    const envelope = JSON.stringify({
+      command: "graph",
+      schemaVersion: 2,
+      coverage: { complete: true },
+    });
+    let thrown;
+    try {
+      parseEvidenceSnapshot(envelope, "/graph-envelope.json");
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown.message).toContain("it is not a delta evidence snapshot");
+    expect(thrown.message).toContain("it is a 'graph' envelope");
+    expect(thrown.message).toContain(
+      "delta requires an evidence snapshot (from 'delta --capture')",
+    );
+    expect(thrown.message).toContain("For graph snapshots use 'diff <baseline>'");
+    expect(thrown.message).not.toMatch(/newer version|upgrade/);
+  });
+
+  it("decides the family before schemaVersion — a command envelope refuses at any version", () => {
+    for (const schemaVersion of [undefined, 1, 2, 99]) {
+      const envelope = JSON.stringify(
+        schemaVersion === undefined ? { command: "graph" } : { command: "graph", schemaVersion },
+      );
+      expect(() => parseEvidenceSnapshot(envelope, "/any-version.json")).toThrow(
+        /it is not a delta evidence snapshot/,
+      );
+    }
+  });
+
   it("refuses a schemaVersion of the wrong type", () => {
     const parsed = validParsed();
     parsed.schemaVersion = "1";

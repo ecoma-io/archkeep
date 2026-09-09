@@ -560,7 +560,7 @@ describe("refusals — every could-not-look path says so", () => {
         },
         intent: manifest(),
       }),
-    ).rejects.toThrow(/schemaVersion/);
+    ).rejects.toThrow(/not a delta evidence snapshot/);
   });
 
   it("refuses a provider mismatch — names across two models are not evidence", async () => {
