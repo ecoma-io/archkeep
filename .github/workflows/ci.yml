@@ -651,9 +651,37 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Job-level permissions REPLACE the workflow-level block, so `contents:
+    # read` is restated beside the one grant this job needs beyond it:
+    # `actions: write` is what workflow dispatch requires. This is the
+    # recorder's trigger, not a gate's — the step below is best-effort and
+    # names every path where it produces no record.
+    permissions:
+      contents: read
+      actions: write
     steps:
       # `needs` alone would let a skipped or cancelled job pass as green, since
       # only `failure` blocks a dependent job by default.
       - name: Fail unless every job succeeded
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
         run: exit 1
+      # Hand the run to the perf recorder by explicit dispatch rather than
+      # letting perf.yml hold a `workflow_run` trigger: a follower reacting to
+      # arbitrary completed runs is a dangerous-trigger shape, and the finder
+      # is right about it. `if: always()` — failed runs record too, that is
+      # where the cost question is sharpest. `--ref main` pins the recorder's
+      # parser to main's tree, never the recorded run's (perf.yml's header
+      # owns that argument). Both tolerated paths are NAMED GAPS, never
+      # silence, and the dispatch failure is a ::warning:: rather than a gate
+      # result: the recorder must not become load-bearing for merges.
+      - name: Dispatch the perf recorder for this run
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh workflow view perf.yml --ref main > /dev/null 2>&1; then
+            gh workflow run perf.yml --ref main -f run_id="$GITHUB_RUN_ID" ||
+              echo "::warning::perf dispatch failed — this run leaves no perf record (named gap)"
+          else
+            echo "perf.yml is not on main yet — this run leaves no perf record (named gap)"
+          fi

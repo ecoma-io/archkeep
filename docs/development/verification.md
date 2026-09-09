@@ -116,3 +116,26 @@ graph got wrong: every consumed-but-external byte is a declared input
 precisely so a hash change forces a re-run. Remote caching is deliberately
 not configured; the repository is small enough that correctness of the graph
 is worth more than seconds the cache would save.
+
+## The performance record
+
+Every run of CI is handed to the `Perf record` workflow (`perf.yml`) by a
+dispatch from `ci-gate`'s final step, which parses the logs the run already
+produced into a machine-readable record: per-moon-task durations from the moon
+step's progress lines, per-vitest-file durations (unit and E2E split), and job
+wall times from the jobs API. The record rides as an artifact
+(`ci-perf-<run id>`) with a human summary in the workflow's step summary.
+
+The recorder is dispatched rather than triggered by `workflow_run`, and it
+parses logs with the scripts at the ref it was dispatched at — never the
+recorded run's tree, which on a pull-request run is that branch's code; a
+recorder is data plumbing, and executing the measured tree's parser on this
+repository's runner would hand a fork's script a base-repo runner (both
+arguments are written out in `perf.yml`'s header). Being dispatched from the
+gate's last step keeps it off the critical path it measures; a run cancelled
+before `ci-gate` executes leaves no record — partial timing is not worth a
+follower that accepts payloads it does not choose. The recorder is not a gate
+and joins neither aggregate; removing it breaks no contract — it only blinds
+the next CI/CD optimization decision, which this repository makes on
+measurement, not intuition. A run whose logs cannot be parsed produces a
+record whose `gaps` array names what is missing, never an empty one.

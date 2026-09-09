@@ -1,0 +1,121 @@
+name: Perf record
+
+# The CI/CD optimization program's instrumentation (issue #806). Every
+# optimization decision in this repository must be judged on measurement, so
+# every run of CI leaves behind a machine-readable record of its own cost:
+# moon task durations, vitest per-file durations, and job wall times, parsed
+# from the logs the run already produced.
+#
+# WHY ci-gate dispatches this workflow instead of a `workflow_run` trigger:
+# a workflow_run follower is flagged as a dangerous trigger, and the flag is
+# right about the shape — a follower that reacts to arbitrary completed runs
+# would run this file against run payloads it does not choose. Dispatching
+# from ci-gate's final step (`if: always()`, so failed runs record too) keeps
+# the recorder off the critical path it measures while naming the trigger
+# runs it accepts. The trade is accepted explicitly: a run cancelled before
+# ci-gate executes produces NO record (a workflow_run follower recorded
+# cancelled runs) — cancelled-run timing is partial data anyway, and the gap
+# is visible as a missing record, never as an empty one.
+#
+# WHY the scripts are NOT checked out from the recorded run's commit: the
+# recorder parses whatever run it is handed, including runs on pull-request
+# branches. Checking out that run's tree would execute that tree's
+# `scripts/build-perf-record.mjs` on this repository's runner — a fork's
+# script, on a base-repo runner, reading that run's logs. So the parser is
+# versioned with the ref this workflow was dispatched at (main, via ci-gate;
+# whatever the dispatcher named, manually) and the recorded run's head_sha
+# rides as DATA in the record, never as code.
+#
+# It is NOT a gate. It uploads an artifact and a step summary; it neither
+# blocks merges nor joins ci-gate/analysis-gate (the drift pins in
+# scripts/ci-drift-pins.test.mjs pin only ci.yml and analysis.yml gate
+# rosters). Removing it changes no contract — it only blinds the next
+# optimization decision.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "CI run to record. Defaults to the latest push-main CI run."
+        required: false
+        type: string
+
+# Top-level is read-all; the job restates what it uses. Same model as
+# analysis.yml: job-level permissions REPLACE the workflow-level block, not
+# extend it, so `contents: read` is restated beside `actions: read`.
+permissions: read-all
+
+jobs:
+  record:
+    name: Build perf record
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Resolve target run
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_RUN_ID: ${{ inputs.run_id }}
+        run: |
+          if [ -n "$INPUT_RUN_ID" ]; then
+            run_id="$INPUT_RUN_ID"
+          else
+            run_id="$(gh api "repos/{owner}/{repo}/actions/runs?branch=main&event=push&per_page=1" --jq '.workflow_runs[0].id')"
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch run metadata and jobs
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.target.outputs.run_id }}
+        run: |
+          mkdir -p perf-data
+          gh api "repos/{owner}/{repo}/actions/runs/$RUN_ID" > perf-data/run.json
+          gh api "repos/{owner}/{repo}/actions/runs/$RUN_ID/jobs?per_page=100" > perf-data/jobs.json
+          head_sha="$(node -e 'const j=require("./perf-data/run.json");process.stdout.write(j.head_sha||"")')"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the parser at this workflow's own ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download the run's logs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.target.outputs.run_id }}
+        run: |
+          gh api "repos/{owner}/{repo}/actions/runs/$RUN_ID/logs" > perf-data/logs.zip
+          mkdir -p perf-data/logs
+          unzip -q perf-data/logs.zip -d perf-data/logs
+          ls perf-data/logs | head -20
+
+      - name: Build the perf record
+        env:
+          RUN_ID: ${{ steps.target.outputs.run_id }}
+          HEAD_SHA: ${{ steps.meta.outputs.head_sha }}
+        run: |
+          node scripts/build-perf-record.mjs \
+            --logs-dir perf-data/logs \
+            --jobs-json perf-data/jobs.json \
+            --run-id "$RUN_ID" \
+            --head-sha "$HEAD_SHA" \
+            --event "$(node -e 'const j=require("./perf-data/run.json");process.stdout.write(j.event||"")')" \
+            --conclusion "$(node -e 'const j=require("./perf-data/run.json");process.stdout.write(j.conclusion||"")')" \
+            --created-at "$(node -e 'const j=require("./perf-data/run.json");process.stdout.write(j.run_started_at||"")')" \
+            --updated-at "$(node -e 'const j=require("./perf-data/run.json");process.stdout.write(j.updated_at||"")')" \
+            --out perf-data/perf-record.json \
+            --summary perf-data/perf-summary.md
+          cat perf-data/perf-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the perf record
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-perf-${{ steps.target.outputs.run_id }}
+          path: perf-data/perf-record.json
+          retention-days: 90
+          if-no-files-found: error
