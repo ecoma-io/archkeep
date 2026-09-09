@@ -60,10 +60,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INPUT_RUN_ID: ${{ inputs.run_id }}
         run: |
+          # Every `gh api` path in this workflow names the repository as
+          # $GITHUB_REPOSITORY rather than gh's `{owner}/{repo}` placeholders:
+          # placeholders expand from the checkout's git remote, and these
+          # steps run BEFORE checkout — there is no git context (#816).
           if [ -n "$INPUT_RUN_ID" ]; then
             run_id="$INPUT_RUN_ID"
           else
-            run_id="$(gh api "repos/{owner}/{repo}/actions/runs?branch=main&event=push&per_page=1" --jq '.workflow_runs[0].id')"
+            run_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?branch=main&event=push&per_page=1" --jq '.workflow_runs[0].id')"
           fi
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
@@ -74,8 +78,8 @@ jobs:
           RUN_ID: ${{ steps.target.outputs.run_id }}
         run: |
           mkdir -p perf-data
-          gh api "repos/{owner}/{repo}/actions/runs/$RUN_ID" > perf-data/run.json
-          gh api "repos/{owner}/{repo}/actions/runs/$RUN_ID/jobs?per_page=100" > perf-data/jobs.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" > perf-data/run.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=100" > perf-data/jobs.json
           head_sha="$(node -e 'const j=require("./perf-data/run.json");process.stdout.write(j.head_sha||"")')"
           echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
 
@@ -89,7 +93,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ steps.target.outputs.run_id }}
         run: |
-          gh api "repos/{owner}/{repo}/actions/runs/$RUN_ID/logs" > perf-data/logs.zip
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/logs" > perf-data/logs.zip
           mkdir -p perf-data/logs
           unzip -q perf-data/logs.zip -d perf-data/logs
           ls perf-data/logs | head -20
