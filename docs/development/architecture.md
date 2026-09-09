@@ -377,11 +377,12 @@ running.
 nine MCP tools call the engine's own command functions in-process through the
 engine package's `./commands` subpath (`packages/archkeep/commands.mjs`, a
 re-export in `nx.mjs`'s spirit), and return the same versioned JSON envelope
-`--format json` renders. Read-only, with one deliberate exception:
-`archkeep_propose` surfaces the engine's two `--propose` surfaces and cannot
-write — adopting a proposal stays a human decision in a reviewed pull request
-([../integrations/mcp.md](../integrations/mcp.md) owns the surface and its
-authority bounds).
+`--format json` renders. All nine announce `readOnlyHint: true`; the ninth,
+`archkeep_propose`, is non-authoritative rather than an exception to that —
+every result carries `requiresApproval: true` and `written: false`, nothing is
+modified, and adopting a proposal stays a human decision in a reviewed pull
+request ([../integrations/mcp.md](../integrations/mcp.md) owns the surface and
+its authority bounds).
 
 Two seams there are worth knowing because both mirror cuts made above.
 `extension.mjs` holds VS Code wiring only, so every decision — which root, which
