@@ -297,8 +297,12 @@ export function scoreIntentRows(intent, judgeVerdict, observed, tagsByProject) {
   // projections score the drift rows from those findings — projecting the
   // canonical verdict, never re-deriving reachability here: a re-walk of the
   // direct-edge list would score a transitive violation the judge reported
-  // as a row "match", the divergence `check` and `drift` do report. Findings
-  // without a pair (`intentUnknownTag`, `projectMissing`, …) are skipped.
+  // as a row "match", the divergence `check` and `drift` do report. The
+  // judge's pairless findings (`intentUnknownProject`, `intentUnknownTag`)
+  // carry no witness pair; the rows they belong to are scored below from the
+  // observed names and tags themselves — the same existence predicate the
+  // judge used to emit them: a row whose endpoint can never resolve is
+  // unknown/unverifiable, never a silent "match".
   const dependencyForbiddenPairs = new Set();
   const tagForbiddenWitnesses = [];
   for (const finding of judgeVerdict.findings) {
@@ -364,6 +368,15 @@ export function scoreIntentRows(intent, judgeVerdict, observed, tagsByProject) {
   }
   for (const forbidden of dependencies.forbidden ?? []) {
     const key = `${forbidden.source} → ${forbidden.target}`;
+    // A row naming a project the observed architecture does not have can
+    // never fire — the judge reports it as `intentUnknownProject` with no
+    // witness pair, so the projection above stays empty for it. Reading
+    // that as "match — the ban holds" would be the silent direction; score
+    // it unknown, mirroring the boundary plane (`reconcileScores`).
+    if (!observedNames.has(forbidden.source) || !observedNames.has(forbidden.target)) {
+      row("edge", key, "unknown", "intentUnknownProject", "forbidden", key);
+      continue;
+    }
     const violated = dependencyForbiddenPairs.has(key);
     row(
       "edge",
@@ -375,8 +388,22 @@ export function scoreIntentRows(intent, judgeVerdict, observed, tagsByProject) {
     );
   }
 
+  // Every tag any observed project carries — the existence side of a
+  // `forbiddenTags` row, the same vocabulary the judge checks when it emits
+  // `intentUnknownTag`.
+  const allTags = new Set();
+  for (const tags of tagsByProject.values()) {
+    for (const tag of tags) allTags.add(tag);
+  }
   for (const tagRow of intent.forbiddenTags ?? []) {
     const key = `${tagRow.from} → ${tagRow.to}`;
+    // A row naming a tag no observed project carries can never fire — the
+    // judge reports it as `intentUnknownTag` with no witness pair. Score it
+    // unknown, never a silent "match".
+    if (!allTags.has(tagRow.from) || !allTags.has(tagRow.to)) {
+      row("tag", key, "unknown", "intentUnknownTag", "tag-forbidden", key);
+      continue;
+    }
     const violated = tagForbiddenWitnesses.some(([source, target]) => {
       const sourceTags = tagsByProject.get(source) ?? [];
       const targetTags = tagsByProject.get(target) ?? [];

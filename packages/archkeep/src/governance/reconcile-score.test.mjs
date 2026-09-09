@@ -419,6 +419,93 @@ describe("scoreIntentRows", () => {
       classification: "tagDependencyForbidden",
     });
   });
+
+  it("scores a dependencies.forbidden row with an unknown target as unknown/unverifiable — never match/stated (SEM-04)", () => {
+    // A forbidden row naming a project the observed architecture does not have
+    // can never fire — the judge emits intentUnknownProject (source: null,
+    // target: null) for it. The scoring must mirror the boundary plane and
+    // score the row unknown/unverifiable rather than silently match/stated.
+    const model = intent({ dependencies: { forbidden: [{ source: "core", target: "ghost" }] } });
+    const verdict = {
+      findings: [
+        {
+          source: null,
+          target: null,
+          rule: "intentUnknownProject",
+          boundaryFrom: null,
+          boundaryTo: null,
+          message:
+            'architecture-intent.json names project "ghost", but the observed architecture has no project of that name',
+        },
+      ],
+    };
+    const rows = scoreIntentRows(model, verdict, observed, tagsByProject);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      plane: "edge",
+      state: "unknown",
+      classification: "intentUnknownProject",
+      confidence: "unverifiable",
+      intentRow: { plane: "edge", index: 0, kind: "forbidden", key: "core → ghost" },
+    });
+  });
+
+  it("scores a forbiddenTags row with an unknown tag as unknown/unverifiable — never match/stated (SEM-04)", () => {
+    // A tag rule referencing tags no observed project carries can never fire —
+    // the judge emits intentUnknownTag (source: null, target: null). The
+    // scoring must mirror the boundary plane.
+    const model = intent({
+      forbiddenTags: [{ from: "no-such-a", to: "no-such-b" }],
+    });
+    const verdict = {
+      findings: [
+        {
+          source: null,
+          target: null,
+          rule: "intentUnknownTag",
+          boundaryFrom: null,
+          boundaryTo: null,
+          message:
+            'architecture-intent.json forbids a dependency from tag "no-such-a" to tag "no-such-b", but no observed project carries "no-such-a" and "no-such-b"',
+        },
+      ],
+    };
+    const rows = scoreIntentRows(model, verdict, observed, tagsByProject);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      plane: "tag",
+      state: "unknown",
+      classification: "intentUnknownTag",
+      confidence: "unverifiable",
+      intentRow: { plane: "tag", index: 0, kind: "tag-forbidden", key: "no-such-a → no-such-b" },
+    });
+  });
+
+  it("scores a real forbidden dependency row with known names still as unexpected/dependencyForbidden (loud direction intact)", () => {
+    // A forbidden row whose endpoints ARE observed and violated must still
+    // score unexpected — the fix must not blunt the loud direction.
+    const model = intent({ dependencies: { forbidden: [{ source: "core", target: "app" }] } });
+    const verdict = {
+      findings: [
+        {
+          source: "core",
+          target: "app",
+          rule: "dependencyForbidden",
+          boundaryFrom: null,
+          boundaryTo: null,
+          message: "core → app — architecture-intent.json forbids",
+        },
+      ],
+    };
+    const rows = scoreIntentRows(
+      model,
+      verdict,
+      { projects: observed.projects, edges: [edge("core", "app")] },
+      tagsByProject,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ state: "unexpected", classification: "dependencyForbidden" });
+  });
 });
 
 describe("reconcileScores", () => {

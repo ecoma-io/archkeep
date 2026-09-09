@@ -153,3 +153,122 @@ describe("reconcile over a real divergent tree", () => {
     expect(readFileSync(join(root, "architecture-intent.json"), "utf8")).toBe(before);
   });
 });
+
+describe("reconcile over a tree whose forbidden rows can never fire", () => {
+  // A second, minimal fixture: the intent forbids `core → ghost` (no project
+  // named ghost exists) and a tag pair no project carries. `check` and
+  // `drift` treat both rows as loud findings (intentUnknownProject /
+  // intentUnknownTag); the rendered reconcile report must disclose the
+  // unverifiable rows (`?` elements) rather than count them under matched
+  // rows — or worse, print "no divergence" (issue #830, SEM-04).
+  const unknownRoot = mkdtempSync(join(tmpdir(), "reconcile-unknown-"));
+  afterAll(() => rmSync(unknownRoot, { recursive: true, force: true }));
+
+  const writeUnknown = (relativePath, text) => {
+    mkdirSync(join(unknownRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(unknownRoot, relativePath), text);
+  };
+
+  writeUnknown(
+    "nx.json",
+    `${JSON.stringify({
+      plugins: [
+        {
+          plugin: "@ecoma-io/archkeep/nx",
+          options: { boundaryConfig: "module-boundaries.config.mjs" },
+        },
+      ],
+    })}\n`,
+  );
+  writeUnknown(
+    "module-boundaries.config.mjs",
+    `export const depConstraints = [];\nexport const moduleBoundaryOptions = {\n  allow: [],\n  buildTargets: ["build"],\n  enforceBuildableLibDependency: false,\n  allowCircularSelfDependency: false,\n  checkDynamicDependenciesExceptions: [],\n  ignoredCircularDependencies: [],\n  banTransitiveDependencies: false,\n  checkNestedExternalImports: false,\n};\n`,
+  );
+  writeUnknown("libs/core/go.mod", "module example.com/core\n\ngo 1.24\n");
+  writeUnknown("libs/core/core.go", "package core\n");
+  writeUnknown(
+    "architecture-intent.json",
+    `${JSON.stringify(
+      {
+        version: "1",
+        boundaries: [{ name: "core", match: ["tag:type-package"] }],
+        dependencies: { forbidden: [{ source: "core", target: "ghost" }] },
+        forbiddenTags: [{ from: "no-such-a", to: "no-such-b" }],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  const unknownGraph = {
+    nodes: {
+      core: {
+        name: "core",
+        type: "lib",
+        data: { root: "libs/core", tags: ["type-package"] },
+      },
+    },
+    dependencies: {},
+  };
+  const unknownFiles = [
+    "nx.json",
+    "module-boundaries.config.mjs",
+    "architecture-intent.json",
+    "libs/core/go.mod",
+    "libs/core/core.go",
+  ];
+  const unknownContext = {
+    cwd: unknownRoot,
+    readGraph: () => unknownGraph,
+    listFiles: () => unknownFiles,
+  };
+
+  const unknownEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      ...unknownContext,
+    };
+  };
+
+  it("discloses the unverifiable rows with ? elements — never counts them as matches", async () => {
+    const e = unknownEnv();
+    const exit = await runCli(["reconcile"], e);
+    // Reconcile is descriptive — findings, even loud ones, keep exit 0.
+    expect(exit).toBe(EXIT.ok);
+    const text = e.lines.out.join("\n");
+    expect(text).toContain("? core → ghost  (intentUnknownProject)");
+    expect(text).toContain("? no-such-a → no-such-b  (intentUnknownTag)");
+    expect(text).not.toContain("no divergence");
+  });
+
+  it("scores the rows unknown/unverifiable in the JSON envelope", async () => {
+    const e = unknownEnv();
+    const exit = await runCli(["reconcile", "--format", "json"], e);
+    expect(exit).toBe(EXIT.ok);
+    const envelope = JSON.parse(e.lines.out.join("\n"));
+    expect(envelope.status).toBe("ok");
+    const unknownEdgeRow = envelope.result.scores.intentRows.find(
+      (row) => row.name === "core → ghost",
+    );
+    const unknownTagRow = envelope.result.scores.intentRows.find(
+      (row) => row.name === "no-such-a → no-such-b",
+    );
+    expect(unknownEdgeRow).toMatchObject({
+      plane: "edge",
+      state: "unknown",
+      classification: "intentUnknownProject",
+      confidence: "unverifiable",
+    });
+    expect(unknownTagRow).toMatchObject({
+      plane: "tag",
+      state: "unknown",
+      classification: "intentUnknownTag",
+      confidence: "unverifiable",
+    });
+    // The unverifiable rows fabricate no repair candidate.
+    expect(envelope.result.candidates).toBeUndefined();
+  });
+});
