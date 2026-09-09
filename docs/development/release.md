@@ -14,20 +14,22 @@ recomputed is a claim wearing a table's name. No row here is fabricated a
 pass; each is `met`, `not met`, or `unmeasured`, and `unmeasured` is the
 third state, not a failure. As measured on 2026-09-09:
 
-| condition                                              | state       | evidence                                                                                                                                                                                                                                                       |
-| ------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| real-tree differential green, run after run            | **met**     | `differential.yml`'s two most recent runs green (2026-09-05, 2026-09-07); `check-readiness --differential '2,green'` reads met at the script's own two-run bar. The red before them (2026-09-04) was the #788 environment class, closed the day greens resumed |
-| a workspace outside this repo gates a build on `check` | **not met** | adoption is real (#605: action-agents and loom gate on `check`; their attestations verified end to end in a dry run), but no attestation file is published in either repository, and #605's verifier refuses action-agents' literal `pnpm arch` spelling       |
-| a quiet stretch in what an unchanged workspace is told | **not met** | `pnpm readiness` reads "15 of 50 commits" since #800 (2026-09-08); the stretch counts quiet commits, so it moves only by landing without verdict-surface changes                                                                                               |
-| releases land without a hand on them                   | **met**     | 15 consecutive tags (v0.13.0 → v0.27.0) each carry a published npm version back to the ADR-0003 rename boundary; the 0.26.0 and 0.27.0 release runs succeeded at `run_attempt: 1` with self-started gates, and both GitHub releases carry the .vsix            |
+| condition                                              | state       | evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| real-tree differential green, run after run            | **met**     | `differential.yml`'s two most recent runs green (run 33979730116, 2026-09-05; run 34105555442, 2026-09-07); the four reds before them (2026-08-31 → 09-04) landed as findings in the `conformance-differential` trail (#104), which the greens closed; `check-readiness --differential '2,green'` reads met at the script's own two-run bar                                                                                                                                                                           |
+| a workspace outside this repo gates a build on `check` | **met**     | `gate-attestation.json` (`ecoma-io/action-agents@0.27.0`, commit `a842c23`) and `archkeep-attestation.json` (`ecoma-io/loom@0.24.0`, commit `4a0ee260`) published at the consumers' repo roots and accepted by the verifier; each names a revision whose push CI ran the boundary step green, and each proof pair is a recorded red run at that step (action-agents run 34367509931, loom run 34368289160) recovered green (34367745437, 34368776193); `check-readiness --attestations` reads the row met naming both |
+| a quiet stretch in what an unchanged workspace is told | **not met** | `pnpm readiness` reads "2 of 50 commits" since #832 (2026-09-09), which touched `docs/reference/exit-codes.md` and `docs/reference/json-output.md` without a marker; #827 (`src/report/text.mjs` warning text) reset it earlier the same day. The stretch counts quiet commits, so it moves only by landing without verdict-surface changes                                                                                                                                                                           |
+| releases land without a hand on them                   | **met**     | the 22 consecutive tags after the never-published 0.12.0 each carry a published npm version; the 0.27.0 and 0.27.1 release runs succeeded at `run_attempt: 1` with self-started gates, and both GitHub releases carry a `.vsix` whose internal version matches its tag (checked 2026-09-09)                                                                                                                                                                                                                           |
 
-Two rows are actionable, in different currencies. The quiet stretch is
-**waiting**: roughly 35 more verdict-quiet commits, nothing else. External
-attestation is **work outside this tree**: consumers publish their attestation
-files at the SHAs they gate on, and #605's verifier refusal is settled here
-first. Both `met` rows rest on recorded evidence — the differential lane's own
-run history and the tag/registry/run-attempt record — not on this table's
-say-so. Structural exit criteria — the phases' own bars, read
+One row is actionable, and its currency is waiting: the quiet stretch needs
+verdict-quiet commits to land on `main` — roughly 48 more at the 2026-09-09
+count — and nothing else. The attestation row's work happened outside this
+tree and landed: both consumers now publish attestation files at revisions
+their CI has gated in both directions. The three `met` rows rest on recorded
+evidence — the differential lane's own run history, the consumers' published
+attestation files with their red and green CI runs, and the tag/registry/
+run-attempt/`.vsix` record — not on this table's say-so. Structural exit
+criteria — the phases' own bars, read
 off [the roadmap](../doctrine/roadmap.md#what-10-waits-for-and-how-each-condition-is-read) —
 are the freeze manifest's concern and not
 restated here.
