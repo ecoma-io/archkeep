@@ -508,8 +508,9 @@ reference instant, and classifies every violation `introduced` | `resolved` |
 import sites. A non-waived introduced violation exits 1; an unclassifiable
 item exits 3; an introduced violation the current waiver table covers is
 reported but does not gate. It refuses (exit 3) an unreadable, malformed, or
-foreign-schema baseline, a baseline captured under a different provider, an
-incomplete side, and the unregistered-plugin graph; a policy change between
+foreign-schema baseline, a `command`-carrying report envelope (a graph
+snapshot is `diff`'s input), a baseline captured under a different provider,
+an incomplete side, and the unregistered-plugin graph; a policy change between
 capture and now is a loud note, not a refusal, because both sides are judged
 under the current law. [../usage/delta.md](../usage/delta.md) owns the model.
 

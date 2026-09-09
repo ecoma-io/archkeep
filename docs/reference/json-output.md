@@ -316,7 +316,8 @@ unresolvable record, or custom-rule item — could not be classified, and
 incomplete head arrives AS the no-verdict envelope — `status: "no-verdict"`,
 no `result`, the unread files and sites named in `coverage`, `decision`
 carrying an `unknown` verdict whose `reason` names the same clauses — while an
-unreadable or foreign-schema baseline, a provider mismatch, and incomplete
+unreadable or foreign-schema baseline, a `command`-carrying report envelope
+(a graph snapshot is `diff`'s input), a provider mismatch, and incomplete
 coverage on the capture side throw, exit `3` having built no envelope at all.
 The envelope carries a
 `decision` block, like `check`'s. [../usage/delta.md](../usage/delta.md) owns
@@ -375,7 +376,8 @@ reconciliation is matched with every declared constraint passing. Its
 refusals split by what they refuse: incomplete head coverage arrives AS the
 no-verdict envelope — no `result`, the unread files and sites named in
 `coverage`, `decision` carrying an `unknown` verdict whose `reason` names the
-clauses — while an unreadable or foreign-schema baseline, a provider mismatch,
+clauses — while an unreadable or foreign-schema baseline, a `command`-carrying
+report envelope, a provider mismatch,
 a manifest that fails shape or reference validation, a catch-all manifest that
 declares no rows while carrying a summary (the breadth guard
 [../usage/change.md](../usage/change.md) documents), and the

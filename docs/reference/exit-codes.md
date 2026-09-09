@@ -168,8 +168,10 @@ a function that failed or that the run could not determine.
 
 `delta` is another. Its compare mode exits 1 when the change introduced a
 boundary violation not covered by an active waiver, and 3 both on its refusals
-(an unreadable, foreign-schema, or incomplete baseline; a provider mismatch;
-an incomplete head) and on a comparison holding an item it could not classify
+(an unreadable, foreign-schema, or incomplete baseline; a `command`-carrying
+report envelope — the wrong family, a graph snapshot being `diff`'s input; a
+provider mismatch; an incomplete head) and on a comparison holding an item it
+could not classify
 -- an unanswerable question is never a clean delta. Its `--capture` mode is
 descriptive: 0 on a written snapshot, 3 on any failure, never 1.
 [../usage/delta.md](../usage/delta.md) owns the model.
@@ -219,7 +221,8 @@ the split is each command's own envelope shape, not the refusal's:
 The refusals that stay throws are the ones about a file or a declaration
 rather than this tree, and they still exit 3 through the catch with nothing on
 stdout and nothing written under `--output`: a baseline that cannot be read,
-parsed, or holds a foreign schema version; an incomplete BASELINE snapshot; a
+parsed, or holds a foreign schema version, or is a `command`-carrying report
+envelope in its place; an incomplete BASELINE snapshot; a
 provider mismatch between baseline and head; a missing or malformed change
 intent; the unregistered-plugin graph over polyglot manifests; and the capture
 modes (`delta --capture`, `history --capture`), whose product is a snapshot

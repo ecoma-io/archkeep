@@ -29,8 +29,10 @@
  * status "no-verdict", exit 3, a `coverage` block naming every file and site
  * the run could not judge — where a parser and `--output` can read it; the
  * rest are throws, exit 3 upstream:
- * - a baseline that cannot be read, parsed, or holds a foreign schemaVersion
- *   (`./delta-snapshot.mjs`'s loader owns those);
+ * - a baseline that cannot be read, parsed, or holds a foreign schemaVersion,
+ *   or a report envelope — a document carrying a `command` field (a graph
+ *   snapshot is `diff`'s input), refused as the wrong family before any
+ *   schemaVersion reading (`./delta-snapshot.mjs`'s loader owns those);
  * - a provider mismatch between baseline and this run (`providerMismatch`) —
  *   a THROW here where `diff` settles for a note, because violation IDENTITY
  *   across two different project models is not trustworthy: the same tree

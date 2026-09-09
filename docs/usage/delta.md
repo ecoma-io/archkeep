@@ -186,6 +186,9 @@ change":
   structure, or carries a `schemaVersion` this tool does not write — a future
   version refuses too, because a half-understood format would be classified
   over misread evidence;
+- a baseline carrying a `command` field — a report envelope, not a delta
+  evidence snapshot (a graph snapshot is `diff`'s input); the family is
+  decided before any `schemaVersion` reading;
 - a baseline whose own coverage was incomplete — a violation living in a file
   the base never looked at would be misread as newly introduced at head;
 - a **provider mismatch** between the baseline and this run — a refusal where

@@ -76,8 +76,9 @@
  * exit 3, a `coverage` block naming every file and site the run could not
  * judge — where a parser and `--output` can read it; the rest are throws →
  * exit 3 upstream: a manifest that fails shape or reference validation, an
- * unreadable/malformed/foreign-schema baseline, incomplete baseline coverage,
- * a provider mismatch, an unregistered-plugin graph over polyglot manifests,
+ * unreadable/malformed/foreign-schema baseline, a `command`-carrying report
+ * envelope in its place, incomplete baseline coverage, a provider mismatch,
+ * an unregistered-plugin graph over polyglot manifests,
  * and a run with no boundary law (constraints and the law fingerprint need
  * one).
  *

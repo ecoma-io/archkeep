@@ -54,8 +54,10 @@ the resolution order.
   introduced/resolved/unchanged/unknown (`./delta-classify.mjs`), with
   unresolvable import sites carried as their own category, never counted as
   violations. Refuses an unreadable, malformed, foreign-schema, or
-  incomplete-coverage baseline, a provider mismatch (stricter than `diff`'s
-  note — violation identity across two project models is not evidence),
+  incomplete-coverage baseline, a `command`-carrying report envelope (a graph
+  snapshot is `diff`'s input, not delta evidence), a provider mismatch
+  (stricter than `diff`'s note — violation identity across two project models
+  is not evidence),
   incomplete head coverage, and an Nx workspace with polyglot manifests but no
   plugin registration; a policy-fingerprint change is a loud coverage note, not
   a refusal. A verdict, not a description: a non-waived introduced violation is
@@ -84,8 +86,9 @@ the resolution order.
   pins); an unproven base identity or an undeterminable
   constraint is exit 3, and constraints are left unevaluated over a base the
   run cannot vouch for. Refuses a manifest that fails shape or reference
-  validation, an unreadable/malformed/incomplete baseline, a provider
-  mismatch, incomplete head coverage, and the unregistered-plugin graph.
+  validation, an unreadable/malformed/incomplete baseline, a `command`-carrying
+  report envelope in its place, a provider mismatch, incomplete head coverage,
+  and the unregistered-plugin graph.
 
 - **`impact`** (`./impact.mjs`'s `impactCommand`) — reverse reachability from
   the project graph: given a project name, lists every project that transitively
