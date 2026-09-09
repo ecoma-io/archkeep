@@ -52,7 +52,9 @@ model `graph`/`drift`/`check` read, from the same providers. It reports:
   and edges to external packages dropped (the same filter `drift` applies);
 - **tags** — the union of project tags, sorted and deduplicated;
 - **coverage** — how many imports, files and projects analysis actually judged,
-  and which files could not be analyzed.
+  and which files could not be analyzed
+  ([evidence.md](evidence.md#terminology-authority) owns the coverage
+  vocabulary).
 
 The coverage line is the first thing the report prints, for the same reason it
 leads every other command's report: the reader knows whether the observations are
