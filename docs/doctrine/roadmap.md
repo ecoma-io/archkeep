@@ -489,8 +489,11 @@ through the authority's verdict, never through the agent's own judgment.
 - **External workspaces gating on it.** The readiness condition is
   attestation-shaped: a repository outside this one runs `check` as a blocking
   gate and publishes the evidence shape
-  [gate-attestation.md](../reference/gate-attestation.md) defines. Adoption
-  exists; **attested readiness is the open half** — **emerging**.
+  [gate-attestation.md](../reference/gate-attestation.md) defines. As measured
+  on 2026-09-09, [release.md](../development/release.md) reads this condition
+  **met** — published attestation files from two external consumers, accepted
+  by the verifier. What remains open at the phase level is the bullet below,
+  not this condition.
 - **The closed agentic loop.** Declare → context → change → observe →
   evidence → verdict → CI, running end to end on a tree nobody here designed
   without a human assembling the pieces. **future** — the phase's summit, on
