@@ -71,7 +71,7 @@ waits on, and the later maturity beyond them.
 - [Languages](reference/languages.md) — parse limits per language
 - [Violations](reference/violations.md) — fifteen violation types
 
----## Getting started
+## Getting started
 
 | page                                                                   | what it answers                                                 |
 | ---------------------------------------------------------------------- | --------------------------------------------------------------- |
