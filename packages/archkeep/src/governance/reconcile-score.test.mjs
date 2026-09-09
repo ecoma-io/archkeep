@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildRankedCandidates } from "./reconcile-candidates.mjs";
 
 import {
   scoreIntentRows,
@@ -287,17 +288,133 @@ describe("scoreIntentRows", () => {
     expect(rows[0]).toMatchObject({ state: "match", classification: "match" });
   });
 
-  it("detects a violated forbiddenTags rule through the observed edges", () => {
+  it("scores a forbidden dependency row violated through the judge's transitive finding", () => {
+    // The judge reports `dependencyForbidden` on the any-path closure (witness
+    // `a → m → core`); the observed graph holds no direct `a → core` edge, so
+    // scoring the row from direct edges read it as "match" while `check` and
+    // `drift` — fed by the same canonical verdict — reported the finding.
+    const model = intent({ dependencies: { forbidden: [{ source: "a", target: "core" }] } });
+    const verdict = {
+      findings: [
+        {
+          source: "a",
+          target: "core",
+          rule: "dependencyForbidden",
+          boundaryFrom: null,
+          boundaryTo: null,
+          message:
+            "a → m → core — architecture-intent.json forbids this dependency, but the observed graph contains it",
+        },
+      ],
+    };
+    const transitive = {
+      projects: [project("a"), project("m"), project("core")],
+      edges: [edge("a", "m"), edge("m", "core")],
+    };
+    const rows = scoreIntentRows(model, verdict, transitive, new Map());
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ state: "unexpected", classification: "dependencyForbidden" });
+  });
+
+  it("scores a forbidden dependency row only from the judge's findings — never from a direct edge", () => {
+    // The row's verdict IS the judge's verdict: a direct `a → core` edge with
+    // no `dependencyForbidden` finding (the canonical judge cannot produce
+    // that combination, since a direct path is on the closure too) stays
+    // `match`, so a scorer that re-derived the row from observed edges — the
+    // silent direction this fix removes — fails this test.
+    const model = intent({ dependencies: { forbidden: [{ source: "a", target: "core" }] } });
+    const rows = scoreIntentRows(
+      model,
+      emptyVerdict,
+      { projects: [project("a"), project("core")], edges: [edge("a", "core")] },
+      new Map(),
+    );
+    expect(rows[0]).toMatchObject({ state: "match", classification: "match" });
+  });
+
+  it("detects a violated forbiddenTags rule through the judge's finding", () => {
     const model = intent({ forbiddenTags: [{ from: "type-package", to: "type-application" }] });
     const rows = scoreIntentRows(model, emptyVerdict, observed, tagsByProject);
     expect(rows[0]).toMatchObject({ state: "match" });
 
-    const observedWithEdge = {
-      projects: observed.projects,
-      edges: [edge("core", "app")],
+    const verdict = {
+      findings: [
+        {
+          source: "core",
+          target: "app",
+          rule: "tagDependencyForbidden",
+          boundaryFrom: null,
+          boundaryTo: null,
+          message:
+            "core → app — architecture-intent.json forbids a dependency from any project carrying " +
+            'tag "type-package" to any project carrying tag "type-application"',
+        },
+      ],
     };
-    const violating = scoreIntentRows(model, emptyVerdict, observedWithEdge, tagsByProject);
+    const violating = scoreIntentRows(model, verdict, observed, tagsByProject);
     expect(violating[0]).toMatchObject({
+      state: "unexpected",
+      classification: "tagDependencyForbidden",
+    });
+  });
+
+  it("attributes a tag-rule witness only to the row whose tags its pair carries", () => {
+    // The judge reports concrete (source, target) witnesses; a witness whose
+    // pair does NOT carry the row's `from`/`to` tags must not violate the row
+    // — attribution through `tagsByProject`, never through a second graph walk.
+    const model = intent({ forbiddenTags: [{ from: "type-package", to: "type-application" }] });
+    const verdict = {
+      findings: [
+        {
+          source: "worker",
+          target: "app",
+          rule: "tagDependencyForbidden",
+          boundaryFrom: null,
+          boundaryTo: null,
+          message: "worker → app — architecture-intent.json forbids",
+        },
+      ],
+    };
+    const rows = scoreIntentRows(model, verdict, observed, tagsByProject);
+    // "worker" is not an observed project in this fixture, so it carries no
+    // tag — the row must stay a match, not read the finding as its own.
+    expect(rows[0]).toMatchObject({ state: "match", classification: "match" });
+  });
+
+  it("scores a forbiddenTags row violated through the judge's transitive witness", () => {
+    // Same any-path closure as `dependencies.forbidden` above: the witness
+    // `a → m → core` crosses the tagged pair with no direct edge between its
+    // endpoints, so a direct-edge `observed.edges.some(...)` re-derivation
+    // scored the row "match" while the canonical judge reported the finding.
+    const model = intent({ forbiddenTags: [{ from: "frontend", to: "core" }] });
+    const verdict = {
+      findings: [
+        {
+          source: "a",
+          target: "core",
+          rule: "tagDependencyForbidden",
+          boundaryFrom: null,
+          boundaryTo: null,
+          message: "a → m → core — architecture-intent.json forbids",
+        },
+      ],
+    };
+    const transitive = {
+      projects: [project("a", ["frontend"]), project("m"), project("core", ["core"])],
+      edges: [edge("a", "m"), edge("m", "core")],
+    };
+    const rows = scoreIntentRows(
+      model,
+      verdict,
+      transitive,
+      new Map([
+        ["a", ["frontend"]],
+        ["m", []],
+        ["core", ["core"]],
+      ]),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
       state: "unexpected",
       classification: "tagDependencyForbidden",
     });
@@ -364,5 +481,54 @@ describe("reconcileScores", () => {
     const scores = reconcileScores(model, verdict, observed, emptyAnalysis);
     expect(scores.boundaries).toHaveLength(1);
     expect(scores.boundaries[0]).toMatchObject({ name: "packages", state: "match" });
+  });
+});
+
+describe("reconcile-score → reconcile-candidates (the --propose face)", () => {
+  it("proposes one removal candidate per forbidden row the judge's closure violates", () => {
+    // The issue's fixture: the observed graph reaches `core` only through `m`
+    // (`a → m → core`), while the intent forbids `a → core` by name and, on
+    // the tag axis, any `frontend`-tagged project reaching a `core`-tagged one.
+    // `check`/`drift` report both findings; reconcile must score both rows
+    // violated and `--propose` must list both as `removal` candidates.
+    const model = intent({
+      dependencies: { forbidden: [{ source: "a", target: "core" }] },
+      forbiddenTags: [{ from: "frontend", to: "core" }],
+    });
+    const verdict = {
+      findings: [
+        {
+          source: "a",
+          target: "core",
+          rule: "dependencyForbidden",
+          boundaryFrom: null,
+          boundaryTo: null,
+          message: "a → m → core — architecture-intent.json forbids this dependency",
+        },
+        {
+          source: "a",
+          target: "core",
+          rule: "tagDependencyForbidden",
+          boundaryFrom: null,
+          boundaryTo: null,
+          message: "a → m → core — architecture-intent.json forbids a dependency by tag",
+        },
+      ],
+    };
+    const transitive = {
+      projects: [project("a", ["frontend"]), project("m"), project("core", ["core"])],
+      edges: [edge("a", "m"), edge("m", "core")],
+    };
+    const scores = reconcileScores(model, verdict, transitive, { failures: [] });
+    const candidates = buildRankedCandidates(scores);
+    expect(candidates).toHaveLength(2);
+    expect(candidates.map((c) => `${c.kind} ${c.name}`)).toEqual([
+      "removal a → core",
+      "removal frontend → core",
+    ]);
+    expect(candidates[0].evidence).toBe("dependencyForbidden");
+    expect(candidates[0].intentRow).toMatchObject({ plane: "edge", kind: "forbidden" });
+    expect(candidates[1].evidence).toBe("tagDependencyForbidden");
+    expect(candidates[1].intentRow).toMatchObject({ plane: "tag", kind: "tag-forbidden" });
   });
 });
