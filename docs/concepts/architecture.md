@@ -1,9 +1,9 @@
 # Architecture
 
-One analysis, three faces. The engine reads a polyglot workspace, judges every
+One analysis, four faces. The engine reads a polyglot workspace, judges every
 import against a constraint table, and delivers the verdict through whichever
 surface the reader needs — the CLI, the language server, or an integration
-plugin. The analysis is the same each time; only the delivery changes.
+(Nx or Moon). The analysis is the same each time; only the delivery changes.
 
 ## The pipeline
 

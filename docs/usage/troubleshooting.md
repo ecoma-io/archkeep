@@ -57,7 +57,7 @@ pnpm exec nx show projects
 pnpm exec moon projects
 ```
 
-**The language is not one of the five.** See
+**The language is not one of the eight.** See
 [languages.md](../reference/languages.md). A file with an unrecognised extension is a no-op —
 the dispatcher is pointed at every tracked file and `README.md` is not an error.
 

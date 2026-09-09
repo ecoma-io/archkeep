@@ -32,7 +32,7 @@ know which exact page owns a topic.
 
 - [Why it exists](doctrine/why.md) — the problem, with the measurement behind it
 - [What Archkeep is](doctrine/architecture-authority.md) — the system boundary and the intent/reality/state vocabulary
-- [The model](concepts/architecture.md) — engine, three faces, layers; then [graph](concepts/graph.md), [boundaries](concepts/boundaries.md), [drift](concepts/drift.md), and the [verdict vocabulary](concepts/evidence.md), whose [terminology authority](concepts/evidence.md#terminology-authority) decides what every other page may call a word
+- [The model](concepts/architecture.md) — engine, four faces, layers; then [graph](concepts/graph.md), [boundaries](concepts/boundaries.md), [drift](concepts/drift.md), and the [verdict vocabulary](concepts/evidence.md), whose [terminology authority](concepts/evidence.md#terminology-authority) decides what every other page may call a word
 - [Where it is going](doctrine/roadmap.md) — the trust ladder, and the conditions stable 1.0 waits on
 
 **Use** — run it and read what it says:
@@ -76,7 +76,7 @@ know which exact page owns a topic.
 
 | page                                                        | what it answers                                                                                                                                                                                                                                                              |
 | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [architecture.md](concepts/architecture.md)                 | The engine, three faces, layer split, and the command capability vocabulary — technology-neutral                                                                                                                                                                             |
+| [architecture.md](concepts/architecture.md)                 | The engine, four faces, layer split, and the command capability vocabulary — technology-neutral                                                                                                                                                                              |
 | [graph.md](concepts/graph.md)                               | Project graph, edge identity, deterministic snapshots                                                                                                                                                                                                                        |
 | [boundaries.md](concepts/boundaries.md)                     | Layer/scope/license axes, constraint model, tag semantics, what "violation" is                                                                                                                                                                                               |
 | [policies.md](concepts/policies.md)                         | Three dialects, one table, stability contract                                                                                                                                                                                                                                |

@@ -3,7 +3,7 @@
 **Architecture governance for polyglot repositories** — a deterministic
 authority that keeps the architecture your team declared aligned with the code
 your team keeps changing. Dependency graphs and module boundaries for Go, Rust,
-Python, TypeScript, JavaScript, Vue, Java, Kotlin and C#, with Nx and Moon as first-class
+Python, TypeScript and JavaScript, Vue, Java, Kotlin and C#, with Nx and Moon as first-class
 integrations. Coding agents read the same verdicts, machine-readably, through
 the `arch-*` skills. The system boundary — what Archkeep is and what it is not —
 is owned by [architecture-authority.md](https://github.com/ecoma-io/archkeep/blob/main/docs/doctrine/architecture-authority.md).
@@ -166,8 +166,9 @@ a file it cannot edit ([overview.md](https://github.com/ecoma-io/archkeep/blob/m
   mismatch, undeclared imports) refuses the run — never a silent skip
   ([custom-rules.md](https://github.com/ecoma-io/archkeep/blob/main/docs/concepts/custom-rules.md),
   [writing one](https://github.com/ecoma-io/archkeep/blob/main/docs/usage/custom-rules.md)).
-- **Shipped policy packs** — Clean Architecture, hexagonal, layered modular
-  monolith and DDD bounded contexts, as ready-made profile registries under
+- **Shipped policy packs** — six shipped packs: Clean Architecture, hexagonal,
+  layered, modular monolith, vertical slice and DDD bounded contexts, as
+  ready-made profile registries under
   this package's `presets/` directory. Copy one into your workspace, or point
   the `profiles` option straight at it; either way it is enforced by the same
   path a registry you wrote yourself is
