@@ -156,3 +156,8 @@ boundary law's own deferred rows, as the `debt rows` metric — because the aged
 ledger needs a snapshot directory and belongs to [debt.md](debt.md).
 
 It writes nothing. Like every command that is not `check`, it reads.
+
+## Next
+
+- The metrics without the document: [health.md](health.md)
+- The waiver ledger behind the trends: [debt.md](debt.md)

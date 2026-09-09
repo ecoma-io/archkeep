@@ -81,7 +81,7 @@ the active count decrease while the resolved record is kept (monotonicity).
 For the id rule, the entry kinds, age and severity, and the refusals, see
 [the reference](../reference/debt.md).
 
-## Docker / sources of truth
+## Sources of truth
 
 `debt` is pointed at the same consumer-managed directory `history` uses — in CI,
 as a committed or artifacts directory; locally, wherever you keep snapshots.
@@ -144,3 +144,8 @@ is the exact contract.
 
 For the four entry kinds, the age model, and the refusals, see
 [the reference](../reference/debt.md).
+
+## Next
+
+- Capture the snapshots the ledger reads: [history.md](history.md)
+- The rows the ledger ages: [waivers.md](waivers.md)

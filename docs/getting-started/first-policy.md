@@ -9,6 +9,9 @@ workspace uses Nx or the native provider.
 One file at the workspace root -- the one `boundaryConfig` names -- holds the
 law. It exports three things:
 
+(No boundary config yet? [first-project.md](first-project.md) step 4 creates
+one; the rest of this page reads the same on either provider.)
+
 ```js
 // module-boundaries.config.mjs
 
@@ -148,8 +151,8 @@ is [../concepts/policies.md](../concepts/policies.md).
 
 ## Next
 
+- The exit codes and SARIF output in a pipeline: [../usage/ci.md](../usage/ci.md)
 - What to put in the constraint table, and how to pick tags that hold:
   [../concepts/boundaries.md](../concepts/boundaries.md)
 - Each violation `messageId` may name: [../reference/violations.md](../reference/violations.md)
-- The exit codes and SARIF output in a pipeline: [../usage/ci.md](../usage/ci.md)
 - Diagnostics at the edit, per client: [../integrations/vscode.md](../integrations/vscode.md)

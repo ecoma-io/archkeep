@@ -143,3 +143,8 @@ to.
 
 The reference page for the command is
 [`../reference/decisions.md`](../reference/decisions.md).
+
+## Next
+
+- The registry the chain resolves through: [adr.md](adr.md)
+- Who recorded what, and when: [provenance.md](provenance.md)

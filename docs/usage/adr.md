@@ -102,3 +102,8 @@ What an ADR is, why the filename is the identity, why the frontmatter dialect
 is strict, and how `decisionRef` binds a rule to its decision — see
 [concepts/adr.md](../concepts/adr.md). The report shapes and the envelope's
 fields are in [reference/adr.md](../reference/adr.md).
+
+## Next
+
+- The chain behind one decision: [decisions.md](decisions.md)
+- Who recorded what, and when: [provenance.md](provenance.md)

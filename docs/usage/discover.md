@@ -127,3 +127,8 @@ The reference page for the command is
 [`../reference/discovery.md`](../reference/discovery.md). The concept that
 defines the derivation rules and the proposal-only line is
 [`../concepts/discovery.md`](../concepts/discovery.md).
+
+## Next
+
+- Propose the intended model from the observation: [migration.md](migration.md)
+- Compare the observation to a declared intent: [drift.md](drift.md)

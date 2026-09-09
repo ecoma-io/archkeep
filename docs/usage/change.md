@@ -225,3 +225,8 @@ reasons. An agent consumes them without parsing prose and decides the next
 step itself. Archkeep stays the deterministic observer — it never generates
 intent, never edits the manifest, and never reasons about what the change
 "meant".
+
+## Next
+
+- Classify what the change introduced: [delta.md](delta.md)
+- The decision the intent traces to: [decisions.md](decisions.md)

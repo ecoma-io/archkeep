@@ -116,3 +116,8 @@ proposal  1 candidate, ranked — proposed, not authoritative, never written
   boundary-change  packages → apps  (change boundary row in boundaries — the observed architecture builds a dependency this boundary row forbids — relax the row or change the boundary)
            — apply none of these without review; architecture-intent.json is untouched
 ```
+
+## Next
+
+- The same gap, observed-first: [drift.md](drift.md)
+- Write the intent the scores ask for: [migration.md](migration.md)

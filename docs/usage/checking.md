@@ -10,7 +10,7 @@ A clean tree prints what it inspected, not just that it found nothing — and
 which law it inspected it against:
 
 ```text
-policy  module-boundaries.config.mjs — fingerprint 3f9a2b7c1d4e5f608a1b2c3d4e5f6078b1e2d3c4f5a6b7c8d9e0f1a2b3c4d5e6
+policy  module-boundaries.config.mjs — fingerprint 3f9c…
 
 ✔ no boundary violations (264 imports in 78 files across 12 projects)
 ```
@@ -28,7 +28,7 @@ SARIF run.
 
 ## What `check` judges
 
-One run combines six verdicts:
+One run combines seven verdicts:
 
 1. **Import boundaries** — every import site in every tracked, supported source
    file is matched against the boundary law.
@@ -177,3 +177,8 @@ options declare a `profiles` registry: with one, `--config` is a profile NAME;
 without one, it is a file path resolved from the workspace root. The two do not
 mix, and `check` does not guess — an unknown name in a profile workspace and a
 missing file without one both exit 3.
+
+## Next
+
+- The same verdict as a gate: [ci.md](ci.md)
+- What a change introduced or resolved: [delta.md](delta.md)

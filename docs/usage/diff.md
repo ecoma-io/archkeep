@@ -110,3 +110,8 @@ The workflow is the one CI already uses with artifacts:
 git checkout main && archkeep graph --format json --output baseline.json
 git checkout my-branch && archkeep diff baseline.json
 ```
+
+## Next
+
+- Classify the difference: [delta.md](delta.md)
+- Read a directory of snapshots over time: [history.md](history.md)

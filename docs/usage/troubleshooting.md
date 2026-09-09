@@ -289,7 +289,7 @@ first graph computation rather than falling back to a default.
 extension to the server, and that the server's workspace root is your workspace
 root rather than a subdirectory — the root decides which boundary config is read.
 Pass it explicitly through `initializationOptions` if in doubt. See
-[editors.md](../integrations/vscode.md).
+[vscode.md](../integrations/vscode.md).
 
 **Stale after editing the boundary config.** The server asks the client to watch
 five patterns: the boundary config, the resolved `tsConfig`, `**/project.json`,
@@ -333,3 +333,8 @@ Two doors, and they are different on purpose:
 
 Either way, the most useful thing you can attach is the file, its `project.json`
 tags, and the boundary config row you expected to fire.
+
+## Next
+
+- The gate this page repairs: [ci.md](ci.md)
+- What a run judges: [checking.md](checking.md)
