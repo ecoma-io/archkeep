@@ -268,8 +268,13 @@ export function scoreEdge(edge, keys, intentForbiddenPairs, tagForbiddenPairs) {
  * Boundary `allowed`/`forbidden` rows are scored from the canonical judge's
  * findings (matched exactly by `from`/`to`): a `forbidden` row with an
  * `intentForbiddenEdge` finding is `unexpected`, an `allowed` row with an
- * `intentAllowedMissing` finding is `absent`. Project and dependency rows are
- * scored directly against the observed names and edges. A
+ * `intentAllowedMissing` finding is `absent`. Project rows are scored against
+ * the observed names, and the two forbidden drift planes are scored from the
+ * judge's findings as well — `dependencies.forbidden` through its
+ * `dependencyForbidden` findings, `forbiddenTags` through its
+ * `tagDependencyForbidden` witnesses attributed via `tagsByProject` — so a
+ * row's verdict IS the verdict `check` and `drift` render, including the
+ * transitive closure a direct-edge re-derivation would read as "match". A
  * `dependencies.allowed` row is an allowlist entry, not an existence claim —
  * its absence in the graph is not divergence, so it scores `match` either
  * way (the divergent direction is the observed edge outside the list, scored
@@ -285,7 +290,25 @@ export function scoreIntentRows(intent, judgeVerdict, observed, tagsByProject) {
   // used by its own test
   const rows = [];
   const observedNames = new Set(observed.projects.map((p) => p.name));
-  const observedEdgeKeys = new Set(observed.edges.map((e) => `${e.source} → ${e.target}`));
+  // The judge has already judged every forbidden plane on the any-path
+  // closure (`../architecture-intent/judge.mjs` emits `dependencyForbidden`
+  // and `tagDependencyForbidden` for direct AND transitive paths, as concrete
+  // `source`/`target` project names with `boundaryFrom: null`). These two
+  // projections score the drift rows from those findings — projecting the
+  // canonical verdict, never re-deriving reachability here: a re-walk of the
+  // direct-edge list would score a transitive violation the judge reported
+  // as a row "match", the divergence `check` and `drift` do report. Findings
+  // without a pair (`intentUnknownTag`, `projectMissing`, …) are skipped.
+  const dependencyForbiddenPairs = new Set();
+  const tagForbiddenWitnesses = [];
+  for (const finding of judgeVerdict.findings) {
+    if (finding.source === null || finding.target === null) continue;
+    if (finding.rule === "dependencyForbidden") {
+      dependencyForbiddenPairs.add(`${finding.source} → ${finding.target}`);
+    } else if (finding.rule === "tagDependencyForbidden") {
+      tagForbiddenWitnesses.push([finding.source, finding.target]);
+    }
+  }
 
   const boundaryFinding = new Map();
   for (const finding of judgeVerdict.findings) {
@@ -341,11 +364,12 @@ export function scoreIntentRows(intent, judgeVerdict, observed, tagsByProject) {
   }
   for (const forbidden of dependencies.forbidden ?? []) {
     const key = `${forbidden.source} → ${forbidden.target}`;
+    const violated = dependencyForbiddenPairs.has(key);
     row(
       "edge",
       key,
-      observedEdgeKeys.has(key) ? "unexpected" : "match",
-      observedEdgeKeys.has(key) ? "dependencyForbidden" : "match",
+      violated ? "unexpected" : "match",
+      violated ? "dependencyForbidden" : "match",
       "forbidden",
       key,
     );
@@ -353,10 +377,9 @@ export function scoreIntentRows(intent, judgeVerdict, observed, tagsByProject) {
 
   for (const tagRow of intent.forbiddenTags ?? []) {
     const key = `${tagRow.from} → ${tagRow.to}`;
-    const violated = observed.edges.some((e) => {
-      if (e.source === e.target) return false;
-      const sourceTags = tagsByProject.get(e.source) ?? [];
-      const targetTags = tagsByProject.get(e.target) ?? [];
+    const violated = tagForbiddenWitnesses.some(([source, target]) => {
+      const sourceTags = tagsByProject.get(source) ?? [];
+      const targetTags = tagsByProject.get(target) ?? [];
       return sourceTags.includes(tagRow.from) && targetTags.includes(tagRow.to);
     });
     row(
