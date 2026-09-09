@@ -29,8 +29,8 @@ Agent
   steps through tools instead of a shell, and the CLI remains the fallback and
   the human/CI face ([../integrations/mcp.md](../integrations/mcp.md)).
 - **MCP** = capability interface. `@ecoma-io/archkeep-mcp`, one tool per
-  question an agent asks mid-change, read-only with one deliberate exception
-  that proposes without ever deciding.
+  question an agent asks mid-change, every tool read-only — including the one
+  that proposes, which is non-authoritative by design and never decides.
 - **Host integrations** = packaging for each agent platform. The Claude Code
   plugin discovers skills through its `skills` field; `npx skills add`
   discovers them from the repository-root `skills/` directory; an MCP host

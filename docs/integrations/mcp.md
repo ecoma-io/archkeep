@@ -158,9 +158,9 @@ who can speak to the server can point it at any readable tree.
 
 ## The authority boundary
 
-**No tool writes.** The eight read tools are read-only by construction — they
-compose the engine's descriptive commands. The ninth holds the line the
-whole design turns on:
+**No tool writes.** All nine tools are read-only by construction — every one
+carries the registry's `readOnlyHint: true`. But eight of them answer
+questions, and the ninth holds the line the whole design turns on:
 
 `archkeep_propose` returns `requiresApproval: true`, `authoritative: false`,
 `written: false`, and every candidate the engine produces already carries
