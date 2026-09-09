@@ -159,25 +159,13 @@ capabilities a workspace asks for — `analyze` observes the architecture,
 explanation from recorded evidence, `govern` groups the governance
 lifecycle's read side, and `rules` serves the rule catalog. The words name
 product capabilities — not packages, and not objects in the engine's
-semantic model — and this page owns them. The table below is every verb
-today; the capability words are the vocabulary a verb's description uses,
-not a second command list.
+semantic model — and this page owns them. The full verb reference — every
+flag, every exit code — is owned by [reference/cli.md](../reference/cli.md),
+and [reference/exit-codes.md](../reference/exit-codes.md) owns the exit-code
+roster. The table below is the complete verb roster today.
 
-The implementation mirrors the vocabulary one-to-one: each capability word
-owns a facade module, `packages/archkeep/src/commands/<word>-capability.mjs`
-— an explicit re-export roster of that word's verbs and nothing else. The
-facade is pure by construction: it has nowhere to hide a judgment, so the
-vocabulary's code referent is visible to the import graph, not just to a
-comment. `cli.mjs` routes its verb imports through the facades rather than
-around them — every verb but `adr`, whose CLI entry reaches its prefix
-`adr-for-workspace.mjs` preamble driver directly, so the workspace-root and
-tracked-file resolution that verb needs is composed once beside the
-`adrCommand` it then feeds (the driver's header owns why that one voice
-routes around, and calling it through the facade afterward would add nothing
-but an indirection).
-
-The same "surface, never a second object" rule governs the words the engine
-carries. **`intent` is not one type** — the word names four distinct surfaces
+The words the engine carries hold one deliberate overload:
+**`intent` is not one type** — the word names four distinct surfaces
 that never merge: the workspace-declared law (`src/architecture-intent/`), the
 v1.0 evidence-manifest registry (`src/intent/`), the declared-change grammar a
 `change` run verifies (`src/commands/change-intent.mjs`), and the run
@@ -211,46 +199,6 @@ disagreement point between the surfaces that happen to share the name.
 | `decisions`  | Walks the full chain behind one recorded decision — decision to bound rows, projects, findings, verification level | no               |
 | `adr`        | Lists recorded architecture decisions and what each binds (`docs/adr/`)                                            | no               |
 | `rules`      | Lists official rules, shows details, verifies catalog integrity, or adds a rule                                    | no               |
-
-Five command verdicts can exit 1, and
-[../reference/exit-codes.md](../reference/exit-codes.md) owns that roster:
-`check` is the only command that exits 1 on boundary findings, `fitness` exits 1
-when a declared function fails (a failing fitness function is a finding, not a
-print job), `delta` exits 1 when the compared change introduced a violation no
-active waiver covers, `change` exits 1 when the change produced architectural
-consequences its declaration did not cover (or skipped ones it did), and
-`rules verify` exits 1 when a rule artifact does not match the bytes its
-catalog recorded — the only `rules` verb whose verdict carries an exit. The
-rest are descriptive or proposal-only: they answer questions about the
-architecture without claiming a violation. `context` answers the question an
-agent asks _before_ editing (what
-is this project allowed to reach?); `impact` answers the question during
-planning (what depends on this?); `scenario` answers the question during
-planning too (what if this dependency changed?); `explain` answers the question after a
-violation is reported (why did this one fail?). `diff` answers the question
-across a single change (what changed, and what boundary implications did the
-change carry?), and `delta` answers its violation half as a gate (which
-violations did this change introduce or resolve, judged under the current
-law — [../usage/delta.md](../usage/delta.md)); `change` answers its
-declaration half as a gate too (did the delta match what the change declared?
-— [../usage/change.md](../usage/change.md)); `history` answers it across time (how did the architecture
-evolve, and which of those changes were architectural, policy, or provider?);
-`evolution` answers it across Git revisions (at which analyzed commit was an
-architectural change first observable — read from each revision's own tree,
-never from commit messages); `drift` answers it in the present tense (does the code that exists agree with the
-architecture that was declared?); `reconcile --propose` and
-`discover --propose` answer it in the future tense (what would the declared
-model need to look like for the two sides to agree?) — as proposals, never
-written. `fitness` and `waivers` sit between: their verdicts fold into
-`check`'s exit code by presence, and `fitness` exits 1 on its own when a
-declared function fails — `waivers` stays descriptive, listing the term-bound
-suppressions on the table without claiming a violation.
-
-Two of the descriptive commands fold into `check` by presence: a policy
-declaring a `fitness` export counts its per-function verdicts into `check`'s
-exit code (`fail` → 1, `unknown` → 3), and a violation an active waiver
-accepts stays exit `1`, moved to the "accepted violations" section until its
-term lapses. The rest only inform the reader.
 
 ¹ Per-edge verdicts in `context` and `impact` cover only `depConstraints`
 (3 of 15 violation types). An edge with no violations in these commands may

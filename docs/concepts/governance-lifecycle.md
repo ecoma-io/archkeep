@@ -58,28 +58,21 @@ evidence commands open the verdict:
 
 ## Evolution
 
-`diff` compares two graph snapshots and adds rule-impact analysis when a
-boundary config is available: which added edges introduce violations, which
-removed edges resolve them. `history` describes the architecture's evolution
-across a directory of snapshots, classifying each transition by the evidence
-the snapshots carry — a changed graph is an architecture change, a changed
-`policy.fingerprint` is a policy/intent change, a changed provider is a
-provider change, provenance moving alone is code drift. Neither is a finding;
-evolution is described, and `check` is where failing happens. `delta` is the
-one evolution verb that gates: it classifies which boundary violations a
-single change introduced or resolved, both sides re-judged under the current
-law, and a non-waived introduced violation is exit 1.
-[usage/diff.md](../usage/diff.md) · [usage/delta.md](../usage/delta.md) ·
-[usage/history.md](../usage/history.md)
+`diff`, `history` and `delta` extend the comparison across time — across a
+single change, across a directory of snapshots, and across a change judged as
+a gate. Evolution is described, and `check` is where failing happens —
+`delta` is the one evolution verb whose verdict can exit 1. What a transition
+classifies is owned by [usage/history.md](../usage/history.md); the gate
+semantics by [usage/delta.md](../usage/delta.md) and
+[usage/diff.md](../usage/diff.md).
 
 ## Drift
 
 Drift is what the lifecycle is there to surface: divergence between what the
-workspace declares and what its files do. Four signals: boundary violations and
-configuration drift through `check`, structural drift through `diff`,
-architecture-intent drift through `drift` (and through `check` by presence).
-Every path that cannot complete the comparison withholds the verdict (exit 3)
-rather than print "no drift". [concepts/drift.md](../concepts/drift.md)
+workspace declares and what its files do. The four drift signals and the
+commands that carry them are owned by
+[concepts/drift.md](../concepts/drift.md); every path that cannot complete
+the comparison withholds the verdict (exit 3) rather than print "no drift".
 
 ## Boundaries around the lifecycle
 
@@ -90,12 +83,8 @@ is a finding by decision
 ([fitness-functions.md](../concepts/fitness-functions.md)). Two of these are
 the law's own selectors, not observations of it:
 
-- **Named law profiles** — a `profiles` registry in the plugin options turns
-  the gate into a selection: every command that reads a boundary law resolves
-  `boundaryConfig`/`--config` as a profile _name_ rather than a file path, and
-  a profile that cannot be resolved exits 3, wherever it is hit. Only `check`'s
-  own report names which profile it enforced; a change report about any other
-  command still must name the `--config <NAME>` it ran with
+- **Named law profiles** — the boundary law itself can be selected by name,
+  per command, from a `profiles` registry
   ([profiles.md](../concepts/profiles.md) is the full model).
 - **ADR / decision records** — a rule's `decisionRef` points at a recorded
   decision in `docs/adr/`, read by `archkeep adr` (the evidence bullet above).

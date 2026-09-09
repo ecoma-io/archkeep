@@ -53,6 +53,8 @@ as a clean one.
   (analyzed / analyzed+notAnalyzed). Full coverage is `ok`; a fraction under 1
   is `findings` with the ratio behind it; a run that examined nothing is
   `unknown`, never 0/0 read as a clean 1.
+  The coverage vocabulary — population, analyzed, notAnalyzed — is owned by
+  [evidence.md](evidence.md#terminology-authority).
 
 - **Boundary** — violations (the rule engine's verdict, minus suppressions)
   and the waiver surface (the count of suppressed violations). A non-zero
