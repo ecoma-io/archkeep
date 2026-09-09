@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <a href="docs/README.md">Document</a> ·
+  <a href="docs/README.md">Docs</a> ·
   <a href="https://github.com/ecoma-io/archkeep/issues/new?template=bug_report.yml">Report Bug</a> ·
   <a href="https://github.com/ecoma-io/archkeep/issues/new?template=feature_request.yml">Feature Request</a>
 </p>
@@ -216,13 +216,14 @@ compiles, tests pass, feature ships. Then:
 ```text
 libs/pricing/src/discount.go:14:2  onlyTagsConstraintViolation
   A project tagged with "layer:domain" can only depend on libs tagged with layer:domain
-  import      "github.com/acme/mq-client/publish" (static)  pricing -> mq-client
-  constraint  sourceTag layer:domain, onlyDependOnLibsWithTags [layer:domain]
+  import      "github.com/acme/mq-client/publish" (static)  pricing → mq-client
+  constraint  sourceTag layer:domain → onlyDependOnLibsWithTags [layer:domain]
+  rule        The domain outlives frameworks, queues and databases.
 ```
 
-Four lines, four audiences: where it happened, the rule that fired (the same
-message id ESLint reports), what is wrong, and — the line everything else
-exists for — **which row of your declared policy said so**.
+Five lines, five audiences: where it happened, the rule that fired (the same
+message id ESLint reports), what is wrong, **which row of your declared policy
+said so** — the line everything else exists for — and that row's own words.
 
 What happens next is governance, not just a red build:
 

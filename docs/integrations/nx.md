@@ -6,18 +6,19 @@ invocation, contributes polyglot dependency edges into the project graph, and
 makes those edges visible to `nx affected` and to the boundary rules.
 
 What it does **not** do is re-infer what Nx already knows. TypeScript and
-JavaScript edges are Nx's own — Archkeep adds Go, Rust and Python, and leaves
+JavaScript edges are Nx's own — Archkeep adds Go, Rust, Python, Java, Kotlin
+and C#, and leaves
 the rest alone ([north-star.md](../doctrine/north-star.md): _TypeScript and
 JavaScript stay with `@nx/eslint-plugin`_).
 
 ## What the integration provides
 
-| surface              | what it gives you                                                                       |
-| -------------------- | --------------------------------------------------------------------------------------- |
-| Project graph edges  | Go, Rust and Python dependencies between Nx projects, contributed at graph time         |
-| `nx affected`        | Polyglot edges make `nx affected` mark dependents of changed Go/Rust/Python code        |
-| Boundary enforcement | The same constraint table that `@nx/enforce-module-boundaries` uses, for every language |
-| `workspaceLayout`    | The plugin carries `nx.json`'s own `workspaceLayout` into the engine                    |
+| surface              | what it gives you                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------ |
+| Project graph edges  | Go, Rust, Python, Java, Kotlin and C# dependencies between Nx projects, contributed at graph time      |
+| `nx affected`        | Polyglot edges make `nx affected` mark dependents of changed Go, Rust, Python, Java, Kotlin or C# code |
+| Boundary enforcement | The same constraint table that `@nx/enforce-module-boundaries` uses, for every language                |
+| `workspaceLayout`    | The plugin carries `nx.json`'s own `workspaceLayout` into the engine                                   |
 
 Edges come from manifests; verdicts come from sources. That split is the
 architecture's central seam —
@@ -162,7 +163,7 @@ would be judged against Nx's default layout instead of the one it declared.
 `nx affected` decides what to rebuild or retest by walking the project graph's
 dependency edges. Nx already infers TypeScript and JavaScript edges from
 imports, so a change to a TypeScript or JavaScript library correctly marks its
-consumers affected. For Go, Rust and Python, that inference does not exist — the
+consumers affected. For Go, Rust, Python, Java, Kotlin and C#, that inference does not exist — the
 edges are absent, and `nx affected` silently under-selects.
 
 Archkeep's plugin fills that gap. A Go project importing a sibling's module path,
@@ -242,8 +243,9 @@ Nx actually surfaces.
 ## The unregistered-plugin refusal
 
 If the plugin is not registered in `nx.json` at all, Nx computes the graph
-without it — zero polyglot edges, zero warnings. The workspace's Go, Rust and
-Python projects exist in the graph as nodes (their `project.json` files still
+without it — zero polyglot edges, zero warnings. The workspace's Go, Rust,
+Python, Java, Kotlin and C# projects exist in the graph as nodes (their
+`project.json` files still
 declare them), but no edge connects any of them. `nx affected` under-selects,
 and the boundary check — which reads the graph through `readProjectGraph` —
 still runs, but judges the workspace against a graph that pretends those

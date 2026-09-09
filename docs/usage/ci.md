@@ -32,6 +32,9 @@ archkeep --help              Show this message
   --output <file>       Write the report to a file instead of stdout
   --config <file>       Read the boundary law from here instead of
                         <workspace root>/module-boundaries.config.mjs
+  --evidence-out <dir>  Also write each custom rule's evidence bundle
+                        into this existing directory, as <rule>.json —
+                        the exact document the rule was judged over
 ```
 
 Both `--flag value` and `--flag=value` work. An unknown flag is a **usage error**

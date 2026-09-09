@@ -24,7 +24,7 @@ suppressions and waivers.
 apps/checkout-api/internal/handler/pay.go:14:2  onlyTagsConstraintViolation
   A project tagged with "scope:checkout" can only depend on libs tagged with scope:checkout, scope:shared
   import      "github.com/acme/billing-core/ledger" (static)  checkout-api → billing-core
-  constraint  sourceTag scope:checkout, onlyDependOnLibsWithTags [scope:checkout, scope:shared]
+  constraint  sourceTag scope:checkout → onlyDependOnLibsWithTags [scope:checkout, scope:shared]
 ```
 
 | line               | what it is for                                                                                                       |
