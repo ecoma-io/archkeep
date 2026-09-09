@@ -613,3 +613,90 @@ describe("SCENARIO_CHANGE_TYPES", () => {
     expect(Object.isFrozen(SCENARIO_CHANGE_TYPES)).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// evaluateScenario — source-named changed edges under depConstraints (#809)
+// ---------------------------------------------------------------------------
+
+describe("evaluateScenario — source-named changed-edge depConstraints (#809)", () => {
+  /**
+   * Build a graph with tagged nodes (not makeGraph, which omits tags).
+   * Nodes: a(scope:a), t(scope:transport), core(scope:shared).
+   * Edges: a → core (legitimate dependency), optionally a → t.
+   */
+  function taggedGraph(extraAEdges = []) {
+    return {
+      nodes: {
+        a: { name: "a", data: { root: "a", tags: ["scope:a"] } },
+        t: { name: "t", data: { root: "t", tags: ["scope:transport"] } },
+        core: { name: "core", data: { root: "core", tags: ["scope:shared"] } },
+      },
+      dependencies: {
+        a: [
+          { target: "core", type: "static", source: "a" },
+          ...extraAEdges.map((e) => ({ ...e, source: "a" })),
+        ],
+      },
+    };
+  }
+
+  const DEP_CONSTRAINTS = [
+    {
+      sourceTag: "scope:a",
+      onlyDependOnLibsWithTags: ["scope:a", "scope:shared"],
+      description: "a may use itself and shared core only",
+    },
+  ];
+
+  it("source-named dependency_added reports the constraint violation (#809)", () => {
+    const graph = taggedGraph();
+    const input = { changes: [change("dependency_added", "a", "t")] };
+    const config = { depConstraints: DEP_CONSTRAINTS };
+
+    // Source-named: scenario a, change a→t. The changed edge's SOURCE is the
+    // named project, so the dependents frame never sees the edge — the row
+    // must still appear, judged like the target-named run's row.
+    const resultA = evaluateScenario("a", makeCommandContext(graph), input, config);
+    const rowA = (resultA.scenario.constraintImpact ?? []).find((r) => r.project === "a");
+    expect(rowA).toBeDefined();
+    expect(rowA.edges).toEqual(
+      expect.arrayContaining([expect.objectContaining({ target: "t", type: "static" })]),
+    );
+    expect(rowA.violations[0]).toMatchObject({ messageId: "onlyTagsConstraintViolation" });
+    expect(resultA.delta.constraintsChanged.status).toBe("changed");
+
+    // Target-named: scenario t, same change — the two namings must agree.
+    const resultT = evaluateScenario("t", makeCommandContext(graph), input, config);
+    const rowT = (resultT.scenario.constraintImpact ?? []).find((r) => r.project === "a");
+    expect(rowT).toBeDefined();
+    expect(rowT.violations[0]).toMatchObject({ messageId: "onlyTagsConstraintViolation" });
+    expect(resultT.delta.constraintsChanged.status).toBe("changed");
+  });
+
+  it("dependency_added for an already-present edge yields no constraint delta", () => {
+    const graph = taggedGraph([{ target: "t", type: "static" }]);
+    const input = { changes: [change("dependency_added", "a", "t")] };
+    const config = { depConstraints: DEP_CONSTRAINTS };
+    const result = evaluateScenario("a", makeCommandContext(graph), input, config);
+    // "dependency already exists" is not a mutation: both sides judge the
+    // same graph, so the delta must not claim a constraint change.
+    expect(result.delta.constraintsChanged.status).toBe("unchanged");
+  });
+
+  it("source-named dependency_removed surfaces the resolved violation on the current side", () => {
+    const graph = taggedGraph([{ target: "t", type: "static" }]);
+    const input = { changes: [change("dependency_removed", "a", "t")] };
+    const config = { depConstraints: DEP_CONSTRAINTS };
+
+    const result = evaluateScenario("a", makeCommandContext(graph), input, config);
+    // Current side: the removed edge a→t exists in the current graph and
+    // violates the scope:a constraint — the row must name it.
+    const currentRow = (result.current.constraintImpact ?? []).find((r) => r.project === "a");
+    expect(currentRow).toBeDefined();
+    expect(currentRow.violations[0]).toMatchObject({ messageId: "onlyTagsConstraintViolation" });
+    // Scenario side: the edge is gone, no violation row for it.
+    const scenarioRow = (result.scenario.constraintImpact ?? []).find((r) => r.project === "a");
+    expect(scenarioRow?.violations?.length ?? 0).toBe(0);
+    expect(result.delta.constraintsChanged.status).toBe("changed");
+  });
+});

@@ -152,11 +152,13 @@ function cloneGraph(graph) {
  *
  * @param {object} graph The base graph to apply changes to.
  * @param {DependencyChange[]} changes The hypothetical changes.
- * @returns {{graph: object, applied: string[], refused: string[]}}
+ * @returns {{graph: object, applied: string[],
+ *   mutations: {type: string, source: string, target: string}[], refused: string[]}}
  */
 function applyChanges(graph, changes) {
   const cloned = cloneGraph(graph);
   const applied = [];
+  const mutations = [];
   const refused = [];
 
   for (const change of changes) {
@@ -203,6 +205,7 @@ function applyChanges(graph, changes) {
         source: change.source,
       });
       applied.push(`added dependency: ${change.source} → ${change.target} (${change.edgeType})`);
+      mutations.push({ type: "dependency_added", source: change.source, target: change.target });
     }
 
     if (change.type === "dependency_removed") {
@@ -238,6 +241,7 @@ function applyChanges(graph, changes) {
       existing.splice(idx, 1);
       const typeLabel = change.edgeType ? ` (${change.edgeType})` : "";
       applied.push(`removed dependency: ${change.source} → ${change.target}${typeLabel}`);
+      mutations.push({ type: "dependency_removed", source: change.source, target: change.target });
     }
   }
   // Clean up empty dependency arrays
@@ -247,7 +251,7 @@ function applyChanges(graph, changes) {
     }
   }
 
-  return { graph: cloned, applied, refused };
+  return { graph: cloned, applied, mutations, refused };
 }
 
 /**
@@ -411,6 +415,50 @@ function resolveBaseRevision(root, userBase) {
 }
 
 /**
+ * Merges constraint-impact rows for the named project's own changed edges
+ * into one side's rows (#809), preserving the row shape the primitive
+ * returns — no new fields, no second judgment.
+ *
+ * One row per project: when the side already carries a row for the project,
+ * the edge, constraint-row and violation lists union without duplicates
+ * (constraint rows match by identity — they are the config's own row
+ * objects; violations by value, since `judgeEdge` builds fresh objects);
+ * otherwise the row is appended. Appending keeps every pre-existing row
+ * byte-identical and the order deterministic, because it follows the
+ * input changes' order.
+ *
+ * @param {{project: string, edges: object[], constraintRows: object[],
+ *   violations: object[]}[]} rows The side's constraint impact, mutated in place.
+ * @param {{project: string, edges: object[], constraintRows: object[],
+ *   violations: object[]}[]} merged Rows computed for the changed edge.
+ */
+function mergeConstraintImpact(rows, merged) {
+  for (const row of merged) {
+    const existing = rows.find((r) => r.project === row.project);
+    if (!existing) {
+      rows.push(row);
+      continue;
+    }
+    for (const edge of row.edges) {
+      if (!existing.edges.some((e) => e.target === edge.target && e.type === edge.type)) {
+        existing.edges.push(edge);
+      }
+    }
+    for (const constraintRow of row.constraintRows) {
+      if (!existing.constraintRows.includes(constraintRow)) {
+        existing.constraintRows.push(constraintRow);
+      }
+    }
+    for (const violation of row.violations) {
+      const identity = JSON.stringify(violation);
+      if (!existing.violations.some((v) => JSON.stringify(v) === identity)) {
+        existing.violations.push(violation);
+      }
+    }
+  }
+}
+
+/**
  * Evaluates a scenario against the current workspace.
  *
  * @param {string} projectName The target project.
@@ -452,7 +500,12 @@ export function evaluateScenario(
   }
 
   // Step 3: Apply scenario changes to the graph
-  const { graph: scenarioGraph, applied, refused } = applyChanges(graph, scenarioInput.changes);
+  const {
+    graph: scenarioGraph,
+    applied,
+    mutations,
+    refused,
+  } = applyChanges(graph, scenarioInput.changes);
 
   // Step 4: Compute scenario impact
   const scenarioImpact = computeImpact(projectName, scenarioGraph);
@@ -466,6 +519,47 @@ export function evaluateScenario(
       scenarioGraph.dependencies,
       config.depConstraints,
     );
+  }
+
+  // Step 4b: the named project's own changed edges (#809).
+  //
+  // `computeImpactConstraints` judges edges INTO the target from its
+  // dependents, so a change whose SOURCE is the named project never enters
+  // that frame — an edge pointing out of the target is invisible to it, and
+  // the source-named run reported `unchanged` where the target-named run of
+  // the same change reported the violation. The rows for the changed edge
+  // are computed here by the same primitive — never a second judgment — and
+  // merged into the frame the edge actually belongs to: additions into the
+  // scenario side (the edge exists only there), removals into the current
+  // side (it exists only there).
+  if (config && config.depConstraints) {
+    for (const mutation of mutations) {
+      if (mutation.source !== projectName) continue;
+      if (mutation.type === "dependency_added") {
+        mergeConstraintImpact(
+          scenarioConstraintImpact,
+          computeImpactConstraints(
+            mutation.target,
+            [mutation.source],
+            scenarioGraph.nodes,
+            scenarioGraph.dependencies,
+            config.depConstraints,
+          ),
+        );
+      }
+      if (mutation.type === "dependency_removed") {
+        mergeConstraintImpact(
+          currentConstraintImpact,
+          computeImpactConstraints(
+            mutation.target,
+            [mutation.source],
+            graph.nodes,
+            graph.dependencies,
+            config.depConstraints,
+          ),
+        );
+      }
+    }
   }
 
   // Step 5: Build decision impact for both sides
