@@ -55,6 +55,19 @@
 // selections would ship bytes the lane never verified. The check pins them
 // agreeing today (audit H-F11) rather than trusting a measurement.
 //
+// The same tarball is also gated on its own imports: every shipped `.mjs`/`.js`
+// file must resolve inside the artifact — each relative specifier against the
+// shipped file set (extension and index probing included), each bare
+// specifier covered by `dependencies` or `peerDependencies`, Node's own
+// built-ins and the package's self-name excepted. The source tree cannot see
+// this class of breakage — the missing file is present there, and every test
+// runs where the thing it needs is already installed — so only a read of the
+// packed bytes catches it. Specifiers come from comment-stripped, string-
+// masked source (a doc comment quoting an import is prose, not an import),
+// and a dynamic `import()` counts only with a string-literal argument, the
+// same literal scope `../packages/archkeep/src/analysis/contract.md` fixes
+// for the analyzers.
+//
 // Checks 4-6 run before check 7 so that graph/diff prove the clean installed
 // artifact. A boundary violation is not a graph or diff finding, so the
 // commands would exit 0 either way — but checking the clean tree first is what
@@ -100,8 +113,9 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parsePeerFloorMajor } from "./peer-floor.mjs";
 
@@ -603,6 +617,272 @@ const VIOLATING_FILES_GRADLE = {
   "libs/gradle-app/src/main/kotlin/com/example/test/app/App.kt":
     "package com.example.test.app\n\nclass App {}\n",
 };
+
+/**
+ * The one lexical pass the shipped-import gate needs: comments are stripped
+ * and every string/template literal is collapsed to a `\uE000<N>\uE000`
+ * placeholder whose raw inner text is returned in `strings`, so import
+ * patterns can be matched against real statement text and never against a
+ * doc comment quoting an import or prose inside a string. Regex literals are
+ * consumed with the standard statement-context heuristic (a `/` after an
+ * opener or a keyword opens a regex; a `/` after a value is division), so a
+ * pattern containing `//` cannot swallow the code after it.
+ *
+ * @param {string} source the module's raw text
+ * @returns {{ code: string, strings: string[] }} masked code + string values by index
+ */
+function maskSource(source) {
+  const REGEX_OPENERS = new Set([
+    "(",
+    "[",
+    "{",
+    ",",
+    ";",
+    ":",
+    "!",
+    "&",
+    "|",
+    "?",
+    "=",
+    "+",
+    "-",
+    "*",
+    "%",
+    "<",
+    ">",
+    "~",
+    "^",
+  ]);
+  const REGEX_KEYWORDS = new Set([
+    "return",
+    "case",
+    "typeof",
+    "void",
+    "delete",
+    "new",
+    "in",
+    "of",
+    "instanceof",
+    "yield",
+    "await",
+    "do",
+    "else",
+  ]);
+  const strings = [];
+  let out = "";
+  let i = 0;
+  const n = source.length;
+
+  const lastMeaningful = () => {
+    for (let j = out.length - 1; j >= 0; j--) {
+      const c = out[j];
+      if (c !== " " && c !== "\n" && c !== "\r" && c !== "\t") return c;
+    }
+    return "";
+  };
+  const lastIdent = () => {
+    let j = out.length - 1;
+    while (j >= 0 && /[A-Za-z0-9_$]/.test(out[j])) j--;
+    return out.slice(j + 1);
+  };
+  const scanRegex = () => {
+    let inClass = false;
+    while (i < n) {
+      const c = source[i];
+      if (c === "\\" && i + 1 < n) {
+        i += 2;
+        continue;
+      }
+      if (inClass) {
+        if (c === "]") inClass = false;
+      } else if (c === "[") {
+        inClass = true;
+      } else if (c === "/") {
+        i += 1;
+        while (i < n && /[dgimsuvy]/.test(source[i])) i += 1;
+        out += " ";
+        return;
+      }
+      i += 1;
+    }
+  };
+  const scanString = (quote) => {
+    let value = "";
+    i += 1;
+    while (i < n && source[i] !== quote) {
+      if (source[i] === "\\" && i + 1 < n) {
+        value += source.slice(i, i + 2);
+        i += 2;
+      } else {
+        value += source[i];
+        i += 1;
+      }
+    }
+    i = Math.min(i + 1, n);
+    return value;
+  };
+
+  while (i < n) {
+    const ch = source[i];
+    const next = i + 1 < n ? source[i + 1] : "";
+    if (ch === "/" && next === "/") {
+      while (i < n && source[i] !== "\n") i += 1;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      i += 2;
+      while (i < n && !(source[i] === "*" && source[i + 1] === "/")) i += 1;
+      i = Math.min(i + 2, n);
+      out += " ";
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      strings.push(scanString(ch));
+      out += ch + `\uE000${strings.length - 1}\uE000` + ch;
+      continue;
+    }
+    if (ch === "`") {
+      i += 1;
+      while (i < n && source[i] !== "`") {
+        if (source[i] === "\\" && i + 1 < n) i += 2;
+        else if (source[i] === "$" && source[i + 1] === "{") {
+          i += 2;
+          let depth = 1;
+          while (i < n && depth > 0) {
+            if (source[i] === "{") depth += 1;
+            else if (source[i] === "}") depth -= 1;
+            i += 1;
+          }
+        } else {
+          i += 1;
+        }
+      }
+      i = Math.min(i + 1, n);
+      strings.push("");
+      out += "`" + `\uE000${strings.length - 1}\uE000` + "`";
+      continue;
+    }
+    if (ch === "/") {
+      const prev = lastMeaningful();
+      if (REGEX_OPENERS.has(prev)) {
+        i += 1;
+        scanRegex();
+        continue;
+      }
+      if (REGEX_KEYWORDS.has(lastIdent())) {
+        i += 1;
+        scanRegex();
+        continue;
+      }
+    }
+    out += ch;
+    i += 1;
+  }
+  return { code: out, strings };
+}
+
+const IMPORT_PATTERNS = [
+  /\bimport\b[^;]*?\bfrom\s*(["'])\uE000(\d+)\uE000\1/g,
+  /\bexport\b[^;]*?\bfrom\s*(["'])\uE000(\d+)\uE000\1/g,
+  /\bimport\s*\(\s*(["'])\uE000(\d+)\uE000\1/g,
+  /\bimport\s*(["'])\uE000(\d+)\uE000\1/g,
+];
+
+/**
+ * The specifiers of every static import, re-export, side-effect import, and
+ * string-literal dynamic import in masked source, deduplicated in
+ * first-appearance order.
+ *
+ * @param {string} code the `code` half of a `maskSource` result
+ * @param {string[]} strings the `strings` half of the same result
+ * @returns {string[]}
+ */
+function specifiersFrom(code, strings) {
+  const found = new Set();
+  for (const pattern of IMPORT_PATTERNS) {
+    pattern.lastIndex = 0;
+    for (const match of code.matchAll(pattern)) {
+      const index = Number.parseInt(match[2], 10);
+      if (index < strings.length) found.add(strings[index]);
+    }
+  }
+  return [...found];
+}
+
+/**
+ * Whether `specifier`, imported from `fromFile`, lands on a file inside
+ * `shippedFiles` — exact, `+.mjs`, `+.js`, `/index.mjs`, or `/index.js`.
+ * Tarball paths are POSIX by construction, so resolution stays in
+ * `node:path`'s posix half regardless of the host running this script.
+ *
+ * @param {string} specifier
+ * @param {string} fromFile
+ * @param {Set<string>} shippedFiles
+ * @returns {boolean}
+ */
+function resolvesInside(specifier, fromFile, shippedFiles) {
+  const base = posix.normalize(posix.join(posix.dirname(fromFile), specifier)).replace(/^\//, "");
+  return [base, `${base}.mjs`, `${base}.js`, `${base}/index.mjs`, `${base}/index.js`].some(
+    (candidate) => shippedFiles.has(candidate),
+  );
+}
+
+/**
+ * The pure half of the shipped-import gate: facts in, violations out. A
+ * relative specifier that resolves outside `shippedFiles` and a bare
+ * specifier covered by neither `dependencyNames` nor Node's own built-ins
+ * are both violations; a bare specifier equal to `packageName` resolves
+ * through the package's own exports map and is accepted. Read the header's
+ * shipped-imports paragraph for why the gate exists and what it refuses to
+ * parse.
+ *
+ * @param {string[]} moduleNames shipped `.mjs`/`.js` file names, sorted
+ * @param {(name: string) => string} readSource reads a shipped module's text
+ * @param {Set<string>} shippedFiles every file name in the tarball
+ * @param {string[]} dependencyNames dependency + peerDependency names
+ * @param {string} packageName the package's own name
+ * @returns {{ file: string, specifier: string, reason: string }[]}
+ */
+function shippedImportViolations(
+  moduleNames,
+  readSource,
+  shippedFiles,
+  dependencyNames,
+  packageName,
+) {
+  const violations = [];
+  for (const name of moduleNames) {
+    const { code, strings } = maskSource(readSource(name));
+    for (const specifier of specifiersFrom(code, strings)) {
+      if (isBuiltin(specifier)) continue;
+      if (specifier === packageName || specifier.startsWith(`${packageName}/`)) continue;
+      if (!specifier.startsWith(".") && !specifier.startsWith("/")) {
+        const covered = dependencyNames.some(
+          (dep) => specifier === dep || specifier.startsWith(`${dep}/`),
+        );
+        if (!covered) {
+          violations.push({
+            file: name,
+            specifier,
+            reason: "bare specifier covered by neither dependencies nor peerDependencies",
+          });
+        }
+        continue;
+      }
+      if (!resolvesInside(specifier, name, shippedFiles)) {
+        const target = posix
+          .normalize(posix.join(posix.dirname(name), specifier))
+          .replace(/^\//, "");
+        violations.push({
+          file: name,
+          specifier,
+          reason: `resolves to ${target}, which the tarball does not ship`,
+        });
+      }
+    }
+  }
+  return violations;
+}
 
 const failures = [];
 const note = (text) => console.log(text);
@@ -1214,6 +1494,38 @@ try {
       `pnpm-only: ${packParity.pnpmNames.filter((n) => !packParity.npmNames.includes(n)).join(", ") || "(none)"}\n` +
       `npm-only: ${packParity.npmNames.filter((n) => !packParity.pnpmNames.includes(n)).join(", ") || "(none)"}`,
   );
+  // The tarball's own import graph: every shipped module must resolve inside
+  // the artifact. The extraction below reuses the pnpm tarball already on disk.
+  {
+    const packageTree = join(workdir, "package-tree");
+    mkdirSync(packageTree);
+    const extracted = run("tar", ["-xzf", join(packDir, tarball), "-C", packageTree], packageDir);
+    const packageRoot = join(packageTree, "package");
+    const shippedFiles = new Set(packParity.pnpmNames);
+    const shippedModules = packParity.pnpmNames.filter((name) => /\.mjs$|\.js$/.test(name));
+    const declaredDeps = Object.keys(manifest.dependencies ?? {});
+    const declaredPeerDeps = Object.keys(manifest.peerDependencies ?? {});
+    const dependencyNames = [...new Set([...declaredDeps, ...declaredPeerDeps])];
+    const readSource = (name) => readFileSync(join(packageRoot, name), "utf8");
+    const violations = shippedImportViolations(
+      shippedModules,
+      readSource,
+      shippedFiles,
+      dependencyNames,
+      packageName,
+    );
+    check(
+      "every shipped module's imports resolve inside the tarball — a relative specifier lands on a shipped file and a bare specifier is covered by dependencies or peerDependencies",
+      extracted.status === 0 && shippedModules.length > 0 && violations.length === 0,
+      `extracted ${shippedModules.length} shipped modules from the tarball\n` +
+        (extracted.status === 0
+          ? ""
+          : `tar extraction failed: ${extracted.stderr ?? extracted.stdout ?? "(no output)"}\n`) +
+        (violations.length > 0
+          ? violations.map((v) => `${v.file}: ${v.specifier} — ${v.reason}`).join("\n")
+          : "(no violations)"),
+    );
+  }
 
   const peers = manifest.peerDependencies ?? {};
   const packageManager = JSON.parse(
