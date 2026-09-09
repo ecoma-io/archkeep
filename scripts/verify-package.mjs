@@ -55,6 +55,19 @@
 // selections would ship bytes the lane never verified. The check pins them
 // agreeing today (audit H-F11) rather than trusting a measurement.
 //
+// The same tarball is also gated on its own imports: every shipped `.mjs`/`.js`
+// file must resolve inside the artifact — each relative specifier against the
+// shipped file set (extension and index probing included), each bare
+// specifier covered by `dependencies` or `peerDependencies`, Node's own
+// built-ins and the package's self-name excepted. The source tree cannot see
+// this class of breakage — the missing file is present there, and every test
+// runs where the thing it needs is already installed — so only a read of the
+// packed bytes catches it. Specifiers come from comment-stripped, string-
+// masked source (a doc comment quoting an import is prose, not an import),
+// and a dynamic `import()` counts only with a string-literal argument, the
+// same literal scope `../packages/archkeep/src/analysis/contract.md` fixes
+// for the analyzers.
+//
 // Checks 4-6 run before check 7 so that graph/diff prove the clean installed
 // artifact. A boundary violation is not a graph or diff finding, so the
 // commands would exit 0 either way — but checking the clean tree first is what
@@ -100,8 +113,9 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { isBuiltin } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parsePeerFloorMajor } from "./peer-floor.mjs";
 
@@ -603,6 +617,272 @@ const VIOLATING_FILES_GRADLE = {
   "libs/gradle-app/src/main/kotlin/com/example/test/app/App.kt":
     "package com.example.test.app\n\nclass App {}\n",
 };
+
+/**
+ * The one lexical pass the shipped-import gate needs: comments are stripped
+ * and every string/template literal is collapsed to a `\uE000<N>\uE000`
+ * placeholder whose raw inner text is returned in `strings`, so import
+ * patterns can be matched against real statement text and never against a
+ * doc comment quoting an import or prose inside a string. Regex literals are
+ * consumed with the standard statement-context heuristic (a `/` after an
+ * opener or a keyword opens a regex; a `/` after a value is division), so a
+ * pattern containing `//` cannot swallow the code after it.
+ *
+ * @param {string} source the module's raw text
+ * @returns {{ code: string, strings: string[] }} masked code + string values by index
+ */
+export function maskSource(source) {
+  const REGEX_OPENERS = new Set([
+    "(",
+    "[",
+    "{",
+    ",",
+    ";",
+    ":",
+    "!",
+    "&",
+    "|",
+    "?",
+    "=",
+    "+",
+    "-",
+    "*",
+    "%",
+    "<",
+    ">",
+    "~",
+    "^",
+  ]);
+  const REGEX_KEYWORDS = new Set([
+    "return",
+    "case",
+    "typeof",
+    "void",
+    "delete",
+    "new",
+    "in",
+    "of",
+    "instanceof",
+    "yield",
+    "await",
+    "do",
+    "else",
+  ]);
+  const strings = [];
+  let out = "";
+  let i = 0;
+  const n = source.length;
+
+  const lastMeaningful = () => {
+    for (let j = out.length - 1; j >= 0; j--) {
+      const c = out[j];
+      if (c !== " " && c !== "\n" && c !== "\r" && c !== "\t") return c;
+    }
+    return "";
+  };
+  const lastIdent = () => {
+    let j = out.length - 1;
+    while (j >= 0 && /[A-Za-z0-9_$]/.test(out[j])) j--;
+    return out.slice(j + 1);
+  };
+  const scanRegex = () => {
+    let inClass = false;
+    while (i < n) {
+      const c = source[i];
+      if (c === "\\" && i + 1 < n) {
+        i += 2;
+        continue;
+      }
+      if (inClass) {
+        if (c === "]") inClass = false;
+      } else if (c === "[") {
+        inClass = true;
+      } else if (c === "/") {
+        i += 1;
+        while (i < n && /[dgimsuvy]/.test(source[i])) i += 1;
+        out += " ";
+        return;
+      }
+      i += 1;
+    }
+  };
+  const scanString = (quote) => {
+    let value = "";
+    i += 1;
+    while (i < n && source[i] !== quote) {
+      if (source[i] === "\\" && i + 1 < n) {
+        value += source.slice(i, i + 2);
+        i += 2;
+      } else {
+        value += source[i];
+        i += 1;
+      }
+    }
+    i = Math.min(i + 1, n);
+    return value;
+  };
+
+  while (i < n) {
+    const ch = source[i];
+    const next = i + 1 < n ? source[i + 1] : "";
+    if (ch === "/" && next === "/") {
+      while (i < n && source[i] !== "\n") i += 1;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      i += 2;
+      while (i < n && !(source[i] === "*" && source[i + 1] === "/")) i += 1;
+      i = Math.min(i + 2, n);
+      out += " ";
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      strings.push(scanString(ch));
+      out += ch + `\uE000${strings.length - 1}\uE000` + ch;
+      continue;
+    }
+    if (ch === "`") {
+      i += 1;
+      while (i < n && source[i] !== "`") {
+        if (source[i] === "\\" && i + 1 < n) i += 2;
+        else if (source[i] === "$" && source[i + 1] === "{") {
+          i += 2;
+          let depth = 1;
+          while (i < n && depth > 0) {
+            if (source[i] === "{") depth += 1;
+            else if (source[i] === "}") depth -= 1;
+            i += 1;
+          }
+        } else {
+          i += 1;
+        }
+      }
+      i = Math.min(i + 1, n);
+      strings.push("");
+      out += "`" + `\uE000${strings.length - 1}\uE000` + "`";
+      continue;
+    }
+    if (ch === "/") {
+      const prev = lastMeaningful();
+      if (REGEX_OPENERS.has(prev)) {
+        i += 1;
+        scanRegex();
+        continue;
+      }
+      if (REGEX_KEYWORDS.has(lastIdent())) {
+        i += 1;
+        scanRegex();
+        continue;
+      }
+    }
+    out += ch;
+    i += 1;
+  }
+  return { code: out, strings };
+}
+
+const IMPORT_PATTERNS = [
+  /\bimport\b[^;]*?\bfrom\s*(["'])\uE000(\d+)\uE000\1/g,
+  /\bexport\b[^;]*?\bfrom\s*(["'])\uE000(\d+)\uE000\1/g,
+  /\bimport\s*\(\s*(["'])\uE000(\d+)\uE000\1/g,
+  /\bimport\s*(["'])\uE000(\d+)\uE000\1/g,
+];
+
+/**
+ * The specifiers of every static import, re-export, side-effect import, and
+ * string-literal dynamic import in masked source, deduplicated in
+ * first-appearance order.
+ *
+ * @param {string} code the `code` half of a `maskSource` result
+ * @param {string[]} strings the `strings` half of the same result
+ * @returns {string[]}
+ */
+export function specifiersFrom(code, strings) {
+  const found = new Set();
+  for (const pattern of IMPORT_PATTERNS) {
+    pattern.lastIndex = 0;
+    for (const match of code.matchAll(pattern)) {
+      const index = Number.parseInt(match[2], 10);
+      if (index < strings.length) found.add(strings[index]);
+    }
+  }
+  return [...found];
+}
+
+/**
+ * Whether `specifier`, imported from `fromFile`, lands on a file inside
+ * `shippedFiles` — exact, `+.mjs`, `+.js`, `/index.mjs`, or `/index.js`.
+ * Tarball paths are POSIX by construction, so resolution stays in
+ * `node:path`'s posix half regardless of the host running this script.
+ *
+ * @param {string} specifier
+ * @param {string} fromFile
+ * @param {Set<string>} shippedFiles
+ * @returns {boolean}
+ */
+export function resolvesInside(specifier, fromFile, shippedFiles) {
+  const base = posix.normalize(posix.join(posix.dirname(fromFile), specifier)).replace(/^\//, "");
+  return [base, `${base}.mjs`, `${base}.js`, `${base}/index.mjs`, `${base}/index.js`].some(
+    (candidate) => shippedFiles.has(candidate),
+  );
+}
+
+/**
+ * The pure half of the shipped-import gate: facts in, violations out. A
+ * relative specifier that resolves outside `shippedFiles` and a bare
+ * specifier covered by neither `dependencyNames` nor Node's own built-ins
+ * are both violations; a bare specifier equal to `packageName` resolves
+ * through the package's own exports map and is accepted. Read the header's
+ * shipped-imports paragraph for why the gate exists and what it refuses to
+ * parse.
+ *
+ * @param {string[]} moduleNames shipped `.mjs`/`.js` file names, sorted
+ * @param {(name: string) => string} readSource reads a shipped module's text
+ * @param {Set<string>} shippedFiles every file name in the tarball
+ * @param {string[]} dependencyNames dependency + peerDependency names
+ * @param {string} packageName the package's own name
+ * @returns {{ file: string, specifier: string, reason: string }[]}
+ */
+export function shippedImportViolations(
+  moduleNames,
+  readSource,
+  shippedFiles,
+  dependencyNames,
+  packageName,
+) {
+  const violations = [];
+  for (const name of moduleNames) {
+    const { code, strings } = maskSource(readSource(name));
+    for (const specifier of specifiersFrom(code, strings)) {
+      if (isBuiltin(specifier)) continue;
+      if (specifier === packageName || specifier.startsWith(`${packageName}/`)) continue;
+      if (!specifier.startsWith(".") && !specifier.startsWith("/")) {
+        const covered = dependencyNames.some(
+          (dep) => specifier === dep || specifier.startsWith(`${dep}/`),
+        );
+        if (!covered) {
+          violations.push({
+            file: name,
+            specifier,
+            reason: "bare specifier covered by neither dependencies nor peerDependencies",
+          });
+        }
+        continue;
+      }
+      if (!resolvesInside(specifier, name, shippedFiles)) {
+        const target = posix
+          .normalize(posix.join(posix.dirname(name), specifier))
+          .replace(/^\//, "");
+        violations.push({
+          file: name,
+          specifier,
+          reason: `resolves to ${target}, which the tarball does not ship`,
+        });
+      }
+    }
+  }
+  return violations;
+}
 
 const failures = [];
 const note = (text) => console.log(text);
@@ -1125,502 +1405,577 @@ function verifyGraphDiffChecks(consumer, label) {
   );
 }
 
-const packageDir = resolve(root, process.argv[2] ?? "");
-if (!process.argv[2]) {
-  console.error("usage: verify-package.mjs <package-directory>");
-  process.exit(2);
-}
-
-const manifest = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
-const packageName = manifest.name;
-
-// `realpathSync` because macOS hands out a symlinked temp directory, and check 4
-// below is precisely about a symlinked path being told apart from a real one.
-const workdir = realpathSync(mkdtempSync(join(tmpdir(), "verify-package-")));
-const packDir = join(workdir, "pack");
-const consumer = join(workdir, "consumer");
-const consumerNative = join(workdir, "consumer-native");
-mkdirSync(packDir);
-mkdirSync(consumer);
-mkdirSync(consumerNative);
-
-let exitCode = 0;
-try {
-  note(`packing ${packageName} from ${process.argv[2]}`);
-  const packed = run("pnpm", ["pack", "--pack-destination", packDir], packageDir);
-  if (packed.status !== 0) {
-    console.error(packed.stdout ?? "");
-    console.error(packed.stderr ?? "");
-    console.error("`pnpm pack` failed, so there is no artifact to verify.");
-    process.exit(1);
-  }
-  const tarball = readdirSync(packDir).find((entry) => entry.endsWith(".tgz"));
-  if (!tarball) {
-    console.error(`\`pnpm pack\` reported success but wrote no .tgz into ${packDir}.`);
-    process.exit(1);
+function main() {
+  const packageDir = resolve(root, process.argv[2] ?? "");
+  if (!process.argv[2]) {
+    console.error("usage: verify-package.mjs <package-directory>");
+    process.exit(2);
   }
 
-  // The lane verifies the `pnpm pack` tarball below, then `npm publish`
-  // rebuilds its own tarball on the way out (the release lane's own comment
-  // names the measured difference: npm does not copy the repository-root
-  // LICENSE the way `pnpm pack` does, which is why the package holds its own
-  // copy). Nothing pins those two file selections agreeing, and the audit
-  // measured them set-identical today (111 files). "Measured today" is a
-  // claim, not a gate: this check pins the agreement here, so a manifest edit
-  // that makes npm select different files than pnpm breaks the change that
-  // caused it instead of shipping bytes the lane never verified. The parity
-  // asserted is selection parity: npm and pnpm must agree on which files
-  // ship. Contents are not hashed here — `npm publish` re-packs from the same
-  // tracked tree the pnpm tarball came from, so a selection divergence is the
-  // drift this check pins.
-  //
-  // `tar -tzf` reads the pnpm tarball's entry names; `npm pack --dry-run
-  // --json` is npm's own selection of the same tree. The two order their
-  // entries differently (locale-correct sorting is not a byte-stable
-  // contract), so both sides are compared as sorted SETS after stripping the
-  // `package/` prefix pnpm's tarball carries.
-  const packParity = (() => {
-    const listing = run("tar", ["-tzf", join(packDir, tarball)], packageDir, {
-      LC_ALL: "C",
-    });
-    const pnpmNames = (listing.stdout ?? "")
-      .split("\n")
-      .map((entry) => entry.replace(/\/$/, "").replace(/^package\//, ""))
-      .filter(Boolean)
-      .sort();
+  const manifest = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
+  const packageName = manifest.name;
 
-    const dryRun = run("npm", ["pack", "--dry-run", "--json"], packageDir, {
-      LC_ALL: "C",
-    });
-    let npmNames = [];
-    try {
-      const json = JSON.parse(dryRun.stdout ?? "");
-      npmNames = (json[0]?.files ?? []).map((file) => file.path).sort();
-    } catch {
-      // Will fail the check below.
+  // `realpathSync` because macOS hands out a symlinked temp directory, and check 4
+  // below is precisely about a symlinked path being told apart from a real one.
+  const workdir = realpathSync(mkdtempSync(join(tmpdir(), "verify-package-")));
+  const packDir = join(workdir, "pack");
+  const consumer = join(workdir, "consumer");
+  const consumerNative = join(workdir, "consumer-native");
+  mkdirSync(packDir);
+  mkdirSync(consumer);
+  mkdirSync(consumerNative);
+
+  let exitCode = 0;
+  try {
+    note(`packing ${packageName} from ${process.argv[2]}`);
+    const packed = run("pnpm", ["pack", "--pack-destination", packDir], packageDir);
+    if (packed.status !== 0) {
+      console.error(packed.stdout ?? "");
+      console.error(packed.stderr ?? "");
+      console.error("`pnpm pack` failed, so there is no artifact to verify.");
+      process.exit(1);
+    }
+    const tarball = readdirSync(packDir).find((entry) => entry.endsWith(".tgz"));
+    if (!tarball) {
+      console.error(`\`pnpm pack\` reported success but wrote no .tgz into ${packDir}.`);
+      process.exit(1);
     }
 
-    const identical =
-      listing.status === 0 && dryRun.status === 0 && packsEqual(pnpmNames, npmNames);
-    return { identical, pnpmNames, npmNames, listing, dryRun };
-  })();
+    // The lane verifies the `pnpm pack` tarball below, then `npm publish`
+    // rebuilds its own tarball on the way out (the release lane's own comment
+    // names the measured difference: npm does not copy the repository-root
+    // LICENSE the way `pnpm pack` does, which is why the package holds its own
+    // copy). Nothing pins those two file selections agreeing, and the audit
+    // measured them set-identical today (111 files). "Measured today" is a
+    // claim, not a gate: this check pins the agreement here, so a manifest edit
+    // that makes npm select different files than pnpm breaks the change that
+    // caused it instead of shipping bytes the lane never verified. The parity
+    // asserted is selection parity: npm and pnpm must agree on which files
+    // ship. Contents are not hashed here — `npm publish` re-packs from the same
+    // tracked tree the pnpm tarball came from, so a selection divergence is the
+    // drift this check pins.
+    //
+    // `tar -tzf` reads the pnpm tarball's entry names; `npm pack --dry-run
+    // --json` is npm's own selection of the same tree. The two order their
+    // entries differently (locale-correct sorting is not a byte-stable
+    // contract), so both sides are compared as sorted SETS after stripping the
+    // `package/` prefix pnpm's tarball carries.
+    const packParity = (() => {
+      const listing = run("tar", ["-tzf", join(packDir, tarball)], packageDir, {
+        LC_ALL: "C",
+      });
+      const pnpmNames = (listing.stdout ?? "")
+        .split("\n")
+        .map((entry) => entry.replace(/\/$/, "").replace(/^package\//, ""))
+        .filter(Boolean)
+        .sort();
 
-  check(
-    "npm and pnpm select the same files from the same tree — the verified bytes are the published bytes",
-    packParity.identical,
-    `pnpm pack lists ${packParity.pnpmNames.length}; npm pack lists ${packParity.npmNames.length}\n` +
-      (packParity.listing.status === 0 ? "" : `tar exited ${packParity.listing.status}\n`) +
-      (packParity.dryRun.status === 0 ? "" : `npm dry-run exited ${packParity.dryRun.status}\n`) +
-      `pnpm-only: ${packParity.pnpmNames.filter((n) => !packParity.npmNames.includes(n)).join(", ") || "(none)"}\n` +
-      `npm-only: ${packParity.npmNames.filter((n) => !packParity.pnpmNames.includes(n)).join(", ") || "(none)"}`,
-  );
-
-  const peers = manifest.peerDependencies ?? {};
-  const packageManager = JSON.parse(
-    readFileSync(join(root, "package.json"), "utf8"),
-  ).packageManager;
-  const tarballRef = JSON.stringify(`file:${join(packDir, tarball)}`);
-
-  const files = fixtureFiles(packageName, peers, packageManager);
-  files["package.json"] = files["package.json"].replace('"*"', tarballRef);
-  write(consumer, files);
-  // `allowBuilds` is not decoration here. pnpm 11 blocks every dependency
-  // install script until the workspace decides on it, and FAILS the install
-  // while any decision is missing — `ERR_PNPM_IGNORED_BUILDS`, exit 1, after
-  // the tree is already correctly on disk. So without these two lines the
-  // fixture install aborts and this script reports that the tarball "could not
-  // be installed", which is a true sentence about a workspace that is fine.
-  //
-  // Measured, and the measurement is why the fixture pins `packageManager`
-  // above: this ran green locally and red in CI because the two ran different
-  // pnpm majors, and pnpm 10 only warns where 11 fails. The values match the
-  // repository's own `pnpm-workspace.yaml` and the reasoning lives there — nx's
-  // postinstall builds a native watcher and warms a daemon this fixture runs
-  // with disabled, and lefthook's installs git hooks into a throwaway tree.
-  writeFileSync(
-    join(consumer, "pnpm-workspace.yaml"),
-    "packages: []\nallowBuilds:\n  lefthook: false\n  nx: false\n",
-    "utf8",
-  );
-
-  // The fixture is a COMMITTED git tree because the tool reads its file list
-  // from `git ls-files` — never a directory walk, which would need ignore rules
-  // that drift from `.gitignore`. `ls-files` lists tracked files only, so a
-  // `git init` with nothing committed yields an empty workspace, and the
-  // checker then reports "no violations (0 imports in 0 files)" on a tree that
-  // violates: green, and meaningless. Measured here rather than reasoned — the
-  // first version of this script did exactly that and check 3 caught it.
-  commitTree(consumer, "the clean tree", true);
-
-  const installed = run("pnpm", ["install", "--no-frozen-lockfile"], consumer);
-  if (installed.status !== 0) {
-    console.error(installed.stdout ?? "");
-    console.error(installed.stderr ?? "");
-    console.error("the packed tarball could not be installed into a fresh workspace (Nx path).");
-    process.exit(1);
-  }
-  note(`installed into ${consumer}`);
-
-  // 1. The plugin loads inside a real Nx process and draws the Go edge.
-  const graphFile = join(workdir, "graph.json");
-  const graphed = run("pnpm", ["exec", "nx", "graph", `--file=${graphFile}`], consumer);
-  let edges = "graph was not produced";
-  let drewEdge = false;
-  if (graphed.status === 0) {
-    const graph = JSON.parse(readFileSync(graphFile, "utf8"));
-    const dependencies = graph.graph?.dependencies ?? {};
-    edges = JSON.stringify(dependencies);
-    drewEdge = (dependencies.app ?? []).some((edge) => edge.target === "core");
-  } else {
-    edges = `${graphed.stdout ?? ""}\n${graphed.stderr ?? ""}`;
-  }
-  check(
-    "Nx draws the Go edge app -> core, which Nx cannot infer on its own",
-    drewEdge,
-    `dependencies: ${edges}`,
-  );
-
-  verifyCleanAndLspChecks(consumer, "Nx path", packageName);
-  verifyViolatingCheck(consumer, "Nx path", () => run("pnpm", ["exec", "nx", "reset"], consumer));
-
-  // 9. A shipped pack, selected by name out of the installed tarball, is the
-  //    law. Last on this consumer because it re-points `nx.json` at the pack
-  //    and reuses the tree check 7 already made violating.
-  verifyPresetSelectedCheck(consumer, "Nx path", packageName);
-
-  // --- the Nx-floor consumer: the same fixture again, with `nx` resolved to
-  // the OLDEST major `peerDependencies.nx` permits. The range above installs
-  // the newest Nx every run, so "supports >=21" is only ever half-tested:
-  // the claim's other half — that the plugin still loads, still draws the
-  // graph edge, and still returns the right verdicts on major 21 — has no
-  // witness here unless one is installed on purpose. The fixture re-derives
-  // the floor from the manifest (parsePeerFloorMajor) rather than holding a
-  // copy, so the lane follows the claim instead of a second definition of
-  // it; the exact version is resolved from the registry so the fixture
-  // installs what a floor-pinned consumer would get today.
-  //
-  // The checks are the plugin's core contract subset — load, graph edge,
-  // clean verdict, violating verdict — not the whole roster: the preset and
-  // custom-rule lanes exercise the tool's own options and are unchanged by
-  // which Nx runs them, so duplicating them here would double the lane's
-  // cost for no added claim. The floor-vs-newest pair is the point.
-  const nxFloorMajor = parsePeerFloorMajor(peers.nx ?? "");
-  check(
-    "the nx peer range still claims a floor — 'minimum supported' stays testable",
-    nxFloorMajor !== null,
-    `peerDependencies.nx: ${peers.nx ?? "(absent)"} → parsed floor: ${nxFloorMajor ?? "none"}`,
-  );
-  if (nxFloorMajor !== null) {
-    const viewed = run("npm", ["view", `nx@${nxFloorMajor}`, "version", "--json"], workdir);
-    let floorVersion = null;
-    if (viewed.status === 0) {
+      const dryRun = run("npm", ["pack", "--dry-run", "--json"], packageDir, {
+        LC_ALL: "C",
+      });
+      let npmNames = [];
       try {
-        // A major-range query answers with an array; its last entry is the
-        // newest patch of the oldest supported line.
-        const versions = JSON.parse(viewed.stdout ?? "[]");
-        floorVersion = Array.isArray(versions) ? versions.at(-1) : versions;
+        const json = JSON.parse(dryRun.stdout ?? "");
+        npmNames = (json[0]?.files ?? []).map((file) => file.path).sort();
       } catch {
-        // Falls through to the check below.
+        // Will fail the check below.
       }
+
+      const identical =
+        listing.status === 0 && dryRun.status === 0 && packsEqual(pnpmNames, npmNames);
+      return { identical, pnpmNames, npmNames, listing, dryRun };
+    })();
+
+    check(
+      "npm and pnpm select the same files from the same tree — the verified bytes are the published bytes",
+      packParity.identical,
+      `pnpm pack lists ${packParity.pnpmNames.length}; npm pack lists ${packParity.npmNames.length}\n` +
+        (packParity.listing.status === 0 ? "" : `tar exited ${packParity.listing.status}\n`) +
+        (packParity.dryRun.status === 0 ? "" : `npm dry-run exited ${packParity.dryRun.status}\n`) +
+        `pnpm-only: ${packParity.pnpmNames.filter((n) => !packParity.npmNames.includes(n)).join(", ") || "(none)"}\n` +
+        `npm-only: ${packParity.npmNames.filter((n) => !packParity.pnpmNames.includes(n)).join(", ") || "(none)"}`,
+    );
+    // The tarball's own import graph: every shipped module must resolve inside
+    // the artifact. The extraction below reuses the pnpm tarball already on disk.
+    {
+      const packageTree = join(workdir, "package-tree");
+      mkdirSync(packageTree);
+      const extracted = run("tar", ["-xzf", join(packDir, tarball), "-C", packageTree], packageDir);
+      const packageRoot = join(packageTree, "package");
+      const shippedFiles = new Set(packParity.pnpmNames);
+      const shippedModules = packParity.pnpmNames.filter((name) => /\.mjs$|\.js$/.test(name));
+      const declaredDeps = Object.keys(manifest.dependencies ?? {});
+      const declaredPeerDeps = Object.keys(manifest.peerDependencies ?? {});
+      const dependencyNames = [...new Set([...declaredDeps, ...declaredPeerDeps])];
+      const readSource = (name) => readFileSync(join(packageRoot, name), "utf8");
+      const violations = shippedImportViolations(
+        shippedModules,
+        readSource,
+        shippedFiles,
+        dependencyNames,
+        packageName,
+      );
+      check(
+        "every shipped module's imports resolve inside the tarball — a relative specifier lands on a shipped file and a bare specifier is covered by dependencies or peerDependencies",
+        extracted.status === 0 && shippedModules.length > 0 && violations.length === 0,
+        `extracted ${shippedModules.length} shipped modules from the tarball\n` +
+          (extracted.status === 0
+            ? ""
+            : `tar extraction failed: ${extracted.stderr ?? extracted.stdout ?? "(no output)"}\n`) +
+          (violations.length > 0
+            ? violations.map((v) => `${v.file}: ${v.specifier} — ${v.reason}`).join("\n")
+            : "(no violations)"),
+      );
+    }
+
+    const peers = manifest.peerDependencies ?? {};
+    const packageManager = JSON.parse(
+      readFileSync(join(root, "package.json"), "utf8"),
+    ).packageManager;
+    const tarballRef = JSON.stringify(`file:${join(packDir, tarball)}`);
+
+    const files = fixtureFiles(packageName, peers, packageManager);
+    files["package.json"] = files["package.json"].replace('"*"', tarballRef);
+    write(consumer, files);
+    // `allowBuilds` is not decoration here. pnpm 11 blocks every dependency
+    // install script until the workspace decides on it, and FAILS the install
+    // while any decision is missing — `ERR_PNPM_IGNORED_BUILDS`, exit 1, after
+    // the tree is already correctly on disk. So without these two lines the
+    // fixture install aborts and this script reports that the tarball "could not
+    // be installed", which is a true sentence about a workspace that is fine.
+    //
+    // Measured, and the measurement is why the fixture pins `packageManager`
+    // above: this ran green locally and red in CI because the two ran different
+    // pnpm majors, and pnpm 10 only warns where 11 fails. The values match the
+    // repository's own `pnpm-workspace.yaml` and the reasoning lives there — nx's
+    // postinstall builds a native watcher and warms a daemon this fixture runs
+    // with disabled, and lefthook's installs git hooks into a throwaway tree.
+    writeFileSync(
+      join(consumer, "pnpm-workspace.yaml"),
+      "packages: []\nallowBuilds:\n  lefthook: false\n  nx: false\n",
+      "utf8",
+    );
+
+    // The fixture is a COMMITTED git tree because the tool reads its file list
+    // from `git ls-files` — never a directory walk, which would need ignore rules
+    // that drift from `.gitignore`. `ls-files` lists tracked files only, so a
+    // `git init` with nothing committed yields an empty workspace, and the
+    // checker then reports "no violations (0 imports in 0 files)" on a tree that
+    // violates: green, and meaningless. Measured here rather than reasoned — the
+    // first version of this script did exactly that and check 3 caught it.
+    commitTree(consumer, "the clean tree", true);
+
+    const installed = run("pnpm", ["install", "--no-frozen-lockfile"], consumer);
+    if (installed.status !== 0) {
+      console.error(installed.stdout ?? "");
+      console.error(installed.stderr ?? "");
+      console.error("the packed tarball could not be installed into a fresh workspace (Nx path).");
+      process.exit(1);
+    }
+    note(`installed into ${consumer}`);
+
+    // 1. The plugin loads inside a real Nx process and draws the Go edge.
+    const graphFile = join(workdir, "graph.json");
+    const graphed = run("pnpm", ["exec", "nx", "graph", `--file=${graphFile}`], consumer);
+    let edges = "graph was not produced";
+    let drewEdge = false;
+    if (graphed.status === 0) {
+      const graph = JSON.parse(readFileSync(graphFile, "utf8"));
+      const dependencies = graph.graph?.dependencies ?? {};
+      edges = JSON.stringify(dependencies);
+      drewEdge = (dependencies.app ?? []).some((edge) => edge.target === "core");
+    } else {
+      edges = `${graphed.stdout ?? ""}\n${graphed.stderr ?? ""}`;
     }
     check(
-      `the registry resolves nx@${nxFloorMajor} — the floor lane can install the claim it tests`,
-      typeof floorVersion === "string" && floorVersion.length > 0,
-      `npm view exited ${viewed.status}: ${(viewed.stderr ?? viewed.stdout ?? "").slice(0, 400)}`,
+      "Nx draws the Go edge app -> core, which Nx cannot infer on its own",
+      drewEdge,
+      `dependencies: ${edges}`,
     );
-    if (typeof floorVersion === "string" && floorVersion.length > 0) {
-      note(`Nx floor lane: nx@${floorVersion} (peer range ${peers.nx})`);
-      const consumerNxFloor = join(workdir, "consumer-nx-floor");
-      mkdirSync(consumerNxFloor);
-      const filesFloor = fixtureFiles(packageName, { ...peers, nx: floorVersion }, packageManager);
-      filesFloor["package.json"] = filesFloor["package.json"].replace('"*"', tarballRef);
-      write(consumerNxFloor, filesFloor);
-      writeFileSync(
-        join(consumerNxFloor, "pnpm-workspace.yaml"),
-        "packages: []\nallowBuilds:\n  lefthook: false\n  nx: false\n",
-        "utf8",
-      );
-      commitTree(consumerNxFloor, "the clean tree", true);
-      const installedFloor = run("pnpm", ["install", "--no-frozen-lockfile"], consumerNxFloor);
-      if (installedFloor.status !== 0) {
-        console.error(installedFloor.stdout ?? "");
-        console.error(installedFloor.stderr ?? "");
-        console.error("the packed tarball could not be installed into the Nx-floor workspace.");
-        process.exit(1);
-      }
-      note(`installed into ${consumerNxFloor}`);
 
-      const floorGraphFile = join(workdir, "graph-floor.json");
-      const floorGraphed = run(
-        "pnpm",
-        ["exec", "nx", "graph", `--file=${floorGraphFile}`],
-        consumerNxFloor,
-      );
-      let floorEdges = "graph was not produced";
-      let floorDrewEdge = false;
-      if (floorGraphed.status === 0) {
-        const floorGraph = JSON.parse(readFileSync(floorGraphFile, "utf8"));
-        const floorDeps = floorGraph.graph?.dependencies ?? {};
-        floorEdges = JSON.stringify(floorDeps);
-        floorDrewEdge = (floorDeps.app ?? []).some((edge) => edge.target === "core");
-      } else {
-        floorEdges = `${floorGraphed.stdout ?? ""}\n${floorGraphed.stderr ?? ""}`;
+    verifyCleanAndLspChecks(consumer, "Nx path", packageName);
+    verifyViolatingCheck(consumer, "Nx path", () => run("pnpm", ["exec", "nx", "reset"], consumer));
+
+    // 9. A shipped pack, selected by name out of the installed tarball, is the
+    //    law. Last on this consumer because it re-points `nx.json` at the pack
+    //    and reuses the tree check 7 already made violating.
+    verifyPresetSelectedCheck(consumer, "Nx path", packageName);
+
+    // --- the Nx-floor consumer: the same fixture again, with `nx` resolved to
+    // the OLDEST major `peerDependencies.nx` permits. The range above installs
+    // the newest Nx every run, so "supports >=21" is only ever half-tested:
+    // the claim's other half — that the plugin still loads, still draws the
+    // graph edge, and still returns the right verdicts on major 21 — has no
+    // witness here unless one is installed on purpose. The fixture re-derives
+    // the floor from the manifest (parsePeerFloorMajor) rather than holding a
+    // copy, so the lane follows the claim instead of a second definition of
+    // it; the exact version is resolved from the registry so the fixture
+    // installs what a floor-pinned consumer would get today.
+    //
+    // The checks are the plugin's core contract subset — load, graph edge,
+    // clean verdict, violating verdict — not the whole roster: the preset and
+    // custom-rule lanes exercise the tool's own options and are unchanged by
+    // which Nx runs them, so duplicating them here would double the lane's
+    // cost for no added claim. The floor-vs-newest pair is the point.
+    const nxFloorMajor = parsePeerFloorMajor(peers.nx ?? "");
+    check(
+      "the nx peer range still claims a floor — 'minimum supported' stays testable",
+      nxFloorMajor !== null,
+      `peerDependencies.nx: ${peers.nx ?? "(absent)"} → parsed floor: ${nxFloorMajor ?? "none"}`,
+    );
+    if (nxFloorMajor !== null) {
+      const viewed = run("npm", ["view", `nx@${nxFloorMajor}`, "version", "--json"], workdir);
+      let floorVersion = null;
+      if (viewed.status === 0) {
+        try {
+          // A major-range query answers with an array; its last entry is the
+          // newest patch of the oldest supported line.
+          const versions = JSON.parse(viewed.stdout ?? "[]");
+          floorVersion = Array.isArray(versions) ? versions.at(-1) : versions;
+        } catch {
+          // Falls through to the check below.
+        }
       }
       check(
-        `Nx ${floorVersion} draws the Go edge app -> core — the minimum supported major runs the plugin`,
-        floorDrewEdge,
-        `dependencies: ${floorEdges}`,
+        `the registry resolves nx@${nxFloorMajor} — the floor lane can install the claim it tests`,
+        typeof floorVersion === "string" && floorVersion.length > 0,
+        `npm view exited ${viewed.status}: ${(viewed.stderr ?? viewed.stdout ?? "").slice(0, 400)}`,
       );
-      verifyCleanAndLspChecks(consumerNxFloor, "Nx floor path", packageName);
-      verifyViolatingCheck(consumerNxFloor, "Nx floor path", () =>
-        run("pnpm", ["exec", "nx", "reset"], consumerNxFloor),
-      );
+      if (typeof floorVersion === "string" && floorVersion.length > 0) {
+        note(`Nx floor lane: nx@${floorVersion} (peer range ${peers.nx})`);
+        const consumerNxFloor = join(workdir, "consumer-nx-floor");
+        mkdirSync(consumerNxFloor);
+        const filesFloor = fixtureFiles(
+          packageName,
+          { ...peers, nx: floorVersion },
+          packageManager,
+        );
+        filesFloor["package.json"] = filesFloor["package.json"].replace('"*"', tarballRef);
+        write(consumerNxFloor, filesFloor);
+        writeFileSync(
+          join(consumerNxFloor, "pnpm-workspace.yaml"),
+          "packages: []\nallowBuilds:\n  lefthook: false\n  nx: false\n",
+          "utf8",
+        );
+        commitTree(consumerNxFloor, "the clean tree", true);
+        const installedFloor = run("pnpm", ["install", "--no-frozen-lockfile"], consumerNxFloor);
+        if (installedFloor.status !== 0) {
+          console.error(installedFloor.stdout ?? "");
+          console.error(installedFloor.stderr ?? "");
+          console.error("the packed tarball could not be installed into the Nx-floor workspace.");
+          process.exit(1);
+        }
+        note(`installed into ${consumerNxFloor}`);
+
+        const floorGraphFile = join(workdir, "graph-floor.json");
+        const floorGraphed = run(
+          "pnpm",
+          ["exec", "nx", "graph", `--file=${floorGraphFile}`],
+          consumerNxFloor,
+        );
+        let floorEdges = "graph was not produced";
+        let floorDrewEdge = false;
+        if (floorGraphed.status === 0) {
+          const floorGraph = JSON.parse(readFileSync(floorGraphFile, "utf8"));
+          const floorDeps = floorGraph.graph?.dependencies ?? {};
+          floorEdges = JSON.stringify(floorDeps);
+          floorDrewEdge = (floorDeps.app ?? []).some((edge) => edge.target === "core");
+        } else {
+          floorEdges = `${floorGraphed.stdout ?? ""}\n${floorGraphed.stderr ?? ""}`;
+        }
+        check(
+          `Nx ${floorVersion} draws the Go edge app -> core — the minimum supported major runs the plugin`,
+          floorDrewEdge,
+          `dependencies: ${floorEdges}`,
+        );
+        verifyCleanAndLspChecks(consumerNxFloor, "Nx floor path", packageName);
+        verifyViolatingCheck(consumerNxFloor, "Nx floor path", () =>
+          run("pnpm", ["exec", "nx", "reset"], consumerNxFloor),
+        );
+      }
     }
-  }
 
-  // --- the native consumer: same physical shape, `archkeep.json` instead of
-  // `nx.json`, no `nx` requested at all. See this file's header for why this
-  // is not redundant with `differential.integration.test.mjs`'s Oracle 1.
-  const filesNative = fixtureFilesNative(packageName, peers, packageManager);
-  filesNative["package.json"] = filesNative["package.json"].replace('"*"', tarballRef);
-  write(consumerNative, filesNative);
-  writeFileSync(
-    join(consumerNative, "pnpm-workspace.yaml"),
-    "packages: []\nallowBuilds:\n  lefthook: false\n",
-    "utf8",
-  );
-  commitTree(consumerNative, "the clean tree", true);
-
-  const installedNative = run("pnpm", ["install", "--no-frozen-lockfile"], consumerNative);
-  if (installedNative.status !== 0) {
-    console.error(installedNative.stdout ?? "");
-    console.error(installedNative.stderr ?? "");
-    console.error(
-      "the packed tarball could not be installed into a fresh workspace (native path).",
+    // --- the native consumer: same physical shape, `archkeep.json` instead of
+    // `nx.json`, no `nx` requested at all. See this file's header for why this
+    // is not redundant with `differential.integration.test.mjs`'s Oracle 1.
+    const filesNative = fixtureFilesNative(packageName, peers, packageManager);
+    filesNative["package.json"] = filesNative["package.json"].replace('"*"', tarballRef);
+    write(consumerNative, filesNative);
+    writeFileSync(
+      join(consumerNative, "pnpm-workspace.yaml"),
+      "packages: []\nallowBuilds:\n  lefthook: false\n",
+      "utf8",
     );
-    process.exit(1);
-  }
-  note(`installed into ${consumerNative}`);
+    commitTree(consumerNative, "the clean tree", true);
 
-  // 5. `nx` was never asked for, and none resolves — the peer is optional in
-  //    fact, not only in `peerDependenciesMeta`. A native workspace that had
-  //    to install Nx anyway to run this tool would be the M2 pivot's whole
-  //    premise failing quietly at install time.
-  const nativeModules = existsSync(join(consumerNative, "node_modules"))
-    ? readdirSync(join(consumerNative, "node_modules"))
-    : [];
-  check(
-    "no nx package resolves in the native consumer — the peer is optional in fact",
-    !nativeModules.includes("nx"),
-    `node_modules entries: ${nativeModules.join(", ") || "(none)"}`,
-  );
+    const installedNative = run("pnpm", ["install", "--no-frozen-lockfile"], consumerNative);
+    if (installedNative.status !== 0) {
+      console.error(installedNative.stdout ?? "");
+      console.error(installedNative.stderr ?? "");
+      console.error(
+        "the packed tarball could not be installed into a fresh workspace (native path).",
+      );
+      process.exit(1);
+    }
+    note(`installed into ${consumerNative}`);
 
-  verifyCleanAndLspChecks(consumerNative, "native path", packageName);
-
-  // 4-6. `graph` and `diff` from a clean installed tarball — native path only.
-  // Per SPEC-m5b-graph-and-diff.md §6, these checks prove the commands work
-  // against a real `pnpm pack` tarball installed into a tree this repository
-  // never built, with no Nx present to fall back on. They run before the
-  // violating mutation (check 7) so the assertions prove the clean artifact.
-  verifyGraphDiffChecks(consumerNative, "native path");
-
-  // A committed, SDK-built custom rule as declared law — both directions,
-  // while the tree is otherwise clean. See the function's own header for why
-  // this cannot be proven anywhere but here.
-  verifyCustomRuleChecks(consumerNative, "native path");
-
-  // 7. The checker exits 1 on a violating tree (native path).
-  verifyViolatingCheck(consumerNative, "native path");
-
-  // --- the Moon consumer: `.moon/workspace.yml` at the root, per-project
-  // `moon.yml` files, `@moonrepo/cli` as a dev dependency — no `nx.json`,
-  // no `project.json`. This is the third provider face the package ships,
-  // and these checks prove it works against a real `pnpm pack` tarball
-  // installed into a tree with Moon as the workspace orchestrator.
-  const consumerMoon = join(workdir, "consumer-moon");
-  mkdirSync(consumerMoon);
-
-  const filesMoon = fixtureFilesMoon(packageName, peers, packageManager);
-  filesMoon["package.json"] = filesMoon["package.json"].replace('"*"', tarballRef);
-  write(consumerMoon, filesMoon);
-  commitTree(consumerMoon, "the clean tree", true);
-
-  const installedMoon = run("pnpm", ["install", "--no-frozen-lockfile"], consumerMoon);
-  if (installedMoon.status !== 0) {
-    console.error(installedMoon.stdout ?? "");
-    console.error(installedMoon.stderr ?? "");
-    console.error("the packed tarball could not be installed into a fresh workspace (Moon path).");
-    process.exit(1);
-  }
-  note(`installed into ${consumerMoon}`);
-
-  // The Moon provider finds the `moon` binary through the consumer's own
-  // `node_modules/.bin/moon`, so `@moonrepo/cli` must resolve.
-  const moonBin = existsSync(join(consumerMoon, "node_modules", ".bin", "moon"));
-  check(
-    "the moon CLI binary is present in the Moon consumer's node_modules/.bin",
-    moonBin,
-    `node_modules/.bin/moon ${moonBin ? "exists" : "missing"}`,
-  );
-
-  verifyCleanAndLspChecks(consumerMoon, "Moon path", packageName);
-
-  // `graph` and `diff` from a clean Moon consumer — the same checks the
-  // native path runs, proving the commands work against a Moon workspace.
-  verifyGraphDiffChecks(consumerMoon, "Moon path");
-
-  // The checker exits 1 on a violating Moon tree, using the Moon-violating
-  // files (which include a TypeScript violation the Nx/native files lack).
-  verifyViolatingCheck(consumerMoon, "Moon path", undefined, VIOLATING_FILES_MOON);
-
-  // --- the Maven consumer: an `archkeep.json` root whose projects are
-  // anchored by tracked `pom.xml` files. Discovery here is inference over
-  // the default manifest list — no declared row names a manifest — and the
-  // graph carries both track kinds for one pair: the pom's declared
-  // dependency AND a written Java import, each attributed to its own source
-  // file. This is also where the optional-peer claim about
-  // `fast-xml-parser` is checked against an actual install, the positive of
-  // the native face's negative-`nx` check above.
-  const consumerMaven = join(workdir, "consumer-maven");
-  mkdirSync(consumerMaven);
-
-  const filesMaven = fixtureFilesMaven(packageName, peers, packageManager);
-  filesMaven["package.json"] = filesMaven["package.json"].replace('"*"', tarballRef);
-  write(consumerMaven, filesMaven);
-  writeFileSync(
-    join(consumerMaven, "pnpm-workspace.yaml"),
-    "packages: []\nallowBuilds:\n  lefthook: false\n",
-    "utf8",
-  );
-  commitTree(consumerMaven, "the clean tree", true);
-
-  const installedMaven = run("pnpm", ["install", "--no-frozen-lockfile"], consumerMaven);
-  if (installedMaven.status !== 0) {
-    console.error(installedMaven.stdout ?? "");
-    console.error(installedMaven.stderr ?? "");
-    console.error("the packed tarball could not be installed into a fresh workspace (maven path).");
-    process.exit(1);
-  }
-  note(`installed into ${consumerMaven}`);
-
-  const xmlParserPresent = existsSync(join(consumerMaven, "node_modules", "fast-xml-parser"));
-  check(
-    "fast-xml-parser resolves in the maven consumer — the optional peer works in fact",
-    xmlParserPresent,
-    xmlParserPresent
-      ? "node_modules/fast-xml-parser exists"
-      : "node_modules/fast-xml-parser missing",
-  );
-
-  // Clean reactor: both tracks draw edges, so the verdict must state real
-  // coverage — imports from the .java files, projects from the poms.
-  const cleanMaven = run("pnpm", ["exec", "archkeep", "check"], consumerMaven);
-  check(
-    "the checker exits 0 on a clean maven reactor",
-    cleanMaven.status === 0,
-    `exit ${cleanMaven.status}\n${cleanMaven.stdout ?? ""}${cleanMaven.stderr ?? ""}`,
-  );
-  check(
-    "the clean maven verdict states it inspected something",
-    /[1-9]\d* import/.test(cleanMaven.stdout ?? "") &&
-      /[1-9]\d* project/.test(cleanMaven.stdout ?? ""),
-    `stdout: ${cleanMaven.stdout ?? "(empty)"}`,
-  );
-
-  // Violating reactor: mvn-core reaching up into mvn-app, written in both Java and Kotlin.
-  // The rule this asserts changed with declared manifest edges: the poms draw
-  // mvn-app -> mvn-core, so core's import closes a CYCLE, and
-  // noCircularDependencies fires before the depConstraints table is read —
-  // the tags violation this check once named is no longer produced here.
-  write(consumerMaven, VIOLATING_FILES_MAVEN);
-  commitTree(consumerMaven, "core reaches up into app", false);
-  const dirtyMaven = run("pnpm", ["exec", "archkeep", "check"], consumerMaven);
-  const dirtyMavenOutput = `${dirtyMaven.stdout ?? ""}${dirtyMaven.stderr ?? ""}`;
-  check(
-    "the checker exits 1 on a violating maven reactor",
-    dirtyMaven.status === 1,
-    `exit ${dirtyMaven.status}\n${dirtyMavenOutput}`,
-  );
-  check(
-    "the maven violation names its rule and reports both java and kotlin file:line:column",
-    dirtyMavenOutput.includes("noCircularDependencies") &&
-      /Violate\.java:\d+:\d+/.test(dirtyMavenOutput) &&
-      /ViolateKotlin\.kt:\d+:\d+/.test(dirtyMavenOutput),
-    dirtyMavenOutput || "(no output)",
-  );
-
-  // --- the Gradle consumer: an `archkeep.json` root whose projects are
-  // anchored by tracked `settings.gradle` files. Discovery here is inference
-  // over the default manifest list — no declared row names a manifest — and
-  // the graph carries both track kinds for one pair: the Gradle project's
-  // declared dependency AND a written Kotlin import, each attributed to its
-  // own source file. This proves the Gradle reader works end-to-end.
-  const consumerGradle = join(workdir, "consumer-gradle");
-  mkdirSync(consumerGradle);
-
-  const filesGradle = fixtureFilesGradle(packageName, peers, packageManager);
-  filesGradle["package.json"] = filesGradle["package.json"].replace('"*"', tarballRef);
-  write(consumerGradle, filesGradle);
-  writeFileSync(
-    join(consumerGradle, "pnpm-workspace.yaml"),
-    "packages: []\nallowBuilds:\n  lefthook: false\n",
-    "utf8",
-  );
-  commitTree(consumerGradle, "the clean tree", true);
-
-  const installedGradle = run("pnpm", ["install", "--no-frozen-lockfile"], consumerGradle);
-  if (installedGradle.status !== 0) {
-    console.error(installedGradle.stdout ?? "");
-    console.error(installedGradle.stderr ?? "");
-    console.error(
-      "the packed tarball could not be installed into a fresh workspace (gradle path).",
+    // 5. `nx` was never asked for, and none resolves — the peer is optional in
+    //    fact, not only in `peerDependenciesMeta`. A native workspace that had
+    //    to install Nx anyway to run this tool would be the M2 pivot's whole
+    //    premise failing quietly at install time.
+    const nativeModules = existsSync(join(consumerNative, "node_modules"))
+      ? readdirSync(join(consumerNative, "node_modules"))
+      : [];
+    check(
+      "no nx package resolves in the native consumer — the peer is optional in fact",
+      !nativeModules.includes("nx"),
+      `node_modules entries: ${nativeModules.join(", ") || "(none)"}`,
     );
-    process.exit(1);
+
+    verifyCleanAndLspChecks(consumerNative, "native path", packageName);
+
+    // 4-6. `graph` and `diff` from a clean installed tarball — native path only.
+    // Per SPEC-m5b-graph-and-diff.md §6, these checks prove the commands work
+    // against a real `pnpm pack` tarball installed into a tree this repository
+    // never built, with no Nx present to fall back on. They run before the
+    // violating mutation (check 7) so the assertions prove the clean artifact.
+    verifyGraphDiffChecks(consumerNative, "native path");
+
+    // A committed, SDK-built custom rule as declared law — both directions,
+    // while the tree is otherwise clean. See the function's own header for why
+    // this cannot be proven anywhere but here.
+    verifyCustomRuleChecks(consumerNative, "native path");
+
+    // 7. The checker exits 1 on a violating tree (native path).
+    verifyViolatingCheck(consumerNative, "native path");
+
+    // --- the Moon consumer: `.moon/workspace.yml` at the root, per-project
+    // `moon.yml` files, `@moonrepo/cli` as a dev dependency — no `nx.json`,
+    // no `project.json`. This is the third provider face the package ships,
+    // and these checks prove it works against a real `pnpm pack` tarball
+    // installed into a tree with Moon as the workspace orchestrator.
+    const consumerMoon = join(workdir, "consumer-moon");
+    mkdirSync(consumerMoon);
+
+    const filesMoon = fixtureFilesMoon(packageName, peers, packageManager);
+    filesMoon["package.json"] = filesMoon["package.json"].replace('"*"', tarballRef);
+    write(consumerMoon, filesMoon);
+    commitTree(consumerMoon, "the clean tree", true);
+
+    const installedMoon = run("pnpm", ["install", "--no-frozen-lockfile"], consumerMoon);
+    if (installedMoon.status !== 0) {
+      console.error(installedMoon.stdout ?? "");
+      console.error(installedMoon.stderr ?? "");
+      console.error(
+        "the packed tarball could not be installed into a fresh workspace (Moon path).",
+      );
+      process.exit(1);
+    }
+    note(`installed into ${consumerMoon}`);
+
+    // The Moon provider finds the `moon` binary through the consumer's own
+    // `node_modules/.bin/moon`, so `@moonrepo/cli` must resolve.
+    const moonBin = existsSync(join(consumerMoon, "node_modules", ".bin", "moon"));
+    check(
+      "the moon CLI binary is present in the Moon consumer's node_modules/.bin",
+      moonBin,
+      `node_modules/.bin/moon ${moonBin ? "exists" : "missing"}`,
+    );
+
+    verifyCleanAndLspChecks(consumerMoon, "Moon path", packageName);
+
+    // `graph` and `diff` from a clean Moon consumer — the same checks the
+    // native path runs, proving the commands work against a Moon workspace.
+    verifyGraphDiffChecks(consumerMoon, "Moon path");
+
+    // The checker exits 1 on a violating Moon tree, using the Moon-violating
+    // files (which include a TypeScript violation the Nx/native files lack).
+    verifyViolatingCheck(consumerMoon, "Moon path", undefined, VIOLATING_FILES_MOON);
+
+    // --- the Maven consumer: an `archkeep.json` root whose projects are
+    // anchored by tracked `pom.xml` files. Discovery here is inference over
+    // the default manifest list — no declared row names a manifest — and the
+    // graph carries both track kinds for one pair: the pom's declared
+    // dependency AND a written Java import, each attributed to its own source
+    // file. This is also where the optional-peer claim about
+    // `fast-xml-parser` is checked against an actual install, the positive of
+    // the native face's negative-`nx` check above.
+    const consumerMaven = join(workdir, "consumer-maven");
+    mkdirSync(consumerMaven);
+
+    const filesMaven = fixtureFilesMaven(packageName, peers, packageManager);
+    filesMaven["package.json"] = filesMaven["package.json"].replace('"*"', tarballRef);
+    write(consumerMaven, filesMaven);
+    writeFileSync(
+      join(consumerMaven, "pnpm-workspace.yaml"),
+      "packages: []\nallowBuilds:\n  lefthook: false\n",
+      "utf8",
+    );
+    commitTree(consumerMaven, "the clean tree", true);
+
+    const installedMaven = run("pnpm", ["install", "--no-frozen-lockfile"], consumerMaven);
+    if (installedMaven.status !== 0) {
+      console.error(installedMaven.stdout ?? "");
+      console.error(installedMaven.stderr ?? "");
+      console.error(
+        "the packed tarball could not be installed into a fresh workspace (maven path).",
+      );
+      process.exit(1);
+    }
+    note(`installed into ${consumerMaven}`);
+
+    const xmlParserPresent = existsSync(join(consumerMaven, "node_modules", "fast-xml-parser"));
+    check(
+      "fast-xml-parser resolves in the maven consumer — the optional peer works in fact",
+      xmlParserPresent,
+      xmlParserPresent
+        ? "node_modules/fast-xml-parser exists"
+        : "node_modules/fast-xml-parser missing",
+    );
+
+    // Clean reactor: both tracks draw edges, so the verdict must state real
+    // coverage — imports from the .java files, projects from the poms.
+    const cleanMaven = run("pnpm", ["exec", "archkeep", "check"], consumerMaven);
+    check(
+      "the checker exits 0 on a clean maven reactor",
+      cleanMaven.status === 0,
+      `exit ${cleanMaven.status}\n${cleanMaven.stdout ?? ""}${cleanMaven.stderr ?? ""}`,
+    );
+    check(
+      "the clean maven verdict states it inspected something",
+      /[1-9]\d* import/.test(cleanMaven.stdout ?? "") &&
+        /[1-9]\d* project/.test(cleanMaven.stdout ?? ""),
+      `stdout: ${cleanMaven.stdout ?? "(empty)"}`,
+    );
+
+    // Violating reactor: mvn-core reaching up into mvn-app, written in both Java and Kotlin.
+    // The rule this asserts changed with declared manifest edges: the poms draw
+    // mvn-app -> mvn-core, so core's import closes a CYCLE, and
+    // noCircularDependencies fires before the depConstraints table is read —
+    // the tags violation this check once named is no longer produced here.
+    write(consumerMaven, VIOLATING_FILES_MAVEN);
+    commitTree(consumerMaven, "core reaches up into app", false);
+    const dirtyMaven = run("pnpm", ["exec", "archkeep", "check"], consumerMaven);
+    const dirtyMavenOutput = `${dirtyMaven.stdout ?? ""}${dirtyMaven.stderr ?? ""}`;
+    check(
+      "the checker exits 1 on a violating maven reactor",
+      dirtyMaven.status === 1,
+      `exit ${dirtyMaven.status}\n${dirtyMavenOutput}`,
+    );
+    check(
+      "the maven violation names its rule and reports both java and kotlin file:line:column",
+      dirtyMavenOutput.includes("noCircularDependencies") &&
+        /Violate\.java:\d+:\d+/.test(dirtyMavenOutput) &&
+        /ViolateKotlin\.kt:\d+:\d+/.test(dirtyMavenOutput),
+      dirtyMavenOutput || "(no output)",
+    );
+
+    // --- the Gradle consumer: an `archkeep.json` root whose projects are
+    // anchored by tracked `settings.gradle` files. Discovery here is inference
+    // over the default manifest list — no declared row names a manifest — and
+    // the graph carries both track kinds for one pair: the Gradle project's
+    // declared dependency AND a written Kotlin import, each attributed to its
+    // own source file. This proves the Gradle reader works end-to-end.
+    const consumerGradle = join(workdir, "consumer-gradle");
+    mkdirSync(consumerGradle);
+
+    const filesGradle = fixtureFilesGradle(packageName, peers, packageManager);
+    filesGradle["package.json"] = filesGradle["package.json"].replace('"*"', tarballRef);
+    write(consumerGradle, filesGradle);
+    writeFileSync(
+      join(consumerGradle, "pnpm-workspace.yaml"),
+      "packages: []\nallowBuilds:\n  lefthook: false\n",
+      "utf8",
+    );
+    commitTree(consumerGradle, "the clean tree", true);
+
+    const installedGradle = run("pnpm", ["install", "--no-frozen-lockfile"], consumerGradle);
+    if (installedGradle.status !== 0) {
+      console.error(installedGradle.stdout ?? "");
+      console.error(installedGradle.stderr ?? "");
+      console.error(
+        "the packed tarball could not be installed into a fresh workspace (gradle path).",
+      );
+      process.exit(1);
+    }
+    note(`installed into ${consumerGradle}`);
+
+    // Clean reactor: both tracks draw edges, so the verdict must state real
+    // coverage — imports from the .kt files, projects from the settings files.
+    const cleanGradle = run("pnpm", ["exec", "archkeep", "check"], consumerGradle);
+    check(
+      "the checker exits 0 on a clean gradle reactor",
+      cleanGradle.status === 0,
+      `exit ${cleanGradle.status}\n${cleanGradle.stdout ?? ""}${cleanGradle.stderr ?? ""}`,
+    );
+    check(
+      "the clean gradle verdict states it inspected something",
+      /[1-9]\d* import/.test(cleanGradle.stdout ?? "") &&
+        /[1-9]\d* project/.test(cleanGradle.stdout ?? ""),
+      `stdout: ${cleanGradle.stdout ?? "(empty)"}`,
+    );
+
+    // Violating reactor: gradle-domain reaching up into gradle-app, written in Kotlin.
+    write(consumerGradle, VIOLATING_FILES_GRADLE);
+    commitTree(consumerGradle, "domain reaches up into app", false);
+    const dirtyGradle = run("pnpm", ["exec", "archkeep", "check"], consumerGradle);
+    const dirtyGradleOutput = `${dirtyGradle.stdout ?? ""}${dirtyGradle.stderr ?? ""}`;
+    check(
+      "the checker exits 1 on a violating gradle reactor",
+      dirtyGradle.status === 1,
+      `exit ${dirtyGradle.status}\n${dirtyGradleOutput}`,
+    );
+    check(
+      "the gradle violation names its rule and its kotlin file:line:column",
+      dirtyGradleOutput.includes("noCircularDependencies") &&
+        /Violate\.kt:\d+:\d+/.test(dirtyGradleOutput),
+      dirtyGradleOutput || "(no output)",
+    );
+  } finally {
+    rmSync(workdir, { recursive: true, force: true });
   }
-  note(`installed into ${consumerGradle}`);
 
-  // Clean reactor: both tracks draw edges, so the verdict must state real
-  // coverage — imports from the .kt files, projects from the settings files.
-  const cleanGradle = run("pnpm", ["exec", "archkeep", "check"], consumerGradle);
-  check(
-    "the checker exits 0 on a clean gradle reactor",
-    cleanGradle.status === 0,
-    `exit ${cleanGradle.status}\n${cleanGradle.stdout ?? ""}${cleanGradle.stderr ?? ""}`,
-  );
-  check(
-    "the clean gradle verdict states it inspected something",
-    /[1-9]\d* import/.test(cleanGradle.stdout ?? "") &&
-      /[1-9]\d* project/.test(cleanGradle.stdout ?? ""),
-    `stdout: ${cleanGradle.stdout ?? "(empty)"}`,
-  );
-
-  // Violating reactor: gradle-domain reaching up into gradle-app, written in Kotlin.
-  write(consumerGradle, VIOLATING_FILES_GRADLE);
-  commitTree(consumerGradle, "domain reaches up into app", false);
-  const dirtyGradle = run("pnpm", ["exec", "archkeep", "check"], consumerGradle);
-  const dirtyGradleOutput = `${dirtyGradle.stdout ?? ""}${dirtyGradle.stderr ?? ""}`;
-  check(
-    "the checker exits 1 on a violating gradle reactor",
-    dirtyGradle.status === 1,
-    `exit ${dirtyGradle.status}\n${dirtyGradleOutput}`,
-  );
-  check(
-    "the gradle violation names its rule and its kotlin file:line:column",
-    dirtyGradleOutput.includes("noCircularDependencies") &&
-      /Violate\.kt:\d+:\d+/.test(dirtyGradleOutput),
-    dirtyGradleOutput || "(no output)",
-  );
-} finally {
-  rmSync(workdir, { recursive: true, force: true });
+  if (failures.length > 0) {
+    console.error("");
+    for (const failure of failures) console.error(`✗ ${failure}\n`);
+    console.error(
+      `${failures.length} of the checks above failed. The package is not installable as ` +
+        `published, whatever this repository's own suite says.`,
+    );
+    exitCode = 1;
+  }
+  process.exit(exitCode);
 }
 
-if (failures.length > 0) {
-  console.error("");
-  for (const failure of failures) console.error(`✗ ${failure}\n`);
-  console.error(
-    `${failures.length} of the checks above failed. The package is not installable as ` +
-      `published, whatever this repository's own suite says.`,
-  );
-  exitCode = 1;
+/**
+ * Whether this file was RUN rather than imported, compared on real paths.
+ *
+ * The obvious spelling — `process.argv[1] === fileURLToPath(import.meta.url)` —
+ * is false whenever the invoking path contains a symlink anywhere in it: Node
+ * resolves symlinks before recording a module's URL, and records `argv[1]`
+ * exactly as the caller spelled it. Measured: a checkout reached through a
+ * symlinked parent directory makes the two differ, `main()` never runs, and the
+ * gate exits 0 having checked nothing — the silent green this script exists to
+ * refuse, arriving by way of its own entry guard.
+ *
+ * Not imported from `packages/archkeep/src/entry-point.mjs`, which
+ * holds the same function for the same reason: that package's conformance suite
+ * requires it to be self-contained and reachable only from its own tree, and a
+ * repo-root script importing into it would make this file part of what the
+ * package ships. Two callers, one small function, and a boundary between them
+ * that is the point rather than an accident — so it is stated twice, each with
+ * the reason, rather than shared across a line neither side should cross.
+ */
+function isProgramEntry(moduleUrl, argv1 = process.argv[1]) {
+  if (!argv1) return false;
+  const real = (path) => {
+    try {
+      return realpathSync(path);
+    } catch {
+      return path;
+    }
+  };
+  return real(argv1) === real(fileURLToPath(moduleUrl));
 }
-process.exit(exitCode);
+
+if (isProgramEntry(import.meta.url)) main();

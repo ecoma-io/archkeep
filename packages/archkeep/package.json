@@ -73,6 +73,7 @@
     "!src/custom-rules/wasm-fixture.mjs",
     "!src/report/envelope-shape.json",
     "!src/custom-rules/evidence-golden.json",
+    "!src/fixtures/",
     "presets/",
     "LICENSE",
     "README.md"
