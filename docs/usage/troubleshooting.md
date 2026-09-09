@@ -57,7 +57,7 @@ pnpm exec nx show projects
 pnpm exec moon projects
 ```
 
-**The language is not one of the five.** See
+**The language is not one of the eight.** See
 [languages.md](../reference/languages.md). A file with an unrecognised extension is a no-op —
 the dispatcher is pointed at every tracked file and `README.md` is not an error.
 
@@ -289,7 +289,7 @@ first graph computation rather than falling back to a default.
 extension to the server, and that the server's workspace root is your workspace
 root rather than a subdirectory — the root decides which boundary config is read.
 Pass it explicitly through `initializationOptions` if in doubt. See
-[editors.md](../integrations/vscode.md).
+[vscode.md](../integrations/vscode.md).
 
 **Stale after editing the boundary config.** The server asks the client to watch
 five patterns: the boundary config, the resolved `tsConfig`, `**/project.json`,
@@ -333,3 +333,8 @@ Two doors, and they are different on purpose:
 
 Either way, the most useful thing you can attach is the file, its `project.json`
 tags, and the boundary config row you expected to fire.
+
+## Next
+
+- The gate this page repairs: [ci.md](ci.md)
+- What a run judges: [checking.md](checking.md)

@@ -409,3 +409,8 @@ with its exact message. Two of them are worth knowing in a pack's own terms:
 - Pointing `profiles` at a pack path that does not exist, which is what a
   renamed or removed `node_modules` produces, is exit 3 as well: the run could
   not read its law, and that never reads as a clean tree.
+
+## Next
+
+- Adopt a pack by name: [profiles.md](profiles.md)
+- Extend a pack with official rules: [custom-rules.md](custom-rules.md)

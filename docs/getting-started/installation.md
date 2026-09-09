@@ -10,9 +10,12 @@ What you need before you install, and how to install it.
 | TypeScript | >= 5 and < 7. Required even in a workspace with no TypeScript in it: `ts.resolveModuleName` is what resolves TypeScript and JavaScript specifiers, and the upper bound is there because TypeScript 7's entry point exports none of the compiler API this delegates to |
 | Vue        | optional, >= 3 -- needed only if you have `.vue` files, and loaded lazily so a workspace without it pays nothing                                                                                                                                                      |
 
-You do **not** need Go, Cargo or uv installed. Nothing here shells out to a
-toolchain; manifests are parsed as data. That is what lets the graph compute on a
-lint-only CI runner.
+You do **not** need Go, Cargo, uv, a JDK or a .NET SDK installed. Nothing here
+shells out to a toolchain; manifests are parsed as data. That is what lets the
+graph compute on a lint-only CI runner. One exception to the zero-setup story:
+Maven `pom.xml` and .NET `.csproj` manifest edges parse XML through the
+optional `fast-xml-parser` peer dependency — install it if your workspace has
+either.
 
 Nx is a peer dependency, but an optional one -- the engine and the CLI run
 without it. A workspace with no `nx` installed uses the native provider
@@ -51,12 +54,14 @@ The CLI commands are documented individually under [../usage/](../usage/), and
 page covers
 getting the package onto your machine; the next two pages cover using it.
 
-A fourth face exists for AI agents: `@ecoma-io/archkeep-mcp` exposes the
+A separate agent surface exists for AI agents: `@ecoma-io/archkeep-mcp` exposes the
 engine's commands as structured MCP tools, for agents whose host speaks the
 Model Context Protocol — a separate optional install, described in
 [../integrations/mcp.md](../integrations/mcp.md).
 
 ## Next
+
+The walkthrough continues in order:
 
 - Set up a workspace with no workspace tool: [first-project.md](first-project.md)
 - Write and run your first constraint table: [first-policy.md](first-policy.md)

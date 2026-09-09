@@ -112,3 +112,8 @@ shows "only `[layer:domain]`" may still have violations from imports written
 before that constraint was added, and a project with no matching constraints is
 not necessarily clean — `check` would flag it as
 `projectWithoutTagsCannotHaveDependencies` if it has any imports at all.
+
+## Next
+
+- The judgment for one import site: [explain.md](explain.md)
+- Everything that depends on a project: [impact.md](impact.md)

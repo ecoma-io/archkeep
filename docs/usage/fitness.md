@@ -52,3 +52,8 @@ and 3 is the no-verdict exit code.
 ✔ full-coverage          221/221 files analyzed (100%), meets the 100% minimum
 ✔ fitness: 2 functions passed
 ```
+
+## Next
+
+- The run that renders the verdicts: [checking.md](checking.md)
+- Ship a whole style instead: [presets.md](presets.md)

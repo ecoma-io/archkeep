@@ -164,14 +164,15 @@ rule authoring UI. The constraint table is code in the workspace, reviewed like
 code, and anything that edits it from outside the repository breaks the property
 that makes it trustworthy.
 
-## The three conditions
+## The three conformance conditions
 
-There is one measurable finish line already written down, and it is not this
-document's to restate: `src/conformance/README.md` § _What this licenses_ states
-the three things that have to be true before a workspace can drop
+Conformance licensing has its own finish line, separate from the four 1.0
+readiness conditions the [roadmap](roadmap.md#what-10-waits-for-and-how-each-condition-is-read)
+owns. `src/conformance/README.md` § _What this licenses_ is its binding home;
+it names the three things that must be true before a workspace can drop
 `@nx/enforce-module-boundaries` and run Archkeep alone. All three now have a
-mechanism holding them; what remains open is breadth of evidence, not a missing
-feature:
+mechanism holding them; what remains open is breadth of evidence, not a
+missing feature:
 
 1. no false negative the suite has not declared and explained — **met**, and held
    by a test that fails both when a new one appears and when a declared one is

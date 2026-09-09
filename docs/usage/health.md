@@ -82,3 +82,8 @@ sites. Run `check` at any commit for those.
 Two runs over an unchanged tree produce byte-identical output, in text and in
 JSON. The metrics are re-derived from the run's own records every time;
 nothing here reads the clock, the locale, or the environment.
+
+## Next
+
+- The same metrics as a governance document: [report.md](report.md)
+- Age the waivers behind the trends: [debt.md](debt.md)

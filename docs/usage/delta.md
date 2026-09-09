@@ -283,3 +283,8 @@ the reasons [ci.md](ci.md#sarif-and-github-code-scanning) gives:
   artifacts live, not where review-time edits do.
 - **A rename is a loud pair**, by design — see "Renames are not guessed"
   above.
+
+## Next
+
+- Declare what the change was allowed to do: [change.md](change.md)
+- The edge comparison underneath: [diff.md](diff.md)

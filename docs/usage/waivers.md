@@ -73,6 +73,12 @@ a row for you — waivers are recorded, and a stale one is surfaced loudly. A
 stale waiver is dead weight in the table; a stale permanent suppression is
 unjustified silence. Both are findings for a human reviewer to address.
 
-The reference page for the command is [`../reference/provenance.md`](../reference/provenance.md).
+The JSON envelope for the command is documented in
+[`../reference/json-output.md`](../reference/json-output.md#result-for-command-waivers).
 The concept that defines the lifecycle and distinction is
 [`../concepts/waivers.md`](../concepts/waivers.md).
+
+## Next
+
+- The ledger that ages these rows: [debt.md](debt.md)
+- The run that surfaces covered findings: [checking.md](checking.md)

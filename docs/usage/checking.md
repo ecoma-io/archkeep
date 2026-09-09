@@ -10,7 +10,7 @@ A clean tree prints what it inspected, not just that it found nothing — and
 which law it inspected it against:
 
 ```text
-policy  module-boundaries.config.mjs — fingerprint 3f9a2b7c1d4e5f608a1b2c3d4e5f6078b1e2d3c4f5a6b7c8d9e0f1a2b3c4d5e6
+policy  module-boundaries.config.mjs — fingerprint 3f9c…
 
 ✔ no boundary violations (264 imports in 78 files across 12 projects)
 ```
@@ -28,7 +28,7 @@ SARIF run.
 
 ## What `check` judges
 
-One run combines six verdicts:
+One run combines seven verdicts:
 
 1. **Import boundaries** — every import site in every tracked, supported source
    file is matched against the boundary law.
@@ -63,7 +63,7 @@ line do not scope them.
 apps/checkout-api/internal/handler/pay.go:14:2  onlyTagsConstraintViolation
   A project tagged with "scope:checkout" can only depend on libs tagged with scope:checkout, scope:shared
   import      "github.com/acme/billing-core/ledger" (static)  checkout-api → billing-core
-  constraint  sourceTag scope:checkout, onlyDependOnLibsWithTags [scope:checkout, scope:shared]
+  constraint  sourceTag scope:checkout → onlyDependOnLibsWithTags [scope:checkout, scope:shared]
 ```
 
 Four things, each with a reader in mind: the `file:line:column` your terminal
@@ -134,12 +134,12 @@ promise are in [json-output.md](../reference/json-output.md).
 
 ## Exit codes
 
-| code | meaning                                                                                                         |
-| ---- | --------------------------------------------------------------------------------------------------------------- |
-| `0`  | No findings, and every selected file was analyzed                                                               |
-| `1`  | Boundary violation, `go.work` drift, dead tsconfig alias, or an architecture-intent finding                     |
-| `2`  | Usage error — invalid arguments, unknown flag, a path outside the workspace, or a path matching no tracked file |
-| `3`  | No verdict — the run could not look, coverage is incomplete, or intent could not be established                 |
+| code | meaning                                                                                                                                                                  |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `0`  | No findings, and every selected file was analyzed                                                                                                                        |
+| `1`  | Boundary violation, declared-edge violations, `go.work` drift, dead tsconfig alias, an architecture-intent finding, a failing fitness function, or a failing custom rule |
+| `2`  | Usage error — invalid arguments, unknown flag, a path outside the workspace, or a path matching no tracked file                                                          |
+| `3`  | No verdict — the run could not look, coverage is incomplete, a declared fitness function or custom rule could not be judged, or intent could not be established          |
 
 A violation an active waiver accepts is still exit `1`: waiving a boundary
 breach for a fixed term is a tracked decision, not a fix, so accepting it
@@ -177,3 +177,8 @@ options declare a `profiles` registry: with one, `--config` is a profile NAME;
 without one, it is a file path resolved from the workspace root. The two do not
 mix, and `check` does not guess — an unknown name in a profile workspace and a
 missing file without one both exit 3.
+
+## Next
+
+- The same verdict as a gate: [ci.md](ci.md)
+- What a change introduced or resolved: [delta.md](delta.md)

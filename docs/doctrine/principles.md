@@ -19,13 +19,12 @@ architecture that lives only in diagrams and decisions.
 ## 2. A green result must mean something
 
 An empty diagnostic list must mean "no violation", and nothing else. A checker
-that returns green when it could not look is worse than no checker: it replaces a
-known gap with an unknown one, wearing a checkmark. The CLI distinguishes exit 3
-(could not look) from exit 0 (looked and found nothing); the language server
-publishes an empty list from exactly two named places. This principle refuses
-every code path that cannot reach a verdict and returns empty instead of saying
-so. [architecture-governance.md](architecture-governance.md) owns the contract
-and the mechanisms that enforce it.
+that returns green when it could not look is worse than no checker. This
+principle refuses every code path that cannot reach a verdict and returns empty
+instead of saying so. [why.md](why.md) carries the evidence for why the silent
+direction is the dangerous one;
+[architecture-governance.md](architecture-governance.md) owns the contract and
+the mechanisms that enforce it.
 
 ## 3. Unknown must never masquerade as valid
 
@@ -60,8 +59,9 @@ enforcer's reach narrower than the workspace's.
 
 The boundary rules read records and never learn which language produced them; the
 analysis layer reports import sites and never judges them; the report layer
-renders and decides nothing. The Nx integration, the CLI, and the language server are
-three faces of the same engine, each composed from the same layers. A layer that
+renders and decides nothing. The Nx integration, the Moon integration, the CLI,
+and the language server are four faces of the same engine, each composed from
+the same layers. A layer that
 reaches across its boundary — an analyzer that filters its own output, a
 formatter that decides what counts as a violation — is a rule wearing the wrong
 name. This principle refuses entanglement that makes a change in one surface

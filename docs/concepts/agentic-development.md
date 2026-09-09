@@ -105,11 +105,11 @@ versioned envelope `--format json` renders
 ([integrations/mcp.md](../integrations/mcp.md) owns the surface and its
 authority bounds).
 
-MCP is a capability interface, not a workflow: the tools answer questions, and
-the `arch-*` skills remain where WHEN and WHY live. An agent with MCP executes
-the skills' workflow through the tools instead of a shell; an agent without it
-runs the CLI. The CLI stays the human and pipeline face either way — same
-engine, same verdicts, three ways in.
+MCP is a capability interface, not a workflow: the tools answer questions; the
+`arch-*` skills are where WHEN and WHY live
+([skills/overview.md](../skills/overview.md) owns that layer); the CLI stays
+the human and CI face ([integrations/mcp.md](../integrations/mcp.md) owns all
+three).
 
 ## The agent is a consumer, not an authority
 

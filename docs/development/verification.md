@@ -15,7 +15,7 @@ each task's declared `inputs` and the graph.
 
 The three decisions a change meets, in order:
 
-1. **Repository-wide invariants** — Prettier formatting, doc links, doc
+1. **Repository-wide invariants** — Prettier formatting, the project roster, doc links, doc
    parity, skills shape, artifact hygiene, the boundary law run on itself.
    These run on every event because their subject is the repository, not a
    project; each is a shell step in `ci.yml`, not a Moon task.

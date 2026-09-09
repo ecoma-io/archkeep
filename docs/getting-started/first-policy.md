@@ -9,6 +9,9 @@ workspace uses Nx or the native provider.
 One file at the workspace root -- the one `boundaryConfig` names -- holds the
 law. It exports three things:
 
+(No boundary config yet? [first-project.md](first-project.md) step 4 creates
+one; the rest of this page reads the same on either provider.)
+
 ```js
 // module-boundaries.config.mjs
 
@@ -95,8 +98,8 @@ A violation looks like this:
 ```text
 apps/checkout-api/internal/handler/pay.go:14:2  onlyTagsConstraintViolation
   A project tagged with "scope:checkout" can only depend on libs tagged with scope:checkout, scope:shared
-  import      "github.com/acme/billing-core/ledger" (static)  checkout-api -> billing-core
-  constraint  sourceTag scope:checkout, onlyDependOnLibsWithTags [scope:checkout, scope:shared]
+  import      "github.com/acme/billing-core/ledger" (static)  checkout-api → billing-core
+  constraint  sourceTag scope:checkout → onlyDependOnLibsWithTags [scope:checkout, scope:shared]
 ```
 
 Four things, each with a reader in mind: the `file:line:column` your terminal
@@ -148,8 +151,8 @@ is [../concepts/policies.md](../concepts/policies.md).
 
 ## Next
 
+- The exit codes and SARIF output in a pipeline: [../usage/ci.md](../usage/ci.md)
 - What to put in the constraint table, and how to pick tags that hold:
   [../concepts/boundaries.md](../concepts/boundaries.md)
 - Each violation `messageId` may name: [../reference/violations.md](../reference/violations.md)
-- The exit codes and SARIF output in a pipeline: [../usage/ci.md](../usage/ci.md)
 - Diagnostics at the edit, per client: [../integrations/vscode.md](../integrations/vscode.md)

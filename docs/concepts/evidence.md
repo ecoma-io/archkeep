@@ -37,6 +37,27 @@ absorbed into a passing count**: a gate nobody is protected by should be
 visible. It counts toward neither the findings lane nor the no-verdict one, so
 it changes no exit code.
 
+## Terminology authority
+
+These terms are owned here. Every other page that uses them should link to
+this section rather than re-explain them. The JSON field names they define
+are documented in [reference/json-output.md](../reference/json-output.md);
+this section owns the meaning.
+
+| term                        | meaning                                                                                                                                                                         | envelope                                                                                                                                    |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **population**              | The set of tracked files a run reads (`git ls-files`, minus coverage-exempt config).                                                                                            | The only files a verdict speaks about.                                                                                                      |
+| **analyzed**                | Files in the population the analyzer produced a verdict for.                                                                                                                    | `coverage.analyzedFiles`.                                                                                                                   |
+| **notAnalyzed**             | Files in the population the analyzer never reached a verdict about — unreadable, no analyzer, a config that would not load, a declared project edge that could not be resolved. | `coverage.notAnalyzed`. Non-empty is exactly what makes `coverage.complete` false. Never call ignored files "not analyzed".                 |
+| **out of population**       | Files excluded from the population entirely.                                                                                                                                    | Not judged, not counted, not disclosed unless the kind below says so.                                                                       |
+| **ignored**                 | Files git's ignore rules name. Out of population, silently — by decision, the same one that keeps `.gitignore` the single authority on what the tool reads.                     | No gap entry, no disclosure.                                                                                                                |
+| **untracked** (not ignored) | Project-owned files present in the worktree that git does not track and no ignore rule names.                                                                                   | Disclosed via a `coverageGaps` entry of kind `"untracked-files"`, with advice to `git add`.                                                 |
+| **coverageGaps**            | Coverage the run knows it did not provide, each entry carrying a `kind`.                                                                                                        | No kind changes `complete`, `status`, or the exit code — a gap is coverage sitting outside the verdict, not a file the run failed to reach. |
+
+[architecture-authority.md](../doctrine/architecture-authority.md) owns the
+intent/reality/evidence/verdict/prediction/proposal/judgment vocabulary;
+[adr.md](adr.md) and [waivers.md](waivers.md) own decision and waiver terms.
+
 ## The cardinal rule: unknown is never a degraded pass
 
 The invariant everything is judged against is that an empty result means "no

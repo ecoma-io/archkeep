@@ -2,6 +2,12 @@
 
 The whole job is one command and one rule about how to read its exit code.
 
+This page is the pipeline face of the walkthrough that runs
+[installation.md](../getting-started/installation.md), then
+[first-project.md](../getting-started/first-project.md), then
+[first-policy.md](../getting-started/first-policy.md): with the workspace and
+its boundary law in hand, the gate is the one command below.
+
 ```shell
 pnpm exec archkeep check
 ```
@@ -26,6 +32,9 @@ archkeep --help              Show this message
   --output <file>       Write the report to a file instead of stdout
   --config <file>       Read the boundary law from here instead of
                         <workspace root>/module-boundaries.config.mjs
+  --evidence-out <dir>  Also write each custom rule's evidence bundle
+                        into this existing directory, as <rule>.json —
+                        the exact document the rule was judged over
 ```
 
 Both `--flag value` and `--flag=value` work. An unknown flag is a **usage error**
@@ -46,7 +55,7 @@ judged is still the consumer's.
 | code | meaning                                                                                                                                                                                  |
 | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `0`  | clean — **and** every selected file was analyzed                                                                                                                                         |
-| `1`  | findings — boundary violations, go.work drift, dead tsconfig aliases, architecture-intent findings, a failing fitness function, or a failing custom rule                                 |
+| `1`  | findings — boundary violations, declared-edge violations, go.work drift, dead tsconfig aliases, architecture-intent findings, a failing fitness function, or a failing custom rule       |
 | `2`  | usage error                                                                                                                                                                              |
 | `3`  | no verdict — the run could not start, a selected file could not be read, architecture intent could not be established, or a declared fitness function or custom rule could not be judged |
 
@@ -262,7 +271,7 @@ If your workspace already runs `@nx/enforce-module-boundaries`, keep it. It stay
 authoritative for JavaScript, TypeScript and Vue; this tool covers the languages
 ESLint cannot parse. Point both at the same config file so there is one table
 rather than two that drift — see
-[getting-started.md](../getting-started/first-policy.md) § _If you already run
+[first-policy.md](../getting-started/first-policy.md) § _If you already run
 `@nx/enforce-module-boundaries`_.
 
 The conditions under which you could eventually drop the ESLint rule are
@@ -293,3 +302,8 @@ directions demonstrated: a controlled violation failing with exit 1, removing
 it restoring green — can publish that fact as a
 [gate attestation](../reference/gate-attestation.md), the evidence shape
 Archkeep's readiness report accepts for its external-adopting condition.
+
+## Next
+
+- Classify what a change introduced: [delta.md](delta.md)
+- When a run misbehaves: [troubleshooting.md](troubleshooting.md)

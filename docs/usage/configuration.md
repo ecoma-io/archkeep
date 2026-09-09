@@ -138,3 +138,8 @@ policy declaring no `customRules` and a path-scoped run each say so on stderr
 - **The exit codes.** 0 clean, 1 findings, 2 usage error, 3 no verdict. See
   [exit-codes.md](../reference/exit-codes.md) for which commands reach which,
   and [ci.md](ci.md) for reading them in a pipeline.
+
+## Next
+
+- Run the law the options name: [checking.md](checking.md)
+- Build a workspace from scratch: [../getting-started/first-project.md](../getting-started/first-project.md)
