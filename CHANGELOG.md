@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.27.1](https://github.com/ecoma-io/archkeep/compare/v0.27.0...v0.27.1) (2026-09-09)
+
+
+### Bug Fixes
+
+* **archkeep:** advise only git add in the untracked-files warning ([#827](https://github.com/ecoma-io/archkeep/issues/827)) ([15c7db0](https://github.com/ecoma-io/archkeep/commit/15c7db0874e7e816d811a3b887d5b4d7149ea924))
+* **archkeep:** judge scenario's own changed edges under depConstraints ([#821](https://github.com/ecoma-io/archkeep/issues/821)) ([87ddf7a](https://github.com/ecoma-io/archkeep/commit/87ddf7ac8cab3dd63c7984d390fd83e7ce9cf751))
+* **archkeep:** refuse graph envelopes as the wrong family in delta baselines ([#820](https://github.com/ecoma-io/archkeep/issues/820)) ([6b55b02](https://github.com/ecoma-io/archkeep/commit/6b55b02d458af4daa860fcf3627ecfcdd658b848))
+* **archkeep:** score can-never-fire intent rows as unknown, not match ([#833](https://github.com/ecoma-io/archkeep/issues/833)) ([e484b51](https://github.com/ecoma-io/archkeep/commit/e484b510e1048d266927310f0461f3b0ebd7a9e6))
+* **archkeep:** score reconcile's forbidden rows from the judge's closure ([#822](https://github.com/ecoma-io/archkeep/issues/822)) ([b3baf57](https://github.com/ecoma-io/archkeep/commit/b3baf5776bd2f439a6c5d85c6a2ea3d859fb9115))
+* **archkeep:** stop shipping the evolution-lifecycle fixture and gate shipped imports ([#823](https://github.com/ecoma-io/archkeep/issues/823)) ([4ebfa63](https://github.com/ecoma-io/archkeep/commit/4ebfa63f3a1251456f5fe1f3e07d5a015c6dc0a4))
+
+
+### Documentation
+
+* add the wrong-family refusal to the delta/change refusal rosters ([#832](https://github.com/ecoma-io/archkeep/issues/832)) ([695168f](https://github.com/ecoma-io/archkeep/commit/695168f355e3ef228b9cd5e9b3bcf9c544d24a64))
+* correct the ci-drift-pins analysis-gate requirement sentence ([#819](https://github.com/ecoma-io/archkeep/issues/819)) ([462eeb3](https://github.com/ecoma-io/archkeep/commit/462eeb3161c6c24b44dd19273b959fc46b7326b7))
+* refresh the readiness table with the 2026-09-09 measurements ([#831](https://github.com/ecoma-io/archkeep/issues/831)) ([805dc12](https://github.com/ecoma-io/archkeep/commit/805dc12037dd2113ac118eb3de9d1cddff6ac9e3))
+
 ## [0.27.0](https://github.com/ecoma-io/archkeep/compare/v0.26.0...v0.27.0) (2026-09-08)
 
 
