@@ -10,12 +10,12 @@ comparison means.
 
 Every element reconcile judges has one state and one classification:
 
-| state        | severity   | means                                                                                                  |
-| ------------ | ---------- | ------------------------------------------------------------------------------------------------------ |
-| `match`      | 0          | The element agrees with the model, or is not governed by it.                                           |
-| `absent`     | 3          | The model claims something the observed architecture does not build.                                   |
-| `unexpected` | 4          | The observed architecture carries something the model does not admit.                                  |
-| `unknown`    | `Infinity` | The element could not be verified — only ever produced by a whole-file failure the command refuses on. |
+| state        | severity   | means                                                                                                                                                       |
+| ------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `match`      | 0          | The element agrees with the model, or is not governed by it.                                                                                                |
+| `absent`     | 3          | The model claims something the observed architecture does not build.                                                                                        |
+| `unexpected` | 4          | The observed architecture carries something the model does not admit.                                                                                       |
+| `unknown`    | `Infinity` | The element could not be verified — an unreadable file the command refuses on, or an intent row naming an endpoint the observed architecture does not have. |
 
 A score of `unknown` is marked as such, never silently read as a match. The
 severity ordering — `unexpected` before `absent` — is what the ranked candidate
@@ -34,13 +34,15 @@ missing.
 
 ### Edge classifications
 
-| classification           | state        | means                                                               |
-| ------------------------ | ------------ | ------------------------------------------------------------------- |
-| `match`                  | `match`      | Ungoverned, or explicitly allowed.                                  |
-| `dependencyForbidden`    | `unexpected` | The intent forbids this `source → target` by name.                  |
-| `dependencyNotAllowed`   | `unexpected` | Outside an explicit `dependencies.allowed` allowlist.               |
-| `intentForbiddenEdge`    | `unexpected` | A forbidden boundary row is being built (the judge's witness edge). |
-| `tagDependencyForbidden` | `unexpected` | A `forbiddenTags` row is being built.                               |
+| classification           | state        | means                                                                       |
+| ------------------------ | ------------ | --------------------------------------------------------------------------- |
+| `match`                  | `match`      | Ungoverned, or explicitly allowed.                                          |
+| `dependencyForbidden`    | `unexpected` | The intent forbids this `source → target` by name.                          |
+| `dependencyNotAllowed`   | `unexpected` | Outside an explicit `dependencies.allowed` allowlist.                       |
+| `intentForbiddenEdge`    | `unexpected` | A forbidden boundary row is being built (the judge's witness edge).         |
+| `tagDependencyForbidden` | `unexpected` | A `forbiddenTags` row is being built.                                       |
+| `intentUnknownProject`   | `unknown`    | A forbidden dependency row names a project the architecture does not build. |
+| `intentUnknownTag`       | `unknown`    | A `forbiddenTags` row names a tag no observed project carries.              |
 
 ### Intent rows
 
@@ -48,6 +50,13 @@ Every row of the intent file is scored once, in file order, and carries an
 `intentRow` identity — `{plane, index, kind, key}` — so a candidate names the
 exact row an operator would edit. `dependencies.allowed` rows always score
 `match`: an allowlist is a permission, not an existence claim.
+
+A `dependencies.forbidden` or `forbiddenTags` row whose endpoints the observed
+architecture cannot name — a project that is not built, a tag no project
+carries — can never fire, and scores `unknown` with `unverifiable` confidence
+(`intentUnknownProject` / `intentUnknownTag`) rather than a silent "match",
+mirroring the boundary plane. No candidate is proposed for such a row: there
+is nothing observed to edit toward.
 
 ## The envelope
 
