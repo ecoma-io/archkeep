@@ -510,7 +510,9 @@ Read it in this order, or jump to what you need:
 | [Agent skills](docs/skills/overview.md)                                                                                                      | The architecture-aware agent protocol                |
 | [Development](docs/development/architecture.md)                                                                                              | For contributors: how it works inside                |
 
-Full index: [**docs/**](docs/README.md).
+Full index: [**docs/**](docs/README.md), which organizes every page into eight
+lanes — Get started, Understand, Use, Integrate, Extend, Reference, Develop,
+Decisions.
 
 ## Real-world usage
 
@@ -518,9 +520,12 @@ Archkeep is actively dogfooded within the Ecoma ecosystem:
 
 - **[ecoma-io/loom](https://github.com/ecoma-io/loom)** — a TypeScript/Vue monorepo using Moonrepo, where Archkeep enforces module-boundary constraints through `module-boundaries.config.mjs` and runs as part of `lint`, with mutation-based tests verifying violations are caught.
 - **[ecoma-io/action-agents](https://github.com/ecoma-io/action-agents)** — a GitHub Actions and automation repository with a native workspace, where Archkeep validates project boundaries via `archkeep.json` and `module-boundaries.config.mjs`, and runs `archkeep check` as a blocking CI gate.
-- **[ecoma-io/release-craft](https://github.com/ecoma-io/release-craft)** — General-purpose release engine for releasing software monorepo using Moonrepo, where Archkeep enforces module-boundary constraints through `module-boundaries.config.mjs` and runs as part of `lint`, with mutation-based tests verifying violations are caught..
+- **[ecoma-io/release-craft](https://github.com/ecoma-io/release-craft)** — a
+  Moonrepo-based release engine for the organisation's monorepos, where
+  Archkeep reads the project graph through its Moon provider and judges it
+  against `module-boundaries.config.mjs`.
 
-Both consume Archkeep as a pinned dependency.
+All three consume Archkeep as a pinned dependency.
 
 ## Contributing
 
