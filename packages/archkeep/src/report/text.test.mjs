@@ -819,6 +819,26 @@ describe("formatCoverageGaps", () => {
     expect(text).toContain("libs/a/go.mod");
     expect(text).toContain("libs/b/Cargo.toml");
   });
+
+  // #811: the advice used to end "…, or let git ignore it" — recommending the
+  // one lane nothing discloses. An ignored project-owned file leaves no gap
+  // entry, keeps `coverage.complete` true, and is never read, so the second
+  // half of the old advice resolved the warning by hiding the file from every
+  // future run. The advice now names only the remediation that puts the file
+  // back inside the analyzed population.
+  it("advises git add alone for the untracked-files gap, never the ignore lane", () => {
+    const text = formatCoverageGaps([{ kind: "untracked-files", files: ["libs/a/new.go"] }]);
+    expect(text).toContain("git add it so the next run reads it");
+    expect(text).not.toContain("let git ignore");
+  });
+
+  it("keeps the untracked-files advice grammatical in the plural", () => {
+    const text = formatCoverageGaps([
+      { kind: "untracked-files", files: ["libs/a/new.go", "libs/b/new.rs"] },
+    ]);
+    expect(text).toContain("git add them so the next run reads them");
+    expect(text).not.toContain("let git ignore");
+  });
 });
 
 describe("formatCustomRulesSection", () => {
