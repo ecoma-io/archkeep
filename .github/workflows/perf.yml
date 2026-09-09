@@ -2,15 +2,29 @@ name: Perf record
 
 # The CI/CD optimization program's instrumentation (issue #806). Every
 # optimization decision in this repository must be judged on measurement, so
-# every run of CI or Analysis leaves behind a machine-readable record of its
-# own cost: moon task durations, vitest per-file durations, and job wall
-# times, parsed from the logs the run already produced.
+# every run of CI leaves behind a machine-readable record of its own cost:
+# moon task durations, vitest per-file durations, and job wall times, parsed
+# from the logs the run already produced.
 #
-# WHY a workflow_run follower rather than a post-job in ci.yml: it can never
-# sit on the critical path it measures — a step added to ci.yml would slow
-# the very thing it times. The trade is accepted explicitly: a run whose
-# logs are unavailable (retention, cancellation) is recorded as a NAMED GAP,
-# never an empty record.
+# WHY ci-gate dispatches this workflow instead of a `workflow_run` trigger:
+# a workflow_run follower is flagged as a dangerous trigger, and the flag is
+# right about the shape — a follower that reacts to arbitrary completed runs
+# would run this file against run payloads it does not choose. Dispatching
+# from ci-gate's final step (`if: always()`, so failed runs record too) keeps
+# the recorder off the critical path it measures while naming the trigger
+# runs it accepts. The trade is accepted explicitly: a run cancelled before
+# ci-gate executes produces NO record (a workflow_run follower recorded
+# cancelled runs) — cancelled-run timing is partial data anyway, and the gap
+# is visible as a missing record, never as an empty one.
+#
+# WHY the scripts are NOT checked out from the recorded run's commit: the
+# recorder parses whatever run it is handed, including runs on pull-request
+# branches. Checking out that run's tree would execute that tree's
+# `scripts/build-perf-record.mjs` on this repository's runner — a fork's
+# script, on a base-repo runner, reading that run's logs. So the parser is
+# versioned with the ref this workflow was dispatched at (main, via ci-gate;
+# whatever the dispatcher named, manually) and the recorded run's head_sha
+# rides as DATA in the record, never as code.
 #
 # It is NOT a gate. It uploads an artifact and a step summary; it neither
 # blocks merges nor joins ci-gate/analysis-gate (the drift pins in
@@ -19,13 +33,10 @@ name: Perf record
 # optimization decision.
 
 on:
-  workflow_run:
-    workflows: ["CI", "Analysis"]
-    types: [completed]
   workflow_dispatch:
     inputs:
       run_id:
-        description: "CI or Analysis run to record. Defaults to the latest push-main CI run."
+        description: "CI run to record. Defaults to the latest push-main CI run."
         required: false
         type: string
 
@@ -48,12 +59,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           INPUT_RUN_ID: ${{ inputs.run_id }}
-          EVENT_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
           if [ -n "$INPUT_RUN_ID" ]; then
             run_id="$INPUT_RUN_ID"
-          elif [ -n "$EVENT_RUN_ID" ]; then
-            run_id="$EVENT_RUN_ID"
           else
             run_id="$(gh api "repos/{owner}/{repo}/actions/runs?branch=main&event=push&per_page=1" --jq '.workflow_runs[0].id')"
           fi
@@ -71,10 +79,9 @@ jobs:
           head_sha="$(node -e 'const j=require("./perf-data/run.json");process.stdout.write(j.head_sha||"")')"
           echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
 
-      - name: Check out scripts at the run's commit
+      - name: Check out the parser at this workflow's own ref
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ steps.meta.outputs.head_sha }}
           persist-credentials: false
 
       - name: Download the run's logs
