@@ -78,7 +78,7 @@ jobs:
           api-url: ${{ secrets.ECOMA_LLM_BASE_URL }}
           api-key: ${{ secrets.ECOMA_LLM_API_KEY }}
           model: review
-          dry-run: "true"
+          dry-run: "false"
 
       # The path is the exact file the run declared via its `artifact-file`
       # output — set on green runs and on the red boundary's record alike, and
