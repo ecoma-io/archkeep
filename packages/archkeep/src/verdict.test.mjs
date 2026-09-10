@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { EXIT, verdictFor } from "./verdict.mjs";
+import { EXIT, coverageComplete, verdictFor } from "./verdict.mjs";
 
 /**
  * The `check` fold's input latch (INV-4's gap, Phase 1-A): `verdictFor`'s
@@ -104,5 +104,23 @@ describe("verdictFor input latch", () => {
     // with the malformed key named in the reason a reader acts on.
     expect(verdict.decision.verdict).toBe("unknown");
     expect(verdict.decision.reason).toContain('"violation"');
+  });
+});
+
+describe("coverageComplete — the one completeness predicate", () => {
+  it("is false when nothing was analyzed, even with nothing left unjudged (silent direction)", () => {
+    // The planted defect: `analyzed > 0` flipped to `analyzed === 0`
+    // survived the suite — a run that judged nothing would report
+    // `coverage.complete: true` and exit ok, byte-identical to clean.
+    expect(coverageComplete({ unchecked: 0, blindSpotCount: 0, analyzed: 0 })).toBe(false);
+  });
+
+  it("is true only once the run judged at least one file", () => {
+    expect(coverageComplete({ unchecked: 0, blindSpotCount: 0, analyzed: 1 })).toBe(true);
+  });
+
+  it("stays false while anything remains unjudged (controls for the conjunction)", () => {
+    expect(coverageComplete({ unchecked: 1, blindSpotCount: 0, analyzed: 12 })).toBe(false);
+    expect(coverageComplete({ unchecked: 0, blindSpotCount: 1, analyzed: 12 })).toBe(false);
   });
 });
