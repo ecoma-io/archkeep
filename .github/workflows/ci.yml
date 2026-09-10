@@ -253,6 +253,12 @@ jobs:
           # there is exactly the batch — which is why `base_ref` is read
           # from the event instead of naming a branch.
           MOON_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
+          # The property-based suite's CI seed leg (vitest.property-seed.mjs):
+          # three fast seeds, one per vitest worker, and a reduced numRuns so
+          # the leg stays inside the PR budget. Nightly sweeps a longer seed
+          # list at full numRuns — same env names, bigger values.
+          ARCHKEEP_PROPERTY_SEEDS: 42,1337,20240910
+          ARCHKEEP_PROPERTY_NUM_RUNS: 25
         run: |
           if [ -n "$MOON_BASE" ]; then
             # The merge-queue event names its base as a fully-qualified ref

@@ -1,7 +1,8 @@
 /**
- * The repeated-run byte-identity gate (#630): `check --format json`, run N
- * times over one frozen fixture tree, must produce N byte-identical stdout
- * streams — compared as raw bytes, normalizing nothing.
+ * The repeated-run byte-identity gate (#630): `check`, `graph`, `diff`,
+ * `delta`, and `drift`, each run N times over one frozen fixture tree with
+ * `--format json`, must produce N byte-identical stdout streams — compared
+ * as raw bytes, normalizing nothing.
  *
  * Why this file exists: every other determinism test here pins WHAT an output
  * says (field order, array sortedness, one value per field). None of them can
@@ -18,9 +19,9 @@
  * Each run is a real spawned CLI process over the fixture, the way a
  * consumer's CI runs it: the suspected transient was observed ACROSS process
  * cold starts, so the gate repeats cold starts rather than calls in one warm
- * process. `check` is the one command gated here because it is the one whose
- * bytes the audit hashed; the same comparator below is what a second command's
- * gate would compose.
+ * process. Every command in the roster whose stdout bytes a consumer diffs
+ * is gated here under the same comparator: the descriptive commands
+ * (`graph`, `diff`, `delta`, `drift`) compose it the same way `check` does.
  *
  * The comparator is under test FIRST: a byte gate whose comparator compared
  * lengths, or trimmed, or short-circuited after the first pair would be a
@@ -160,6 +161,17 @@ const MODEL = () =>
     2,
   )}\n`;
 
+/**
+ * A minimal architecture-intent: one boundary matching every project the
+ * fixture's graph observes, with no rows — nothing required, nothing
+ * forbidden, so `drift`'s verdict over the frozen tree is "no drift" and the
+ * gate measures only whether that verdict's bytes move between runs.
+ */
+const INTENT = `${JSON.stringify({
+  version: "1",
+  boundaries: [{ name: "all-projects", match: ["name:alpha", "name:beta", "name:gamma"] }],
+})}\n`;
+
 const GO_MOD = (name) => `module example.com/${name}\n\ngo 1.22\n`;
 /** gamma reaches alpha on one layer — legal. */
 const GAMMA = `package gamma
@@ -200,6 +212,7 @@ function makeFrozenWorkspace(violating) {
     mkdirSync(join(root, relativePath, ".."), { recursive: true });
     writeFileSync(join(root, relativePath), text);
   };
+  write("architecture-intent.json", INTENT);
   write("archkeep.json", MODEL());
   write("module-boundaries.config.mjs", LAW);
   write("libs/alpha/go.mod", GO_MOD("alpha"));
@@ -228,8 +241,8 @@ function makeFrozenWorkspace(violating) {
 }
 
 /** Spawns the real CLI over `root`, capturing stdout as bytes. */
-const runCheck = (root) =>
-  spawnSync(process.execPath, [CLI, "check", "--format", "json"], {
+const runCli = (root, args) =>
+  spawnSync(process.execPath, [CLI, ...args], {
     cwd: root,
     encoding: "buffer",
     timeout: SPAWN_BUDGET_MS,
@@ -237,12 +250,41 @@ const runCheck = (root) =>
     env: environmentForTree(),
   });
 
+/** `check --format json` — the gate this file existed for (#630). */
+const runCheck = (root) => runCli(root, ["check", "--format", "json"]);
+/** `graph --format json` — the descriptive snapshot `diff` reads as its baseline. */
+const runGraph = (root) => runCli(root, ["graph", "--format", "json"]);
+/** `diff <baseline> --format json` — compares a graph snapshot against the live head. */
+const runDiff = (root, baselinePath) => runCli(root, ["diff", baselinePath, "--format", "json"]);
+/** `delta <baseline> --format json` — classifies violations moved since the evidence snapshot. */
+const runDelta = (root, baselinePath) => runCli(root, ["delta", baselinePath, "--format", "json"]);
+/** `drift --format json` — compares the observed architecture against the declared intent. */
+const runDrift = (root) => runCli(root, ["drift", "--format", "json"]);
+
 let cleanRoot;
 let violatingRoot;
+/** Graph-envelope baseline for `diff`, captured from `graph --format json` over cleanRoot. */
+let diffBaselinePath;
+/** Evidence-snapshot baseline for `delta`, captured from `delta --capture` over cleanRoot. */
+let deltaBaselinePath;
 
 beforeAll(() => {
   cleanRoot = makeFrozenWorkspace(false);
   violatingRoot = makeFrozenWorkspace(true);
+
+  // The descriptive commands take a baseline file as their input. Each is
+  // captured ONCE from the same frozen tree every gate below runs over, then
+  // reused unchanged — the input the N runs share. `graph`'s output IS the
+  // envelope shape `diff`'s `parseBaseline` validates; `delta --capture`
+  // writes the evidence snapshot `delta`'s compare mode reads.
+  const graphRun = runGraph(cleanRoot);
+  expect(graphRun.status).toBe(EXIT.ok);
+  diffBaselinePath = join(cleanRoot, "diff-baseline.json");
+  writeFileSync(diffBaselinePath, graphRun.stdout);
+
+  deltaBaselinePath = join(cleanRoot, "delta-baseline.json");
+  const captureRun = runCli(cleanRoot, ["delta", "--capture", "--output", deltaBaselinePath]);
+  expect(captureRun.status).toBe(EXIT.ok);
 });
 
 afterAll(() => {
@@ -267,6 +309,61 @@ describe("check --format json — repeated runs over one frozen tree (#630)", ()
     // repository's own tree checks clean, so an empty violations array, the
     // coverage block, and the provenance header are the bytes that moved.
     const runs = Array.from({ length: RUNS }, () => runCheck(cleanRoot));
+    for (const run of runs) {
+      expect(run.status).toBe(EXIT.ok);
+    }
+    assertStreamsByteIdentical(runs);
+  });
+});
+
+describe("graph/delta/diff/drift — repeated runs over one frozen tree (#630)", () => {
+  // Every gate below runs over cleanRoot — the half the audit's divergence
+  // was observed on — with `beforeAll`'s frozen baselines as the shared
+  // input. A tree that cannot change cannot produce a differing byte: any
+  // difference between runs is the command leaking something run-varying
+  // (a timestamp, a Map iteration order, a Math.random() tie-break) into
+  // bytes a downstream pipeline diffs. The silent direction is the killer:
+  // a command whose stdout happens to agree on every sample run ships, and
+  // the divergence surfaces only in a consumer's cache — so the gate, like
+  // every run-varying seed, must fail LOUDLY when it sees a difference,
+  // never paper over one.
+
+  it(`graph produces byte-identical stdout across ${RUNS} runs`, () => {
+    const runs = Array.from({ length: RUNS }, () => runGraph(cleanRoot));
+    for (const run of runs) {
+      expect(run.status).toBe(EXIT.ok);
+    }
+    assertStreamsByteIdentical(runs);
+  });
+
+  it(`diff produces byte-identical stdout across ${RUNS} runs`, () => {
+    // Baseline and head are the same frozen tree, so the diff verdict is
+    // "no changes" every run — the bytes that could move are the envelope's
+    // summary counts and any ordering inside `result`.
+    const runs = Array.from({ length: RUNS }, () => runDiff(cleanRoot, diffBaselinePath));
+    for (const run of runs) {
+      expect(run.status).toBe(EXIT.ok);
+    }
+    assertStreamsByteIdentical(runs);
+  });
+
+  it(`delta produces byte-identical stdout across ${RUNS} runs`, () => {
+    // Baseline evidence and live analysis describe the same frozen tree, so
+    // every run classifies the same nothing-introduced verdict — the bytes
+    // that could move are the introduced/resolved counts and any ordering
+    // inside `result`.
+    const runs = Array.from({ length: RUNS }, () => runDelta(cleanRoot, deltaBaselinePath));
+    for (const run of runs) {
+      expect(run.status).toBe(EXIT.ok);
+    }
+    assertStreamsByteIdentical(runs);
+  });
+
+  it(`drift produces byte-identical stdout across ${RUNS} runs`, () => {
+    // The intent and the graph are both frozen, so the verdict is the same
+    // no-drift every run — the bytes that could move are the resolved
+    // boundary rows and any ordering inside `result`.
+    const runs = Array.from({ length: RUNS }, () => runDrift(cleanRoot));
     for (const run of runs) {
       expect(run.status).toBe(EXIT.ok);
     }
