@@ -47,13 +47,16 @@ export default [
       // registering the @nx plugin (they are input to loadEslintBoundaryConfig,
       // not real eslint configs). Without these ignores, eslint . (the lint
       // target) fails when it walks the tree while tests are running or when
-      // interrupted runs leave fixtures behind. The three fixture families are:
+      // interrupted runs leave fixtures behind. The fixture families are:
       // - .eslint-config-fixture-* (eslint-config.integration.test.mjs)
       // - .cli-eslint-config-fixture-* (cli.integration.test.mjs)
       // - .oracle-simple-* (providers/native/differential.integration.test.mjs)
+      // - .config-spelling-a{4,5}-eslint-* (config-spelling.integration.test.mjs)
       "**/.eslint-config-fixture-*/**",
       "**/.cli-eslint-config-fixture-*/**",
-      // The oracle fixtures share the same lifecycle as the two families
+      "**/.config-spelling-a4-eslint-*/**",
+      "**/.config-spelling-a5-eslint-*/**",
+      // The oracle fixtures share the same lifecycle as the families
       // above (created under the package root by integration tests, left
       // behind only by an interrupted run); `.oracle-*` covers every
       // spelling, the simple and the composite ones alike.
