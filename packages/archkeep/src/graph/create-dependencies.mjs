@@ -42,6 +42,20 @@
  * the rule; its malformed-TOML tolerance stays the documented exception its
  * own header pins (`../analysis/python.mjs`).
  *
+ * ## The hook's context contract (#843)
+ *
+ * `context.fileMap.projectFileMap` is validated before any resolver runs: a
+ * missing map, or a declared project with no key in it, throws. nx 23.x
+ * seeds a key for EVERY declared project before attributing a single file —
+ * `createFileMap` writes `projectFileMap[name] ??= []` (measured, nx 23.2.0
+ * `dist/src/project-graph/file-map-utils.js`) — so a legitimate zero-file or
+ * target-only project reads as an EMPTY ARRAY, never as an absent key. The
+ * refusal therefore has no legitimate shape to catch, and the state it
+ * replaces was the silent direction: a project whose manifests were never
+ * read contributes no edges, byte-for-byte identical to a workspace with
+ * nothing to find, while a project whose manifest was read and could not be
+ * parsed throws (#364). "Never looked" now fails like "looked and failed".
+ *
  * Resolver contract (see `../analysis/*.mjs`): every resolver returns raw Nx
  * edges — { source, target, sourceFile, type } and nothing else. Go, Rust and
  * Python take `resolve(projects, filesOf, readFile)`; the C# and JVM halves
@@ -188,12 +202,31 @@ export function resolveDeclaredManifestFailures(workspace) {
  */
 export const createDependencies = (options, context) => {
   resolveOptions(options);
-  const projects = Object.entries(context.projects).map(([projectName, config]) => ({
-    name: projectName,
-    root: config.root,
-  }));
-  const filesOf = (projectName) =>
-    (context.fileMap?.projectFileMap?.[projectName] ?? []).map((f) => f.file);
+  const projectFileMap = context.fileMap?.projectFileMap;
+  if (projectFileMap === null || typeof projectFileMap !== "object") {
+    throw new Error(
+      "archkeep: the Nx plugin context carries no fileMap.projectFileMap — no " +
+        "project's file universe is known, so no polyglot manifest can be read and " +
+        "no edge can be trusted. Refusing rather than computing a silently empty " +
+        "graph: nx 23.x seeds a projectFileMap key for every declared project, so a " +
+        "missing map is context-shape drift. Upgrade @ecoma-io/archkeep if a newer " +
+        "Nx moved the field.",
+    );
+  }
+  const projects = Object.entries(context.projects).map(([projectName, config]) => {
+    if (!Object.hasOwn(projectFileMap, projectName)) {
+      throw new Error(
+        `archkeep: project "${projectName}" (root "${config.root}") is declared in the ` +
+          `Nx plugin context but has no key in fileMap.projectFileMap — its manifests ` +
+          `would go unread and its edges undrawn, the under-selection this plugin ` +
+          `exists to close. nx 23.x maps every declared project, including projects ` +
+          `with no files (an empty array), so a missing key is context-shape drift. ` +
+          `Upgrade @ecoma-io/archkeep if a newer Nx moved the field.`,
+      );
+    }
+    return { name: projectName, root: config.root };
+  });
+  const filesOf = (projectName) => projectFileMap[projectName].map((f) => f.file);
   const readFile = (workspaceRelativePath) => {
     const abs = join(context.workspaceRoot, workspaceRelativePath);
     // Every value this reader is handed comes from the tree's own `fileMap` —

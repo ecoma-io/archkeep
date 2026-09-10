@@ -214,35 +214,55 @@ describe("createDependencies over a real workspace fixture", () => {
     ]);
   });
 
-  it("still resolves a project whose files are missing from the file map", () => {
-    // `context.fileMap?.projectFileMap?.[name] ?? []` — a project absent from
-    // the map contributes no files, so no edges of its own, without breaking
-    // the projects that ARE listed. Nx always fills the map; the fallback
-    // exists so an odd context shape cannot crash every graph computation.
+  it("refuses a declared project whose key is missing from the file map (#843)", () => {
+    // nx 23.x seeds a projectFileMap key for every declared project — an
+    // EMPTY ARRAY for a project with no files — so an absent key is context
+    // shape drift, never a legitimate empty project. The old behavior mapped
+    // the absence to "no files": rs/b's Cargo.toml declared a path dependency
+    // no resolver ever read, and the graph came back one edge short with
+    // nothing to explain it — byte-for-byte the clean answer. The missing key
+    // is now the loud direction, and the error names the dropped project.
     const { "rs-b": _unlisted, ...rest } = context.fileMap.projectFileMap;
+    expect(() =>
+      createDependencies(undefined, {
+        ...context,
+        fileMap: { projectFileMap: rest },
+      }),
+    ).toThrow(/rs-b/);
+  });
+
+  it("refuses a context whose fileMap is missing entirely (#843)", () => {
+    // The same drift one level up: with no map, no project's file universe is
+    // known, and the empty graph such a context would produce is
+    // indistinguishable from a workspace with nothing to find.
+    const { fileMap: _omitted, ...withoutFileMap } = context;
+    expect(() => createDependencies(undefined, withoutFileMap)).toThrow(/fileMap\.projectFileMap/);
+  });
+
+  it("still resolves a workspace holding a project that owns zero files", () => {
+    // The legitimate shape the refusals above must not catch: nx seeds the
+    // key with an empty array for a project with no tracked files, and such
+    // a project contributes nothing while the mapped ones still resolve.
+    // (A bystander, deliberately: a project mapped `[]` carries no manifest,
+    // so a sibling's declared path dependency into it resolves no target —
+    // the filesOf-settles-absence posture the Rust resolver pins at #405.)
     const deps = createDependencies(undefined, {
-      ...context,
-      fileMap: { projectFileMap: rest },
+      workspaceRoot: root,
+      projects: {
+        "go-one": { root: "go/one" },
+        "go-two": { root: "go/two" },
+        empty: { root: "empty" },
+      },
+      fileMap: {
+        projectFileMap: {
+          "go-one": [{ file: "go/one/go.mod" }, { file: "go/one/main.go" }],
+          "go-two": [{ file: "go/two/go.mod" }, { file: "go/two/lib.go" }],
+          empty: [],
+        },
+      },
     });
-    // The rs-b manifest is unlisted, so the Rust project contributes nothing;
-    // the Go, Python and JVM edges are drawn from the projects that ARE listed.
     expect(deps).toEqual([
       { source: "go-one", target: "go-two", sourceFile: "go/one/main.go", type: "static" },
-      { source: "py-p", target: "py-q", sourceFile: "py/p/pyproject.toml", type: "static" },
-      { source: "py-r", target: "py-s", sourceFile: "py/r/pyproject.toml", type: "static" },
-      { source: "py-t", target: "py-u", sourceFile: "py/t/pyproject.toml", type: "static" },
-      {
-        source: "jvm-app",
-        target: "jvm-lib",
-        sourceFile: "jvm/app/src/main/java/com/acme/app/App.java",
-        type: "static",
-      },
-      // The two C# tracks over one pair, same shape as the JVM's: the
-      // written using AND the csproj's declared reference each draw their
-      // own edge.
-      { source: "cs-app", target: "cs-lib", sourceFile: "cs/app/App.cs", type: "static" },
-      { source: "cs-app", target: "cs-lib", sourceFile: "cs/app/App.csproj", type: "static" },
-      { source: "jvm-app", target: "jvm-lib", sourceFile: "jvm/app/pom.xml", type: "static" },
     ]);
   });
 
