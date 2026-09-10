@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 import { debtCommand } from "./debt.mjs";
 
 vi.mock("./provenance.mjs", () => ({ resolveProvenance: vi.fn(() => "mock-provenance") }));
+
 vi.mock("../report/json.mjs", () => ({
+  SCHEMA_VERSION: 2,
   jsonEnvelope: (input) => input,
   renderJson: (input) => JSON.stringify(input),
 }));
@@ -275,5 +280,61 @@ describe("debtCommand — determinism", () => {
     expect(envelope.coverage.notes).toEqual(
       expect.arrayContaining([expect.stringContaining("sampleTime is the wall clock")]),
     );
+  });
+});
+
+describe("debtCommand — corrupt-middle snapshot composition", () => {
+  /** A minimal graph envelope that `parseBaseline` accepts (schemaVersion 2). */
+  const validSnapshot = JSON.stringify({
+    schemaVersion: 2,
+    command: "graph",
+    coverage: { complete: true },
+    result: {
+      projects: [{ name: "core", root: "libs/core", tags: [] }],
+      dependencies: [],
+    },
+    workspace: { provider: "native", provenance: "test" },
+  });
+
+  // The silent direction this pins: a reader that tolerated a malformed file
+  // between two valid ones — skipping it, aging over it, counting the
+  // survivors — would ship a plausible-looking ledger computed from snapshots
+  // 1 and 3 while the record it claims to read is broken. The extremes are
+  // already covered above (unreadable directory, empty directory, malformed
+  // snapshot in a single-file directory), but none of those exercise the
+  // real reader encountering a corrupt file sandwiched between valid ones.
+  // `readSnapshots` refuses at the first unparsable file (history.mjs:238 —
+  // `parseBaseline` is called without a guard), and `debt` must let that
+  // refusal reach the consumer (exit 3), never compute a ledger over a
+  // partial record.
+  it("refuses loudly naming the corrupt file when the middle of three snapshots is malformed, never emitting a ledger from survivors", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "archkeep-debt-corrupt-"));
+    try {
+      await writeFile(join(dir, "0001-first.json"), validSnapshot);
+      await writeFile(join(dir, "0002-corrupt.json"), "not valid json {{{");
+      await writeFile(join(dir, "0003-last.json"), validSnapshot);
+
+      // `loadIntentOverride` is the only io injected: the real `readSnapshots`
+      // runs (debt.mjs:110 falls through to it when `io.readSnapshots` is
+      // absent), and the injected intent lets the command reach the ledger
+      // computation if it gets past the read — which is exactly the silent
+      // direction this test must catch. The command must reject with the
+      // error `parseBaseline` produced — which names the corrupt file's full
+      // path — never resolve with a ledger computed from survivors.
+      await expect(
+        debtCommand(dir, commandContext(), {
+          config: null,
+          io: { loadIntentOverride: async () => intent() },
+        }),
+      ).rejects.toThrow(/the baseline snapshot at '.*0002-corrupt\.json' is not valid JSON/);
+
+      // The throw itself is the proof that no ledger exists: the read
+      // failure at debt.mjs:110 precedes `computeDebtLedger` (debt.mjs:163)
+      // and `formatDebtReport` (debt.mjs:241), so a ledger computed from the
+      // surviving snapshots 1 and 3 is unreachable — the command either
+      // refuses the broken record or it does not, and this pins "it does".
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
