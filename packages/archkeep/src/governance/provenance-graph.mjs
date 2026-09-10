@@ -405,7 +405,12 @@ export function buildProvenanceGraph({
       for (const nextId of sortedArray(record.supersedes)) {
         if (!visited.has(nextId)) {
           queue.push(nextId);
-          parentMap.set(nextId, currentId);
+          // First queued parent wins: when a second supersession path reaches
+          // a decision already queued, overwriting its parent would drop the
+          // first path's hop from the chain while `edges` keeps both relations.
+          if (!parentMap.has(nextId)) {
+            parentMap.set(nextId, currentId);
+          }
         }
       }
 
@@ -454,7 +459,9 @@ export function buildProvenanceGraph({
       causalChains.push({
         id: chainId,
         startNode: rowId,
-        endNode: `decision:${chainNodes[chainNodes.length - 1]}`,
+        // `chainNodes` entries are node ids already (`decision:<id>`); wrapping
+        // them a second time emitted the dangling `decision:decision:<id>`.
+        endNode: chainNodes[chainNodes.length - 1],
         hops: chainEdges,
       });
     }
