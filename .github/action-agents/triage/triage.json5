@@ -1,0 +1,19 @@
+// The triage labels sheet — phase 2 of the action-agents dogfood rollout
+// (ecoma-io/action-agents docs/dogfood.md, "Configuration"). The run stays
+// `dry-run: "true"`; this file only widens what the record's decision block
+// can express. Ownership: `bug` and `enhancement` were returned by the issue
+// forms (one owner per label — see the audit in the phase-2 PR); GitHub is
+// the source of truth for each label's description and colour.
+{
+  schemaVersion: 2,
+  labels: {
+    use: ["bug", "enhancement", "documentation", "question"],
+    roles: {
+      bug: "semantic-classification",
+      enhancement: "semantic-classification",
+      documentation: "semantic-classification",
+      question: "semantic-classification",
+    },
+    exclusive: ["semantic-classification"],
+  },
+}

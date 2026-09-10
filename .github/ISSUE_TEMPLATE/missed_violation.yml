@@ -1,7 +1,7 @@
 name: Missed boundary violation
 description: An import crosses a boundary it should not, and the tooling reported nothing.
 title: "bug: missed violation — "
-labels: ["bug", "false negative", "needs triage"]
+labels: ["false negative", "needs triage"]
 body:
   - type: markdown
     attributes:
