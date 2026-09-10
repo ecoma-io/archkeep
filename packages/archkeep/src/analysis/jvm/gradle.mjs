@@ -69,6 +69,12 @@
  * below THROWS on the same list (#364's posture, `../source-util.mjs`'s
  * `refuseUnreadTree`), so `nx affected` fails loudly instead of
  * under-selecting on it.
+ *
+ * A settings file that cannot be READ at all — one `readFile` throws on, an
+ * unreadable include file — is refused with a thrown Error naming the file
+ * path, not an empty include list (#847): a missing settings file is fine
+ * (a root may have no reactor), but a settings file whose read fails must
+ * not collapse the reactor to "no includes" silently.
  */
 
 import { normalizePath } from "../manifest-util.mjs";
@@ -380,12 +386,27 @@ function buildGradleModel(workspace) {
   for (const dir of candidateDirs) {
     for (const name of SETTINGS_FILENAMES) {
       const path = normalizePath(dir, name);
-      if (readFile(path) !== null && readFile(path) !== undefined) settingsFiles.push(path);
+      try {
+        if (readFile(path) !== null && readFile(path) !== undefined) settingsFiles.push(path);
+      } catch (cause) {
+        throw new Error(
+          `Gradle settings file '${path}' could not be read: ${cause?.message ?? cause}`,
+          { cause },
+        );
+      }
     }
   }
   for (const settingsPath of settingsFiles) {
     const settingsDir = dirnameOf(settingsPath);
-    const settingsText = readFile(settingsPath);
+    let settingsText;
+    try {
+      settingsText = readFile(settingsPath);
+    } catch (cause) {
+      throw new Error(
+        `Gradle settings file '${settingsPath}' could not be read: ${cause?.message ?? cause}`,
+        { cause },
+      );
+    }
     const settingsParsed = parseGradleSettings(settingsText ?? "");
     if (settingsParsed.reason !== undefined) {
       failures.push({

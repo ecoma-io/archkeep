@@ -730,5 +730,31 @@ rootProject.name = "my-app" // inline comment
 
       assert.throws(() => resolveGradleDependencies(settingsLess), /app\/build\.gradle/);
     });
+
+    it("refuses an unreadable settings file instead of silently producing an empty include list", () => {
+      // #847: a settings file whose readFile throws must not collapse the
+      // reactor to "no includes" — the same silent direction the whole model
+      // exists to refuse. The thrown Error must name the settings file.
+      const unreadable = {
+        projects: [
+          { name: "app", root: "app" },
+          { name: "core", root: "core" },
+        ],
+        filesOf: (projectName) => {
+          const map = { app: ["app/build.gradle"], core: ["core/build.gradle"] };
+          return map[projectName] || [];
+        },
+        readFile: (path) => {
+          if (path === "settings.gradle") throw new Error("EACCES: permission denied");
+          const fixtures = {
+            "app/build.gradle": `dependencies { implementation project(":core") }`,
+            "core/build.gradle": `dependencies { }`,
+          };
+          return fixtures[path] || null;
+        },
+      };
+
+      assert.throws(() => resolveGradleDependencies(unreadable), /settings\.gradle/);
+    });
   });
 });
