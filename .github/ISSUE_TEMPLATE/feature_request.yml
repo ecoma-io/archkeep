@@ -1,7 +1,7 @@
 name: Feature request
 description: Propose a capability — a language, a rule, an editor integration.
 title: "feat: "
-labels: ["enhancement", "needs triage"]
+labels: ["needs triage"]
 body:
   - type: markdown
     attributes:
