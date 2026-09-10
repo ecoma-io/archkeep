@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "tool": {
     "name": "@ecoma-io/archkeep",
-    "version": "0.27.1"
+    "version": "0.28.0"
   },
   "command": "diff",
   "workspace": {
@@ -33,7 +33,7 @@
       "path": "<fixture-root>/.archkeep-graph.json",
       "projects": 3,
       "edges": 2,
-      "toolVersion": "0.27.1",
+      "toolVersion": "0.28.0",
       "provenance": {
         "commit": "1fd51709c377d99a6139891e1200291cf08aede9",
         "remote": null,
