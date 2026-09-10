@@ -1278,3 +1278,96 @@ describe("analyzeGo", () => {
     });
   });
 });
+
+describe("Go — pathological names", () => {
+  // Contract: a Unicode module path and the import spelled against it must
+  // match byte for byte — both sides are the same real string here
+  // (`module example.com/acme/café` ↔ `import "example.com/acme/café/feature"`).
+  // The plausible silent failure: a one-sided normalization (NFC-folding the
+  // go.mod but not the import, or any ASCII-sanitization "fix" in the spirit
+  // of the old `GO_IMPORT_ALIAS` class that silently dropped `import π "…"`)
+  // would make the import reach no module — no edge, no import-site target,
+  // and the project left the graph exactly as a BOM-prefixed go.mod once did
+  // (#221): a first-party crossing reported as none.
+  it("matches a Unicode module path to an import spelled the same way", () => {
+    const workspace = {
+      root: "/w",
+      projects: [
+        { name: "alpha", root: "acme/libs/alpha" },
+        { name: "gamma", root: "acme/apps/gamma" },
+      ],
+      filesOf: (name) =>
+        ({
+          alpha: ["acme/libs/alpha/go.mod"],
+          gamma: ["acme/apps/gamma/go.mod", "acme/apps/gamma/main.go"],
+        })[name] ?? [],
+      readFile: (path) =>
+        ({
+          "acme/libs/alpha/go.mod": "module example.com/acme/café\n",
+          "acme/apps/gamma/go.mod": "module example.com/acme/gamma\n",
+          "acme/apps/gamma/main.go": 'package main\n\nimport "example.com/acme/café/feature"\n',
+        })[path] ?? null,
+    };
+    const { imports, failures } = analyzeGo({
+      sourceFile: "acme/apps/gamma/main.go",
+      text: 'package main\n\nimport "example.com/acme/café/feature"\n',
+      workspace,
+    });
+    expect(failures).toEqual([]);
+    expect(imports[0].resolved).toMatchObject({ target: "alpha", external: false });
+    expect(
+      resolveGoDependencies(workspace.projects, workspace.filesOf, workspace.readFile),
+    ).toEqual([
+      {
+        source: "gamma",
+        target: "alpha",
+        sourceFile: "acme/apps/gamma/main.go",
+        type: "static",
+      },
+    ]);
+  });
+
+  // Contract: a Go module path is a case-sensitive string, exactly like the
+  // filesystem it lives on — `example.com/acme/Lib` and `example.com/acme/lib`
+  // are two different modules on Linux, and each import must reach the project
+  // whose go.mod spells the case it writes. The plausible silent failure: a
+  // case-folding normalization (the PEP 503-style folding the Python resolver
+  // MUST apply to manifest names, applied here by mistake) would collapse the
+  // two module keys into one and silently attribute every import to whichever
+  // project won the map — the other project's edge vanishing with no failure.
+  it("keeps case-distinct module paths in separate projects", () => {
+    const workspace = {
+      root: "/w",
+      projects: [
+        { name: "upper", root: "acme/libs/upper" },
+        { name: "lower", root: "acme/libs/lower" },
+        { name: "gamma", root: "acme/apps/gamma" },
+      ],
+      filesOf: (name) =>
+        ({
+          upper: ["acme/libs/upper/go.mod"],
+          lower: ["acme/libs/lower/go.mod"],
+          gamma: ["acme/apps/gamma/go.mod", "acme/apps/gamma/main.go"],
+        })[name] ?? [],
+      readFile: (path) =>
+        ({
+          "acme/libs/upper/go.mod": "module example.com/acme/Lib\n",
+          "acme/libs/lower/go.mod": "module example.com/acme/lib\n",
+          "acme/apps/gamma/go.mod": "module example.com/acme/gamma\n",
+          "acme/apps/gamma/main.go": "",
+        })[path] ?? null,
+    };
+    const upper = analyzeGo({
+      sourceFile: "acme/apps/gamma/main.go",
+      text: 'package main\n\nimport "example.com/acme/Lib/sub"\n',
+      workspace,
+    });
+    const lower = analyzeGo({
+      sourceFile: "acme/apps/gamma/main.go",
+      text: 'package main\n\nimport "example.com/acme/lib/sub"\n',
+      workspace,
+    });
+    expect(upper.imports[0].resolved).toMatchObject({ target: "upper", external: false });
+    expect(lower.imports[0].resolved).toMatchObject({ target: "lower", external: false });
+  });
+});

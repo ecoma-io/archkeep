@@ -603,3 +603,29 @@ describe("analyzeCSharp — #419 whole-file failure", () => {
     });
   });
 });
+
+describe("CSharp — pathological names", () => {
+  // Contract: a namespace segment may contain any Unicode letter (`\p{L}` in
+  // the segment grammar; C# identifiers admit Unicode letters), and a
+  // `using` of that namespace must reach the project whose declaration
+  // spells the same name. The plausible silent failure: an ASCII-only `\w`
+  // segment class would refuse both sides at once — the `namespace
+  // Café.Domain;` declaration absent from the index AND the `using`
+  // directive absent from the report — so the first-party crossing vanishes
+  // with zero records and zero failures (the classic empty-result-as-shrug,
+  // against the "an unreadable entry refuses, it does not skip" posture).
+  it("resolves a Unicode namespace to its owning project", () => {
+    const workspace = workspaceOf({
+      "libs/shop/domain/Policy.cs": "namespace Café.Domain;\n\npublic sealed class Policy { }\n",
+      "libs/shop/app/Service.cs": "",
+    });
+    const { imports, failures } = analyzeCSharp({
+      sourceFile: "libs/shop/app/Service.cs",
+      text: "using Café.Domain;\n",
+      workspace,
+    });
+    expect(failures).toEqual([]);
+    expect(imports[0].specifier).toBe("Café.Domain");
+    expect(imports[0].resolved).toMatchObject({ target: "shop-domain", external: false });
+  });
+});

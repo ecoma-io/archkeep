@@ -1401,3 +1401,45 @@ describe("Python — silent direction", () => {
     expect(failures[0].reason).toMatch(/truncated/);
   });
 });
+
+describe("Python — pathological names", () => {
+  // Contract: module resolution is case-sensitive, exactly like the
+  // filesystems the packages live on — on Linux `Foo` and `foo` are two
+  // different packages, `import Foo` reaches the project shipping `Foo`,
+  // and `import foo` must be disclosed as external rather than credited to
+  // that project. The plausible silent failure: folding the PEP 503
+  // normalization (which the *manifest* side must apply to distribution
+  // names) into the *module* side would merge the two packages and silently
+  // attribute `import foo` to the `Foo` project — a wrong-project edge with
+  // no failure beside it.
+  it("resolves module names case-sensitively, like the filesystem", () => {
+    const workspace = {
+      root: "/workspace",
+      projects: [
+        { name: "acme", root: "packages/acme" },
+        { name: "app", root: "packages/app" },
+      ],
+      filesOf: (name) =>
+        ({
+          acme: ["packages/acme/src/Foo/__init__.py"],
+          app: ["packages/app/src/app/__init__.py"],
+        })[name] ?? [],
+      readFile: () => null,
+    };
+    const exact = analyzePython({
+      sourceFile: "packages/app/src/app/__init__.py",
+      text: "import Foo\n",
+      workspace,
+    });
+    const folded = analyzePython({
+      sourceFile: "packages/app/src/app/__init__.py",
+      text: "import foo\n",
+      workspace,
+    });
+    expect(exact.imports[0].resolved).toMatchObject({ target: "acme", external: false });
+    expect(exact.failures).toEqual([]);
+    expect(folded.imports[0].resolved).toMatchObject({ target: null, external: true });
+    expect(folded.failures).toHaveLength(1);
+    expect(folded.failures[0]).toMatchObject({ external: true });
+  });
+});
