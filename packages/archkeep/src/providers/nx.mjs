@@ -34,6 +34,17 @@
  *   afterwards (`../../cli.mjs`, via `annotateMFERemotes` and
  *   `annotatePackageFacts`), read from disk the way upstream reads them — a
  *   provider that filled them in would only be overwritten.
+ *
+ * The nodes that graph carries are validated at this seam, not trusted. Nx's
+ * own contract is narrow — `type` exactly one of `app`/`e2e`/`lib`, `data` an
+ * object with a string `root` and, when present, a `tags` array of non-empty
+ * strings — and every one of those fields is read verbatim by the rules layer
+ * (`../rules/specifiers.mjs`'s root mappings, `../rules/index.mjs`'s node-kind
+ * filter, `../rules/tags.mjs`'s constraint matching), so a drifted node is
+ * refused here by project name rather than judged into a wrong analysis: a
+ * rootless project silently drops out of every path lookup, a wrong kind
+ * silently skips its checks, a scalar `tags` silently matches or misses every
+ * tag row. See `readProjectGraph` below for the refusal itself.
  */
 
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -106,6 +117,81 @@ function nxCli({ resolveNx = () => require.resolve("nx/package.json") } = {}) {
 }
 
 /**
+ * Refuses any project node whose shape drifted from what Nx emits, by name.
+ *
+ * The command's output reaches `evaluate()` with no shape work in between, and
+ * every node field is read verbatim downstream: `data.root` by
+ * `../rules/specifiers.mjs`'s `createProjectRootMappings` (a missing root maps
+ * the project to `undefined`, and it silently drops out of every
+ * path-to-project lookup), `type` by `../rules/index.mjs`'s
+ * `isProjectGraphProjectNode` (anything outside `app`/`e2e`/`lib` is judged as
+ * an external node, silently skipping its boundary checks), `data.tags` by
+ * `../rules/tags.mjs` (a scalar silently matches or misses every constraint
+ * row). All four shapes are states `nx graph` does not emit — Nx 23.2.0's own
+ * `ProjectGraphProjectNode` carries exactly `type: "app"|"e2e"|"lib"` and a
+ * `data` configuration with a string `root` — so one here can only mean an Nx
+ * version drift or a defective producer, and it is refused, not guessed at:
+ * an unreadable entry refuses, it does not skip.
+ *
+ * @param {Record<string, object>} nodes The `graph.nodes` map as parsed.
+ * @throws {Error} when a node is not an object, its `type` is not one of
+ *   `app`/`e2e`/`lib`, its `data` is not an object, its `data.root` is not a
+ *   string, or its `data.tags` is present but not an array of non-empty
+ *   strings. The error names the project and the offending field.
+ */
+function validateProjectNodes(nodes) {
+  for (const [name, node] of Object.entries(nodes)) {
+    if (typeof node !== "object" || node === null) {
+      throw new Error(
+        `archkeep: \`nx graph\` node '${name}' is not an object — expected a project node ` +
+          `with type, name and data as Nx emits it.`,
+      );
+    }
+    if (node.type !== "app" && node.type !== "e2e" && node.type !== "lib") {
+      throw new Error(
+        `archkeep: \`nx graph\` node '${name}' has type "${node.type}" — expected one of ` +
+          `"app", "e2e", "lib". Anything else is judged as an external node and its boundary ` +
+          `checks are silently skipped.`,
+      );
+    }
+    if (typeof node.data !== "object" || node.data === null) {
+      throw new Error(
+        `archkeep: \`nx graph\` node '${name}' has no data object — expected data with a ` +
+          `workspace-relative root, and tags when the project carries any.`,
+      );
+    }
+    if (typeof node.data.root !== "string") {
+      throw new Error(
+        `archkeep: \`nx graph\` node '${name}' has no string data.root — expected the ` +
+          `workspace-relative project root as a string ("" is the workspace root). A rootless ` +
+          `project silently drops out of every path-to-project lookup and its imports are ` +
+          `judged with no owning project.`,
+      );
+    }
+    if (node.data.tags !== undefined) {
+      if (!Array.isArray(node.data.tags)) {
+        const got = node.data.tags === null ? "null" : typeof node.data.tags;
+        throw new Error(
+          `archkeep: \`nx graph\` node '${name}' has data.tags of type ${got} — expected an ` +
+            `array of non-empty strings. Tag rows are matched against this list verbatim, so a ` +
+            `scalar silently matches or misses every row.`,
+        );
+      }
+      for (const [index, tag] of node.data.tags.entries()) {
+        if (typeof tag !== "string" || tag === "") {
+          const got = tag === "" ? "an empty string" : `a ${typeof tag}`;
+          throw new Error(
+            `archkeep: \`nx graph\` node '${name}' has data.tags[${index}] that is not a ` +
+              `non-empty string (got ${got}) — expected an array of non-empty strings. A ` +
+              `non-string entry silently matches or misses every tag row it is compared with.`,
+          );
+        }
+      }
+    }
+  }
+}
+
+/**
  * The Nx project graph for `workspaceRoot`, in the shape `evaluate()` consumes.
  *
  * `nx graph --file=<json>` emits `{ graph: { nodes, dependencies } }` and no
@@ -133,6 +219,12 @@ function nxCli({ resolveNx = () => require.resolve("nx/package.json") } = {}) {
  * agree on the same declared object rather than one merging onto a default
  * the other would have refused.
  *
+ * Each node in that graph is also validated against Nx's own contract —
+ * `type` one of `app`/`e2e`/`lib`, `data` an object, `data.root` a string,
+ * `data.tags` (when present) an array of non-empty strings — and a drifted
+ * node is refused by project name (`validateProjectNodes` below) rather than
+ * forwarded to rules that read it verbatim and would silently misjudge it.
+ *
  * @param {string} workspaceRoot
  * @param {{ run?: typeof runProcess, resolveNx?: () => string,
  *   readLayout?: typeof readWorkspaceLayout }} [io]
@@ -140,6 +232,9 @@ function nxCli({ resolveNx = () => require.resolve("nx/package.json") } = {}) {
  *   `workspaceLayout` read (see `../options.mjs`).
  * @returns {object} `{ nodes, dependencies }`, plus `workspaceLayout` when
  *   `nx.json` declares a complete one.
+ * @throws {Error} when the emitted graph carries no `graph.nodes` map, or any
+ *   node drifted from Nx's own shape — the error names the project and the
+ *   field that refused it.
  */
 export function readProjectGraph(
   workspaceRoot,
@@ -150,12 +245,13 @@ export function readProjectGraph(
   try {
     run(process.execPath, [nxCli({ resolveNx }), "graph", `--file=${file}`], workspaceRoot);
     const { graph } = JSON.parse(readFileSync(file, "utf8"));
-    if (!graph?.nodes) {
+    if (!graph?.nodes || typeof graph.nodes !== "object" || Array.isArray(graph.nodes)) {
       throw new Error(
-        `archkeep: \`nx graph\` produced no \`graph.nodes\` in ${file} — ` +
+        `archkeep: \`nx graph\` produced no \`graph.nodes\` object in ${file} — ` +
           `nothing can be judged against a graph with no projects in it`,
       );
     }
+    validateProjectNodes(graph.nodes);
     const workspaceLayout = requireCompleteWorkspaceLayout(readLayout(workspaceRoot));
     return workspaceLayout === null ? graph : { ...graph, workspaceLayout };
   } finally {

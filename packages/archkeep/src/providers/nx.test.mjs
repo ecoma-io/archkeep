@@ -151,3 +151,98 @@ describe("merging nx.json's workspaceLayout onto the graph", () => {
     expect(result).toThrow(/workspaceLayout declares libsDir but is missing appsDir/);
   });
 });
+
+describe("refusing drifted project nodes", () => {
+  // `nx graph --file=` output is forwarded to the rules layer unmodified, and
+  // every node field is read verbatim there (`data.root` →
+  // `../rules/specifiers.mjs`'s `createProjectRootMappings`, `type` →
+  // `../rules/index.mjs`'s project-node filter, `data.tags` →
+  // `../rules/tags.mjs`). Nx 23.2.0's own contract — `type` exactly one of
+  // `app`/`e2e`/`lib`, `data` a configuration with a string `root` and, when
+  // present, a `tags` array — is what each mutated node below drifts from. The
+  // refusal must name the drifter: a bare shape error deep in evaluation would
+  // name neither the project nor the field, exactly the silent direction this
+  // suite exists to pin.
+  const healthy = {
+    name: "alpha",
+    type: "lib",
+    data: { root: "libs/alpha", tags: ["layer:domain"] },
+  };
+  const runWritingGraph = (nodes) => (_file, args) => {
+    const target = args.find((arg) => arg.startsWith("--file="))?.slice("--file=".length);
+    writeFileSync(target, JSON.stringify({ graph: { nodes, dependencies: {} } }));
+    return "";
+  };
+  const drift = (mutated) => ({
+    alpha: mutated,
+    beta: { name: "beta", type: "lib", data: { root: "libs/beta", tags: [] } },
+  });
+
+  it("refuses a node whose type is not one of app, lib, e2e, naming the project", () => {
+    expect(() =>
+      readProjectGraph(root, { run: runWritingGraph(drift({ ...healthy, type: "application" })) }),
+    ).toThrow(/node 'alpha' has type "application" .* expected one of "app", "e2e", "lib"/);
+  });
+
+  it("refuses a node whose data is missing, naming the project", () => {
+    const { data, ...withoutData } = healthy;
+    void data;
+    expect(() => readProjectGraph(root, { run: runWritingGraph(drift(withoutData)) })).toThrow(
+      /node 'alpha' has no data object/,
+    );
+  });
+
+  it("refuses a node whose data.root is missing, naming the project", () => {
+    expect(() =>
+      readProjectGraph(root, {
+        run: runWritingGraph(drift({ ...healthy, data: { tags: ["layer:domain"] } })),
+      }),
+    ).toThrow(/node 'alpha' has no string data\.root/);
+  });
+
+  it("refuses a node whose data.tags is a string, not an array, naming the project", () => {
+    expect(() =>
+      readProjectGraph(root, {
+        run: runWritingGraph(
+          drift({ ...healthy, data: { root: "libs/alpha", tags: "layer:domain" } }),
+        ),
+      }),
+    ).toThrow(
+      /node 'alpha' has data\.tags of type string .* expected an array of non-empty strings/,
+    );
+  });
+
+  it("refuses a node whose data.tags carries a non-string entry, naming it", () => {
+    expect(() =>
+      readProjectGraph(root, {
+        run: runWritingGraph(
+          drift({ ...healthy, data: { root: "libs/alpha", tags: ["layer:domain", 7] } }),
+        ),
+      }),
+    ).toThrow(/node 'alpha' has data\.tags\[1\].*got a number/);
+  });
+
+  it("refuses a node whose data.tags carries an empty string entry, naming it", () => {
+    expect(() =>
+      readProjectGraph(root, {
+        run: runWritingGraph(
+          drift({ ...healthy, data: { root: "libs/alpha", tags: ["layer:domain", ""] } }),
+        ),
+      }),
+    ).toThrow(/node 'alpha' has data\.tags\[1\].*got an empty string/);
+  });
+
+  it("refuses a node that is not an object, naming the project", () => {
+    expect(() => readProjectGraph(root, { run: runWritingGraph(drift(null)) })).toThrow(
+      /node 'alpha' is not an object/,
+    );
+  });
+
+  it("refuses a graph.nodes that is not a project map, rather than judging an empty one", () => {
+    // `Object.entries([])` is empty, so an array would flow downstream as "no
+    // projects" — the same silent emptiness the no-`graph.nodes` guard refuses.
+    expect(() => readProjectGraph(root, { run: runWritingGraph([]) })).toThrow(
+      /no `graph\.nodes` object/,
+    );
+  });
+});
