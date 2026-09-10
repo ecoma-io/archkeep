@@ -121,7 +121,6 @@ describe("buildProvenanceGraph", () => {
       records: [],
       byId: new Map(),
       knownFitness: new Set(),
-      fileAttribution: withoutAttribution,
       decisionLifecycle: [],
     });
 
@@ -138,7 +137,6 @@ describe("buildProvenanceGraph", () => {
       records: [],
       byId: new Map(),
       knownFitness: new Set(),
-      fileAttribution: withoutAttribution,
       decisionLifecycle: [],
     });
 
@@ -164,7 +162,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
@@ -188,7 +185,6 @@ describe("buildProvenanceGraph", () => {
       records: [],
       byId: new Map(),
       knownFitness: new Set(),
-      fileAttribution: withoutAttribution,
       decisionLifecycle: [],
     });
 
@@ -208,7 +204,6 @@ describe("buildProvenanceGraph", () => {
       records: [],
       byId: new Map(),
       knownFitness: new Set(),
-      fileAttribution: withoutAttribution,
       decisionLifecycle: [],
     });
 
@@ -233,7 +228,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withAttribution,
       decisionLifecycle: makeLifecycle(withAttribution),
     });
 
@@ -259,7 +253,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
@@ -277,7 +270,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withAttribution,
       decisionLifecycle: makeLifecycle(withAttribution),
     });
 
@@ -297,7 +289,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
@@ -316,7 +307,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
@@ -347,7 +337,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
@@ -366,7 +355,6 @@ describe("buildProvenanceGraph", () => {
       records: [],
       byId: new Map(),
       knownFitness: new Set(),
-      fileAttribution: withoutAttribution,
       decisionLifecycle: [],
     });
 
@@ -392,7 +380,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withAttribution,
       decisionLifecycle: makeLifecycle(withAttribution),
     });
 
@@ -408,7 +395,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withAttribution,
       decisionLifecycle: makeLifecycle(withAttribution),
     });
 
@@ -426,7 +412,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
@@ -452,7 +437,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withAttribution,
       decisionLifecycle: makeLifecycle(withAttribution),
     });
 
@@ -522,7 +506,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
@@ -563,7 +546,6 @@ describe("buildProvenanceGraph", () => {
       records: cycleRecords,
       byId: cycleById,
       knownFitness: new Set(),
-      fileAttribution: withoutAttribution,
       decisionLifecycle: cycleLifecycle,
     });
 
@@ -588,7 +570,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
