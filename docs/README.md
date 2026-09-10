@@ -57,7 +57,7 @@ know which exact page owns a topic.
 
 **Develop** — the inside, for contributors:
 
-- [Architecture](development/architecture.md) · [testing](development/testing.md) · [verification](development/verification.md) · [release](development/release.md) — full [development index](#development)
+- [Architecture](development/architecture.md) · [testing](development/testing.md) · [verification](development/verification.md) · [release](development/release.md) · [hardening baseline](hardening/upgrade-baseline.md) — full [development index](#development)
 
 **Decisions** — why the tool is the way it is:
 
@@ -208,14 +208,16 @@ decided rather than summarized into them.
 
 ## Development
 
-| page                                                       | what it answers                                                     |
-| ---------------------------------------------------------- | ------------------------------------------------------------------- |
-| [architecture.md](development/architecture.md)             | One check, end to end, and why the layers are cut where they are    |
-| [adding-a-language.md](development/adding-a-language.md)   | The full path for a new language, in the order that keeps it honest |
-| [adding-integration.md](development/adding-integration.md) | How a new integration extends the core, and the contract it holds   |
-| [repository.md](development/repository.md)                 | The eight packages, plain ESM, gate scripts, CI                     |
-| [release.md](development/release.md)                       | How a version reaches the people who use it                         |
-| [testing.md](development/testing.md)                       | Which suite proves what, and which failure each tier is for         |
+| page                                                           | what it answers                                                                                                                                                       |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [architecture.md](development/architecture.md)                 | One check, end to end, and why the layers are cut where they are                                                                                                      |
+| [adding-a-language.md](development/adding-a-language.md)       | The full path for a new language, in the order that keeps it honest                                                                                                   |
+| [adding-integration.md](development/adding-integration.md)     | How a new integration extends the core, and the contract it holds                                                                                                     |
+| [repository.md](development/repository.md)                     | The eight packages, plain ESM, gate scripts, CI                                                                                                                       |
+| [release.md](development/release.md)                           | How a version reaches the people who use it                                                                                                                           |
+| [testing.md](development/testing.md)                           | Which suite proves what, and which failure each tier is for                                                                                                           |
+| [hardening/upgrade-baseline.md](hardening/upgrade-baseline.md) | The measured 2026-09 baseline: toolchain, gate outcomes, suite and coverage counts, bench rows, readiness reading — every number tied to the command that produced it |
+| [hardening/hardening-ledger.md](hardening/hardening-ledger.md) | The hardening findings register: what the audit observed, where, and each row's disposition — fix PR, deferred issue, or unverified probe                             |
 
 Those pages assume you can already build and run the repository. The setup, the
 command list, the commit format and how a pull request lands are
@@ -251,6 +253,7 @@ allowed to say it". That table:
 | `docs/reference/discovery.md`                                                         | The `discover` command: flags, exit codes, the additive JSON envelope, the proposal and its one write door (`--write-intent`)                                                                                                                               |
 | `docs/reference/gate-attestation.md`                                                  | The external blocking-gate evidence: the schema an outside repository publishes, what `verify-gate-attestation.mjs` refuses, and why a fixture is not adoption                                                                                              |
 | `docs/development/`                                                                   | How it works inside, and how to extend it                                                                                                                                                                                                                   |
+| `docs/hardening/`                                                                     | The measured record of the hardening program: the dated upgrade baseline — which owns every baseline number, so no other page restates one — and the findings ledger registering what the audit observed, where, and what was decided about it              |
 | `docs/skills/`                                                                        | Agent architecture skills: overview, installation, hosts, the Claude Code and Codex plugins, authoring, versioning                                                                                                                                          |
 | `CONTRIBUTING.md`                                                                     | The contribution bar, the commands, hooks, commits, review, release                                                                                                                                                                                         |
 | `SECURITY.md`                                                                         | The threat model — and here a silent gate is a security defect, so read it before touching `scripts/`                                                                                                                                                       |
