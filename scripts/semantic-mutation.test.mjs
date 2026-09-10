@@ -15,8 +15,10 @@ import {
   anySurvived,
   applyMutationAndRun,
   evaluateMutations,
+  reverifySurvivors,
   signalGuard,
   testFileFor,
+  verdictFromSpawn,
 } from "./semantic-mutation.mjs";
 
 // --- testFileFor: the source→test colocated mapping ---
@@ -178,4 +180,80 @@ test("restore runs even when it has nothing to restore — guards are idempotent
   handler();
   assert.equal(calls, 2);
   assert.equal(exited, 2);
+});
+
+// --- reverifySurvivors: the red-direction guard (#860) ---
+//
+// The colocated file is the fast judge, not the complete one: a covering
+// test can live in an integration file the colocated mapping never names.
+// A mutant the full package suite kills must therefore NOT be reported as
+// a survivor — before reverifySurvivors existed, that case passed
+// silently and produced exactly the false finding #860 records.
+
+test("a mutant the full suite kills is corrected from SURVIVED to killed", () => {
+  const results = [{ name: "false-survivor", killed: false, durationMs: 100 }];
+  reverifySurvivors(results, (name) => {
+    assert.equal(name, "false-survivor");
+    return { killed: true, durationMs: 300 };
+  });
+  assert.equal(results[0].killed, true, "full-suite kill must flip the verdict");
+  assert.equal(results[0].fullSuiteVerified, true);
+  assert.equal(results[0].durationMs, 400, "durations accumulate across passes");
+});
+
+test("genuine survivors, dirty skips, and already-killed mutants are not touched", () => {
+  const results = [
+    { name: "killed-colocated", killed: true, durationMs: 5 },
+    { name: "genuine-survivor", killed: false, durationMs: 200 },
+    { name: "skipped-dirty", killed: false, durationMs: 0 },
+  ];
+  const judged = [];
+  reverifySurvivors(results, (name) => {
+    judged.push(name);
+    return { killed: false, durationMs: 50 };
+  });
+  // Only the colocated survivor was re-judged — killed and skipped were not.
+  assert.deepEqual(judged, ["genuine-survivor"]);
+  assert.equal(results[0].fullSuiteVerified, undefined);
+  assert.equal(results[1].killed, false, "a mutant surviving both passes is a real finding");
+  assert.equal(results[1].fullSuiteVerified, undefined);
+  assert.equal(results[2].durationMs, 0);
+});
+
+test("a timed-out full-suite verdict never flips a survivor to killed", () => {
+  const results = [{ name: "unjudged", killed: false, durationMs: 100 }];
+  reverifySurvivors(results, () => ({
+    killed: false,
+    durationMs: 600_000,
+    error: "full suite timed out (signal SIGTERM)",
+  }));
+  assert.equal(
+    results[0].killed,
+    false,
+    "a timed-out suite judges nothing — killed would hide the mutant's true fate",
+  );
+  assert.equal(results[0].fullSuiteVerified, undefined);
+  assert.match(results[0].error, /timed out/, "the inconclusive verdict must be loud, not silent");
+});
+
+// --- verdictFromSpawn: only a numeric non-zero exit kills (#860's silent direction) ---
+
+test("spawnSync timeout (status null) is inconclusive, never a kill", () => {
+  const verdict = verdictFromSpawn({ status: null, signal: "SIGTERM" });
+  assert.equal(verdict.killed, false, "status null !== 0 must NOT classify as killed");
+  assert.match(verdict.error, /timed out/);
+  assert.match(verdict.error, /SIGTERM/);
+});
+
+test("spawn failure (child.error) is inconclusive, never a kill", () => {
+  const verdict = verdictFromSpawn({ status: null, signal: null, error: new Error("ENOENT") });
+  assert.equal(verdict.killed, false);
+  assert.match(verdict.error, /spawn failed/);
+  assert.match(verdict.error, /ENOENT/);
+});
+
+test("a numeric non-zero exit still kills; exit zero is the only survivor verdict", () => {
+  assert.deepEqual(verdictFromSpawn({ status: 1, signal: null }), { killed: true });
+  assert.deepEqual(verdictFromSpawn({ status: 2, signal: null }), { killed: true });
+  assert.deepEqual(verdictFromSpawn({ status: 0, signal: null }), { killed: false });
 });

@@ -11,11 +11,17 @@
  *
  * Each mutation is a `{ name, file, find, replace }` manifest entry.
  * `find` must occur exactly once in the current source; multiple hits
- * or zero hits are loud failures. After applying the mutation, the
- * harness runs the colocated test file (`foo.test.mjs` beside
- * `foo.mjs`) through vitest. A non-zero exit means the test suite
- * caught the inversion (mutant killed). Exit 0 means the mutant
- * survived — the finding.
+ * or zero hits are loud failures. Verification is two-pass: the
+ * colocated test file (`foo.test.mjs` beside `foo.mjs`) judges each
+ * mutant first — only a numeric non-zero exit kills it. A timed-out or
+ * failed spawn is a loud INCONCLUSIVE, never a silent kill: classifying
+ * it as killed would hide a genuine survivor, the exact failure class
+ * this harness exists to catch. A mutant that survives the
+ * colocated pass is re-judged by the FULL package suite, because the
+ * covering test may live in an integration or provider file the
+ * colocated mapping never names (#860). Only mutants that survive
+ * both passes are reported as findings — exit 0 overall means every
+ * mutant died somewhere.
  *
  * File restoration uses `git checkout --`, which requires a clean
  * working tree for the mutated file. Files with uncommitted changes
@@ -174,6 +180,57 @@ export function anySurvived(results) {
   return results.some((r) => !r.killed);
 }
 
+/**
+ * Converts a spawnSync result into an EXPLICIT suite verdict. Only a
+ * numeric non-zero exit kills the mutant: `status: null` means the
+ * child was signalled away (timeout, external kill) and `child.error`
+ * means the suite never even started — classifying either as a kill
+ * would silently hide a genuine survivor, the exact failure class this
+ * harness exists to catch. Both surface as a loud inconclusive instead.
+ *
+ * @param {{ status: number | null, signal: string | null, error?: Error }} child
+ * @returns {{ killed: boolean, error?: string }}
+ */
+export function verdictFromSpawn(child) {
+  if (child.error) {
+    return { killed: false, error: `spawn failed: ${child.error.message}` };
+  }
+  if (child.status === null) {
+    return { killed: false, error: `timed out (signal ${child.signal})` };
+  }
+  return { killed: child.status !== 0 };
+}
+
+/**
+ * Re-verifies mutants that survived the colocated suite against the full
+ * package suite. A mutant whose colocated test file does not cover the
+ * modified path (e.g. an integration test in a different file) may still
+ * be killed by the package's complete test suite — only mutants that
+ * survive BOTH passes are genuine findings. Dirty mutants (durationMs =
+ * 0, skipped) and already-killed mutants are left untouched.
+ *
+ * @param {{ name: string, killed: boolean, durationMs: number, error?: string, fullSuiteVerified?: boolean }[]} results
+ *   mutated in-place: `killed` is set to true and `fullSuiteVerified`
+ *   is stamped when the full package suite exits non-zero; an
+ *   inconclusive full-suite verdict (timeout, spawn failure) populates
+ *   `error` and leaves `killed` untouched — the mutant's fate stays
+ *   unjudged, loudly.
+ * @param {(name: string) => { killed: boolean, durationMs: number, error?: string }} runFullSuite
+ */
+export function reverifySurvivors(results, runFullSuite) {
+  for (const result of results) {
+    if (result.killed || result.durationMs === 0) continue;
+    const { killed, durationMs, error } = runFullSuite(result.name);
+    if (error) {
+      result.error = error;
+    } else if (killed) {
+      result.killed = true;
+      result.durationMs += durationMs;
+      result.fullSuiteVerified = true;
+    }
+  }
+}
+
 // ─── IO layer ──────────────────────────────────────────────────────
 
 /**
@@ -281,6 +338,7 @@ function main() {
   console.log(`\x1b[1mSemantic mutation harness — ${MUTATIONS.length} mutants\x1b[0m\n`);
 
   const byName = new Map(MUTATIONS.map((m) => [m.name, m]));
+  const vitestBin = resolve(root, "node_modules/.bin/vitest");
   const results = evaluateMutations(MUTATIONS, (name) => {
     const mutation = byName.get(name);
     const abs = resolve(root, mutation.file);
@@ -301,7 +359,6 @@ function main() {
 
     const start = performance.now();
     try {
-      const vitestBin = resolve(root, "node_modules/.bin/vitest");
       // Coverage stays OFF for a targeted run: the config's global
       // thresholds are measured over the whole suite, so a single test
       // file would fail them on coverage alone and every mutant would
@@ -313,12 +370,32 @@ function main() {
         env: { ...process.env, FORCE_COLOR: "1" },
       });
       const durationMs = Math.round(performance.now() - start);
-      return { killed: child.status !== 0, durationMs };
+      const verdict = verdictFromSpawn(child);
+      if (verdict.error) verdict.error = `colocated suite ${verdict.error}`;
+      return { ...verdict, durationMs };
     } finally {
       // Restore to HEAD, always.
       spawnSync("git", ["checkout", "--", mutation.file], { cwd: root });
       inFlight.delete(mutation.file);
     }
+  });
+
+  // Survivor re-verification: the colocated file is the FAST judge, not
+  // the complete one — a covering test may live in an integration or
+  // provider file the colocated mapping never names (#860). Survivors
+  // are rare, so the full package suite only pays on that rare path:
+  // only mutants that survive BOTH passes are reported as findings.
+  reverifySurvivors(results, () => {
+    const start = performance.now();
+    const child = spawnSync(vitestBin, ["run", "--coverage.enabled=false"], {
+      cwd: archkeepDir,
+      timeout: 600_000,
+      env: { ...process.env, FORCE_COLOR: "1" },
+    });
+    const durationMs = Math.round(performance.now() - start);
+    const verdict = verdictFromSpawn(child);
+    if (verdict.error) verdict.error = `full suite ${verdict.error}`;
+    return { ...verdict, durationMs };
   });
 
   printReport(results);
@@ -332,15 +409,18 @@ function main() {
  * Coloured report: each mutant's name, status (killed / survived /
  * skipped), and duration. Survivors are named explicitly.
  *
- * @param {{ name: string, killed: boolean, durationMs: number, error?: string }[]} results
+ * @param {{ name: string, killed: boolean, durationMs: number, error?: string, fullSuiteVerified?: boolean }[]} results
  */
 function printReport(results) {
   for (const r of results) {
     const time = `${r.durationMs}ms`;
     if (r.error) {
-      console.log(`  \x1b[33m⚠ ${r.name}\x1b[0m  error: ${r.error}`);
+      console.log(
+        `  \x1b[33m⚠ ${r.name}\x1b[0m  ${r.killed ? "error" : "INCONCLUSIVE"}: ${r.error}`,
+      );
     } else if (r.killed) {
-      console.log(`  \x1b[32m✔ ${r.name}\x1b[0m  killed (${time})`);
+      const via = r.fullSuiteVerified ? " — killed by full package suite" : "";
+      console.log(`  \x1b[32m✔ ${r.name}\x1b[0m  killed (${time})${via}`);
     } else if (r.durationMs === 0) {
       console.log(`  \x1b[33m⚠ ${r.name}\x1b[0m  skipped (dirty)`);
     } else {
