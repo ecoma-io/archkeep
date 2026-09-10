@@ -530,3 +530,43 @@ describe("analyzeJava — #419 whole-file failure", () => {
     });
   });
 });
+
+describe("Java — pathological names", () => {
+  // Contract: a package segment may contain any Unicode letter (`\p{L}` in
+  // the segment grammar; JLS §3.8 admits Unicode letters in identifiers), so
+  // `import café.util.Util` is legal Java and must reach the project whose
+  // package declaration spells the same name. The plausible silent failure:
+  // an ASCII-only `\w` segment class — the same regression shape the Go
+  // resolver's import-alias grammar once had, where `import π "…"` was
+  // dropped silently — would refuse the whole dotted name: the site would
+  // vanish with no record and no failure, and a first-party crossing would
+  // read as none.
+  it("resolves a Unicode package segment to its owning project", () => {
+    const workspace = {
+      root: "/workspace",
+      projects: [
+        { name: "acme", root: "packages/acme" },
+        { name: "app", root: "packages/app" },
+      ],
+      filesOf: (name) =>
+        ({
+          acme: ["packages/acme/src/main/java/café/util/Util.java"],
+          app: ["packages/app/src/main/java/com/app/App.java"],
+        })[name] ?? [],
+      readFile: (path) =>
+        ({
+          "packages/acme/src/main/java/café/util/Util.java":
+            "package café.util;\n\npublic final class Util {}\n",
+          "packages/app/src/main/java/com/app/App.java": "",
+        })[path] ?? null,
+    };
+    const { imports, failures } = analyzeJava({
+      sourceFile: "packages/app/src/main/java/com/app/App.java",
+      text: "package com.app;\n\nimport café.util.Util;\n",
+      workspace,
+    });
+    expect(failures).toEqual([]);
+    expect(imports[0].specifier).toBe("café.util.Util");
+    expect(imports[0].resolved).toMatchObject({ target: "acme", external: false });
+  });
+});

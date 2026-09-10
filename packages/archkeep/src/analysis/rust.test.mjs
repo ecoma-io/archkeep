@@ -1281,3 +1281,51 @@ describe("unterminated `use` — the #419 malformation", () => {
     });
   });
 });
+
+describe("Rust — pathological names", () => {
+  // Contract: Cargo crate names are case-sensitive identifiers — `MyCrate`
+  // and `mycrate` are two different crates and a workspace may legally hold
+  // both (cargo refuses only an *exact* duplicate). Each `use` must reach the
+  // project whose manifest declares the case it spells. The plausible silent
+  // failure: a case-folding normalization beside the existing `-`/`.`-only
+  // folding in `crateIdentifier` would collapse the two map keys into one and
+  // silently attribute both spellings to whichever project iterated last —
+  // one project's edges would point at the wrong target, with no failure.
+  it("resolves case-distinct crate names each to their own project", () => {
+    const workspace = {
+      root: "/w",
+      projects: [
+        { name: "upper", root: "crates/upper" },
+        { name: "lower", root: "crates/lower" },
+        { name: "app", root: "apps/app" },
+      ],
+      filesOf: (name) =>
+        ({
+          upper: ["crates/upper/Cargo.toml"],
+          lower: ["crates/lower/Cargo.toml"],
+          app: ["apps/app/Cargo.toml", "apps/app/src/main.rs"],
+        })[name] ?? [],
+      readFile: (path) =>
+        ({
+          "crates/upper/Cargo.toml": '[package]\nname = "MyCrate"\n',
+          "crates/lower/Cargo.toml": '[package]\nname = "mycrate"\n',
+          "apps/app/Cargo.toml": '[package]\nname = "app"\n',
+          "apps/app/src/main.rs": "",
+        })[path] ?? null,
+    };
+    const upper = analyzeRust({
+      sourceFile: "apps/app/src/main.rs",
+      text: "use MyCrate::kernel;\n",
+      workspace,
+    });
+    const lower = analyzeRust({
+      sourceFile: "apps/app/src/main.rs",
+      text: "use mycrate::kernel;\n",
+      workspace,
+    });
+    expect(upper.imports[0].resolved).toMatchObject({ target: "upper", external: false });
+    expect(lower.imports[0].resolved).toMatchObject({ target: "lower", external: false });
+    expect(upper.failures).toEqual([]);
+    expect(lower.failures).toEqual([]);
+  });
+});

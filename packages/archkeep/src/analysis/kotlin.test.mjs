@@ -370,3 +370,42 @@ describe("Kotlin — silent direction", () => {
     expect(failures[0].reason).toMatch(/truncated/);
   });
 });
+
+describe("Kotlin — pathological names", () => {
+  // Contract: Kotlin identifiers admit Unicode letters (`\p{L}` in the
+  // segment grammar), so `import café.util.Kernel` is legal Kotlin and must
+  // reach the project whose package declaration spells the same name. The
+  // plausible silent failure is the ASCII-`\w` regression class (the shape
+  // the Go resolver's old import-alias grammar had, dropping `import π "…"`
+  // with no record): a segment class that stops at the first non-ASCII
+  // letter would drop the whole import site — no target, no failure — and a
+  // first-party crossing would read as none.
+  it("resolves a Unicode package segment to its owning project", () => {
+    const workspace = {
+      root: "/workspace",
+      projects: [
+        { name: "acme", root: "packages/acme" },
+        { name: "app", root: "packages/app" },
+      ],
+      filesOf: (name) =>
+        ({
+          acme: ["packages/acme/src/main/kotlin/café/util/Kernel.kt"],
+          app: ["packages/app/src/main/kotlin/com/app/App.kt"],
+        })[name] ?? [],
+      readFile: (path) =>
+        ({
+          "packages/acme/src/main/kotlin/café/util/Kernel.kt":
+            "package café.util\n\nclass Kernel\n",
+          "packages/app/src/main/kotlin/com/app/App.kt": "",
+        })[path] ?? null,
+    };
+    const { imports, failures } = analyzeKotlin({
+      sourceFile: "packages/app/src/main/kotlin/com/app/App.kt",
+      text: "package com.app\n\nimport café.util.Kernel\n",
+      workspace,
+    });
+    expect(failures).toEqual([]);
+    expect(imports[0].specifier).toBe("café.util.Kernel");
+    expect(imports[0].resolved).toMatchObject({ target: "acme", external: false });
+  });
+});
