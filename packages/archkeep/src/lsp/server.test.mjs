@@ -873,6 +873,77 @@ describe("keeping up with the buffer and with the tree", () => {
 
     expect(build).toBe(1);
   });
+  it("publishes, in order, when a watched-file change and a text change interleave", async () => {
+    // The serial message queue is the mechanism that stops "the editor would
+    // then show whichever finished last" (`server.mjs`'s queue comment). A
+    // watched-file invalidation and a `didChange` are two messages arriving
+    // in the same window: the queue must run the invalidation's re-diagnosis
+    // to completion — publishing the verdict computed from the text the
+    // document still had, against the new config — BEFORE the `didChange`'s
+    // own diagnosis runs. If the invalidation ran outside the queue (a
+    // fire-and-forget re-diagnosis), it would resolve the shared
+    // currentResources promise after the `didChange` has already stored the
+    // new text, so its publish would reflect text it was never given — the
+    // out-of-order publish this queue exists to prevent.
+    //
+    // Red direction: removing the `await` from the `invalidateAndRepublish()`
+    // call in the `workspace/didChangeWatchedFiles` handler lets the
+    // invalidation race the next queued message. The mock diagnosis is
+    // synchronous, but the invalidation's `currentResources` promise still
+    // resolves after the `didChange` has run — by which time the buffer
+    // holds the new text. The middle publish then carries the newest text
+    // instead of the text the invalidation actually saw, and this test
+    // fails on the second assertion.
+    diagnoseDocument.mockImplementation(({ text, config }) => {
+      const { revision } = /** @type {any} */ (config);
+      return {
+        analyzed: true,
+        diagnostics: [{ message: `rev${revision}:${text.trim()}` }],
+      };
+    });
+    // A real config read is I/O: it lands in a later turn of the event loop
+    // than the message that triggered it. `setTimeout(0)` models that gap
+    // deterministically — it fires after every pending microtask, so the
+    // invalidation's diagnosis cannot overtake a message dispatched behind
+    // it in the serial queue.
+    const readConfig = async (_root, revision) => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return { depConstraints: [], options: {}, revision };
+    };
+    const { server, sent } = session({ readConfig });
+    await server.handle(initialize());
+    await server.handle(didOpen("package inner\n"));
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "workspace/didChangeWatchedFiles",
+      params: { changes: [{ uri: `file://${ROOT}/${DEFAULT_WATCHED[0]}`, type: 2 }] },
+    });
+    await server.handle({
+      jsonrpc: "2.0",
+      method: "textDocument/didChange",
+      params: {
+        textDocument: { uri: URI, version: 2 },
+        contentChanges: [{ text: 'package inner\nimport "example.test/outer"\n' }],
+      },
+    });
+
+    const publishes = published(sent);
+    expect(publishes).toHaveLength(3);
+    // didOpen: old text, old config (revision 0).
+    expect(publishes[0].diagnostics[0].message).toBe("rev0:package inner");
+    // The invalidation's re-diagnosis completed before the `didChange` was
+    // dispatched: it carries the NEW config but the text the document still
+    // had. The queue never lets a publish reflect text from a message that
+    // has not been processed yet.
+    expect(publishes[1].diagnostics[0].message).toBe("rev1:package inner");
+    // The `didChange`'s publish is the final word: newest config AND newest
+    // text, and the newest buffered version. Nothing computed at an older
+    // revision lands after it.
+    expect(publishes[2].diagnostics[0].message).toBe(
+      'rev1:package inner\nimport "example.test/outer"',
+    );
+    expect(publishes[2].version).toBe(2);
+  });
 });
 
 describe("asking the client to watch the files a verdict depends on", () => {
