@@ -763,6 +763,62 @@ describe("deltaCommand event output", () => {
     expect(readdirSync(dir).filter((name) => name.endsWith(".json"))).toHaveLength(1);
   });
 
+  // A corrupt file in the middle of a populated store must not be silently
+  // skipped by the dedupe scan. The scan reads every file; one it cannot
+  // parse throws because the unreadable file may BE the duplicate the write
+  // is about to manufacture. A tolerant scan (skip unreadable) would report
+  // `recorded` about a store it never fully read — the silent direction this
+  // composition closes (#869, umbrella #844).
+  it("refuses an append when a middle store file is unreadable (F-corrupt-mid-store)", async () => {
+    const law = config();
+    const dir = join(eventsDir, "corrupt-mid-store");
+
+    // Run A1: baseline clean, head crossing — transition one, event 0000.
+    const baselineClean = baselineOf({ law, root: gitRoot });
+    const first = await deltaCommand(
+      "/invented/base.json",
+      contextOf({ records: [crossingRecord()], root: gitRoot }),
+      {
+        config: law,
+        readBaseline: baselineClean.readBaseline,
+        now: NOW,
+        eventOut: dir,
+      },
+    );
+    expect(first.eventWrite.duplicate).toBe(false);
+
+    // Run A2: baseline graph without the alpha → beta edge — a different
+    // base snapshot identity (different dedupeKey), event 0001.
+    const baselineEdgeless = baselineOf({ law, root: gitRoot, graph: edgelessGraph() });
+    const runA2 = () =>
+      deltaCommand(
+        "/invented/base.json",
+        contextOf({ records: [crossingRecord()], root: gitRoot }),
+        {
+          config: law,
+          readBaseline: baselineEdgeless.readBaseline,
+          now: NOW,
+          eventOut: dir,
+        },
+      );
+    const second = await runA2();
+    expect(second.eventWrite.duplicate).toBe(false);
+
+    // Corrupt event 0001 in place — the middle of the scan's read path.
+    const names = readdirSync(dir)
+      .filter((name) => name.endsWith(".json"))
+      .sort();
+    expect(names).toHaveLength(2);
+    writeFileSync(join(dir, names[1]), "not json at all", "utf8");
+
+    // Run B: the same transition as A2. The scan reads 0000 (no match),
+    // then hits the corrupt 0001 and must refuse loudly.
+    await expect(runA2()).rejects.toThrow(/malformed/);
+
+    // No new event file landed — the store is exactly what it was.
+    expect(readdirSync(dir).filter((name) => name.endsWith(".json"))).toHaveLength(2);
+  });
+
   it("refuses to write an event from a commitless head (F-delta-event-id)", async () => {
     const law = config();
     const baseline = baselineOf({ law });
