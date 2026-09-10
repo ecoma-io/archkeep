@@ -1,8 +1,8 @@
 /**
  * The repeated-run byte-identity gate (#630): `check`, `graph`, `diff`,
- * `delta`, and `drift`, each run N times over one frozen fixture tree with
- * `--format json`, must produce N byte-identical stdout streams — compared
- * as raw bytes, normalizing nothing.
+ * `delta`, `drift`, and `reconcile --propose`, each run N times over one
+ * frozen fixture tree with `--format json`, must produce N byte-identical
+ * stdout streams — compared as raw bytes, normalizing nothing.
  *
  * Why this file exists: every other determinism test here pins WHAT an output
  * says (field order, array sortedness, one value per field). None of them can
@@ -21,7 +21,10 @@
  * cold starts, so the gate repeats cold starts rather than calls in one warm
  * process. Every command in the roster whose stdout bytes a consumer diffs
  * is gated here under the same comparator: the descriptive commands
- * (`graph`, `diff`, `delta`, `drift`) compose it the same way `check` does.
+ * (`graph`, `diff`, `delta`, `drift`) compose it the same way `check` does,
+ * and `reconcile --propose` (#863) joins because its ranked candidate list is
+ * exactly the output an unstable sort would reorder between runs while each
+ * run still looks correct.
  *
  * The comparator is under test FIRST: a byte gate whose comparator compared
  * lengths, or trimmed, or short-circuited after the first pair would be a
@@ -32,7 +35,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -172,6 +175,26 @@ const INTENT = `${JSON.stringify({
   boundaries: [{ name: "all-projects", match: ["name:alpha", "name:beta", "name:gamma"] }],
 })}\n`;
 
+/**
+ * The reconcile gate's intent: the same boundary, plus two existence rows
+ * that DIVERGE from the frozen tree — a required project that does not exist
+ * (`absent`, severity 3) and a forbidden project that does (`unexpected`,
+ * severity 4). Two candidate severities are the point: an unstable sort in
+ * the `--propose` ranking would swap them between runs while each run
+ * individually looks correct. This is NOT the shared fixture's intent — the
+ * check/drift gates above measure the minimal no-drift model's bytes, and
+ * `check` also reads a tracked intent file, so the divergent one is
+ * workspace-scoped to the reconcile root.
+ */
+const RECONCILE_INTENT = `${JSON.stringify({
+  version: "1",
+  boundaries: [{ name: "all-projects", match: ["name:alpha", "name:beta", "name:gamma"] }],
+  projects: {
+    required: [{ name: "delta", tags: [] }],
+    forbidden: [{ name: "gamma" }],
+  },
+})}\n`;
+
 const GO_MOD = (name) => `module example.com/${name}\n\ngo 1.22\n`;
 /** gamma reaches alpha on one layer — legal. */
 const GAMMA = `package gamma
@@ -202,9 +225,11 @@ const GIT_IDENTITY = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit
 /**
  * Builds a frozen native-provider workspace: three Go projects, everything
  * committed, nothing left for another writer to change. `violating` decides
- * whether alpha's one import crosses the layer axis.
+ * whether alpha's one import crosses the layer axis; `intent` defaults to the
+ * shared minimal model the check/drift gates measure, and the reconcile gate
+ * overrides it with the divergent `RECONCILE_INTENT`.
  */
-function makeFrozenWorkspace(violating) {
+function makeFrozenWorkspace(violating, intent = INTENT) {
   const root = mkdtempSync(
     join(tmpdir(), `archkeep-byte-identity-${violating ? "violating" : "clean"}-`),
   );
@@ -212,7 +237,7 @@ function makeFrozenWorkspace(violating) {
     mkdirSync(join(root, relativePath, ".."), { recursive: true });
     writeFileSync(join(root, relativePath), text);
   };
-  write("architecture-intent.json", INTENT);
+  write("architecture-intent.json", intent);
   write("archkeep.json", MODEL());
   write("module-boundaries.config.mjs", LAW);
   write("libs/alpha/go.mod", GO_MOD("alpha"));
@@ -260,6 +285,8 @@ const runDiff = (root, baselinePath) => runCli(root, ["diff", baselinePath, "--f
 const runDelta = (root, baselinePath) => runCli(root, ["delta", baselinePath, "--format", "json"]);
 /** `drift --format json` — compares the observed architecture against the declared intent. */
 const runDrift = (root) => runCli(root, ["drift", "--format", "json"]);
+/** `reconcile --propose --format json` — the ranked candidate list reconcile emits. */
+const runReconcile = (root) => runCli(root, ["reconcile", "--propose", "--format", "json"]);
 
 let cleanRoot;
 let violatingRoot;
@@ -267,10 +294,13 @@ let violatingRoot;
 let diffBaselinePath;
 /** Evidence-snapshot baseline for `delta`, captured from `delta --capture` over cleanRoot. */
 let deltaBaselinePath;
+/** Frozen reconcile workspace: the clean tree plus the divergent RECONCILE_INTENT. */
+let reconcileRoot;
 
 beforeAll(() => {
   cleanRoot = makeFrozenWorkspace(false);
   violatingRoot = makeFrozenWorkspace(true);
+  reconcileRoot = makeFrozenWorkspace(false, RECONCILE_INTENT);
 
   // The descriptive commands take a baseline file as their input. Each is
   // captured ONCE from the same frozen tree every gate below runs over, then
@@ -288,7 +318,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  for (const root of [cleanRoot, violatingRoot]) {
+  for (const root of [cleanRoot, violatingRoot, reconcileRoot]) {
     if (root) rmSync(root, { recursive: true, force: true });
   }
 });
@@ -368,5 +398,39 @@ describe("graph/delta/diff/drift — repeated runs over one frozen tree (#630)",
       expect(run.status).toBe(EXIT.ok);
     }
     assertStreamsByteIdentical(runs);
+  });
+});
+
+describe("reconcile --propose --format json — repeated runs over one frozen tree (#863)", () => {
+  // Reconcile documents byte-determinism (src/commands/reconcile.mjs): every
+  // scored element and every --propose candidate is keyed and sorted by plain
+  // string comparison, so runs over an unchanged tree and intent produce
+  // byte-identical output. The candidate RANKING is the exposure — an
+  // unstable sort would silently reorder proposals between runs while each
+  // run individually looks correct, exactly the class a per-field or
+  // single-run assertion cannot see and only this byte gate across cold
+  // starts can. The workspace's intent (RECONCILE_INTENT) diverges from the
+  // frozen tree on two existence planes of different severity, so the ranked
+  // list is non-empty and an unstable sort has something to reorder.
+
+  it(`produces byte-identical stdout across ${RUNS} runs`, () => {
+    const runs = Array.from({ length: RUNS }, () => runReconcile(reconcileRoot));
+    // Reconcile is descriptive — it never exits 1, and a run that could not
+    // reach a verdict (exit 3) is not a byte-identical finding.
+    for (const run of runs) {
+      expect(run.status).toBe(EXIT.ok);
+    }
+    assertStreamsByteIdentical(runs);
+  });
+
+  it(`leaves the intent file byte-identical across ${RUNS} runs`, () => {
+    // Reconcile is READ-ONLY by design — writing back is a manual, reviewable
+    // step the operator performs. N runs over the frozen tree may not move a
+    // single byte of architecture-intent.json.
+    const before = readFileSync(join(reconcileRoot, "architecture-intent.json"));
+    for (let index = 0; index < RUNS; index += 1) {
+      expect(runReconcile(reconcileRoot).status).toBe(EXIT.ok);
+    }
+    expect(readFileSync(join(reconcileRoot, "architecture-intent.json")).equals(before)).toBe(true);
   });
 });
