@@ -147,8 +147,9 @@ export function validateOrigin(raw, io = {}, at = "origin") {
  *   clock that supplies `on`. `clock` is required — an `on` produced without a
  *   clock is the non-determinism this module exists to exclude, so the absence
  *   is a loud Error, never a default.
- * @returns {OriginRecord} `{by, tool, on: clock.now()}`, and ONLY those three
- *   keys — a fresh object, so nothing from untrusted input rides along.
+ * @returns {OriginRecord} `{by, tool, on}`, where `on` is the clock's one
+ *   sampled answer, and ONLY those three keys — a fresh object, so nothing from
+ *   untrusted input rides along.
  * @throws {Error} on an invalid author, an unusable clock, or a
  *   non-string/empty clock answer.
  */
@@ -158,11 +159,24 @@ export function recordOrigin({ by, tool, clock }) {
   if (shape.length > 0) {
     throw new Error(shape.join("; "));
   }
-  const clockProblems = clockViolations(clock);
-  if (clockProblems.length > 0) {
-    throw new Error(`origin.on: ${clockProblems.join("; ")}`);
+  // The clock is read exactly once and the read is what ships: sample it, judge
+  // the sample, emit it. `clockViolations` cannot render this verdict — it
+  // samples the clock itself, so delegating to it here would read the clock a
+  // second time, and that second read let a stateful clock answer validation
+  // with one instant and the record with another. The checks below restate its
+  // messages so a misused clock is still named in the shared vocabulary,
+  // read-free until the one sample exists.
+  if (clock === null || typeof clock !== "object") {
+    throw new Error(
+      `origin.on: clock must be an object with a now() function, got ${describe(clock)}`,
+    );
   }
-  // The clock is the single door, and it is called exactly once for this
-  // record, so two calls with the same clock are byte-identical.
-  return { by, tool, on: clock.now() };
+  if (typeof clock.now !== "function") {
+    throw new Error("origin.on: clock.now must be a function returning a non-empty string");
+  }
+  const on = clock.now();
+  if (typeof on !== "string" || on.length === 0) {
+    throw new Error("origin.on: clock.now() must return a non-empty string");
+  }
+  return { by, tool, on };
 }
