@@ -474,6 +474,51 @@ describe("deltaCommand", () => {
     expect(notes).toMatch(/head carries no provenance/u);
     expect(result.status).toBe("ok");
   });
+  it("a waiver active at capture but expired at re-judge covers nothing — violation re-asserts", async () => {
+    // Defect class: a fate recomputed with a per-side clock or a base-side
+    // waiver baked into the snapshot reads a lapsed acceptance as resolved/
+    // unchanged — silent acceptance past the written term.  No single-step
+    // fate test (waiver.test.mjs:51-63, metrics.test.mjs:198-204) composes
+    // capture → clock passage → re-judge, so the regression passes them all.
+    //
+    // Time arc: T0 < EXPIRY < T1.  Capture at T0 (waiver active); re-judge
+    // at T1 (waiver expired).  Both sides carry the crossing record.
+    const EXPIRY = "2026-06-01T00:00:00.000Z";
+    const LATER = FUTURE;
+
+    const law = config({
+      suppressions: [
+        {
+          path: "libs/alpha/**",
+          reason: "accepted migration window",
+          expiresAt: EXPIRY,
+        },
+      ],
+    });
+
+    // Capture at T0 (NOW < EXPIRY): the waiver is ACTIVE, covering the
+    // crossing edge.  The baseline stores raw records, never verdicts.
+    const { readBaseline } = baselineOf({ records: [crossingRecord()], law });
+
+    // Re-judge at T1 (LATER > EXPIRY): both sides are re-judged under ONE
+    // shared instant where the waiver has expired.
+    const result = await deltaCommand(
+      "/invented/base.json",
+      contextOf({ records: [crossingRecord()] }),
+      { config: law, readBaseline, now: LATER },
+    );
+
+    // The violation is present on both sides → unchanged.
+    expect(result.delta.summary.unchanged).toBe(1);
+    expect(result.delta.summary.introduced).toBe(0);
+    expect(result.delta.summary.resolved).toBe(0);
+
+    // The expired waiver covers nothing: suppressionFate was "reassert" at
+    // the shared re-judge instant, so the entry carries NO waive annotation.
+    const entry = result.delta.violations.unchanged[0];
+    expect(entry.waived).toBe(false);
+    expect(entry.waivedBy).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
