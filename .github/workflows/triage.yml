@@ -57,7 +57,7 @@ jobs:
       # No checkout: a target references the released action by ref, and
       # triage reads everything through the API, never the working tree. One
       # less thing in the workspace.
-      - uses: ecoma-io/action-agents/triage@605c38f60a26b7bcc56e9cd24852d5b38babbe70 # v0.11.2
+      - uses: ecoma-io/action-agents/triage@97f294f439ee9dd12f60a1a723469f6dcdf9c93f # v0.12.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           api-url: ${{ secrets.ECOMA_LLM_BASE_URL }}
@@ -66,7 +66,7 @@ jobs:
           # The rollout's starting posture, set explicitly rather than left to
           # the default so the flip to live is a visible one-line diff in this
           # repository's history.
-          dry-run: "true"
+          dry-run: "false"
 
       # The run record is a dry run's whole output — if it is missing, the run
       # is red or the record write failed; it is never green over nothing. The
