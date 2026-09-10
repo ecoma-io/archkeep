@@ -81,6 +81,39 @@ describe("discovering the projects a tree declares", () => {
     expect(projects.map((p) => p.name)).toEqual(["@scope/thing"]);
   });
 
+  it("refuses a package.json whose read throws instead of falling back to the directory name", () => {
+    // #846: the reader knows the package.json is there (it asked), so a
+    // failed read must not quietly become "no name stated" — the project
+    // would enter the graph under its directory basename, a name no
+    // constraint row carries.
+    const { files, readFile } = tree({
+      [`somewhere/${PROJECT_CONFIG_FILE}`]: "{}",
+    });
+    expect(() =>
+      discoverProjects({
+        files,
+        readFile: (path) => {
+          if (path === "somewhere/package.json") throw new Error("EACCES: permission denied");
+          return readFile(path);
+        },
+      }),
+    ).toThrow(/somewhere\/package\.json/);
+  });
+
+  it("refuses a package.json that was read but does not parse, instead of the basename fallback", () => {
+    // The same silent direction through the parse: a project.json-stated
+    // project whose unparseable package.json used to lose its name to the
+    // directory. The refusal names the project directory and the file.
+    expect(() =>
+      discoverProjects(
+        tree({
+          [`broken/${PROJECT_CONFIG_FILE}`]: "{}",
+          "broken/package.json": "{ this is not json",
+        }),
+      ),
+    ).toThrow(/broken\/package\.json/);
+  });
+
   it("skips a project.json it cannot read instead of blanking the whole graph", () => {
     // One project being edited must not cost the verdict for every other. The
     // skip is reported so the server can say so rather than swallow it.

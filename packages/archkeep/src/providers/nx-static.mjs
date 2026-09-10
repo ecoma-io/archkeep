@@ -37,6 +37,12 @@
  * not blank the index — where `readProjectGraph` throws the identical refusal;
  * the two policies are the recorded difference between an acquisition that
  * still has a tree to index and one that does not.
+ *
+ * One refusal THROWS rather than skipping: a `package.json` beside a
+ * `project.json` that exists but cannot be read or parsed (#846). Falling
+ * through to the directory basename there would put the project in the graph
+ * under a name no constraint row names — a silently wrong identity. Absent
+ * (null) stays the legitimate basename fallback per Nx's own precedence.
  */
 
 import { readWorkspaceLayout, requireCompleteWorkspaceLayout } from "../options.mjs";
@@ -103,15 +109,30 @@ export function discoverProjects({ files, readFile }) {
     // Nx's own precedence: the name a project states, then the one its
     // `package.json` states, then the directory it lives in.
     const packageName = (() => {
-      const manifest = readFile(root === "" ? "package.json" : `${root}/package.json`);
+      const pkgPath = root === "" ? "package.json" : `${root}/package.json`;
+      let manifest;
+      try {
+        manifest = readFile(pkgPath);
+      } catch (cause) {
+        throw new Error(
+          `package.json '${pkgPath}' beside project '${root || "."}' could not be read: ${cause?.message ?? cause}`,
+          { cause },
+        );
+      }
       if (manifest === null) return undefined;
       try {
         // The same parser, because Nx reads this file with the same
         // `readJsonFile` — a `package.json` Nx can name a project from must
         // not become a project named after its directory here.
         return parseProjectJson(manifest).name;
-      } catch {
-        return undefined;
+      } catch (cause) {
+        // An unreadable package.json that was READ must not fall through to
+        // the directory basename (#846) — that is a project the graph knows
+        // under one name and every constraint row names under another.
+        throw new Error(
+          `package.json '${pkgPath}' beside project '${root || "."}' could not be read: ${cause?.message ?? cause}`,
+          { cause },
+        );
       }
     })();
     const name =
