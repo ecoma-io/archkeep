@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.28.0](https://github.com/ecoma-io/archkeep/compare/v0.27.1...v0.28.0) (2026-09-10)
+
+
+### Features
+
+* take review live on pull requests ([#891](https://github.com/ecoma-io/archkeep/issues/891)) ([b56d6a6](https://github.com/ecoma-io/archkeep/commit/b56d6a6bf6ac7caddeef4289c2ac7dc1c330c187))
+* take triage live on the labels sheet ([#881](https://github.com/ecoma-io/archkeep/issues/881)) ([a8be6e3](https://github.com/ecoma-io/archkeep/commit/a8be6e3de302bce8513b7b1060a4c6afbcc578e0))
+
+
+### Bug Fixes
+
+* **archkeep:** harden provenance record and causal-chain integrity ([#883](https://github.com/ecoma-io/archkeep/issues/883)) ([942e7f9](https://github.com/ecoma-io/archkeep/commit/942e7f9c0603ec72cff08b7b974f627542de4ab4))
+* **archkeep:** refuse a drifted Nx project node at the provider boundary ([#866](https://github.com/ecoma-io/archkeep/issues/866)) ([419018e](https://github.com/ecoma-io/archkeep/commit/419018e5517734fb5ccdcc9613a0c1b28504c425))
+* **archkeep:** refuse a plugin context whose file map omits a declared project ([#845](https://github.com/ecoma-io/archkeep/issues/845)) ([19c8b7f](https://github.com/ecoma-io/archkeep/commit/19c8b7f23170db547462a31b562a27a370a6582e))
+* **archkeep:** refuse unreadable Gradle include-list file ([#865](https://github.com/ecoma-io/archkeep/issues/865)) ([0c14a5a](https://github.com/ecoma-io/archkeep/commit/0c14a5a130f0d28a9978a0cac285b7ef0dce42f8))
+* **archkeep:** refuse unreadable nx-static package.json ([#864](https://github.com/ecoma-io/archkeep/issues/864)) ([54d31d7](https://github.com/ecoma-io/archkeep/commit/54d31d7db44b6c9313072af3e23469a850cced50))
+* restore triage dry-run until the labels sheet design lands ([#851](https://github.com/ecoma-io/archkeep/issues/851)) ([81c8981](https://github.com/ecoma-io/archkeep/commit/81c898124451e359e0f5ef6dba79443e34f6eed8))
+* **workspace:** ignore the config-spelling eslint fixtures in the lint walk ([#879](https://github.com/ecoma-io/archkeep/issues/879)) ([10827f7](https://github.com/ecoma-io/archkeep/commit/10827f768487a2ee1fd98c440d454b11242333f8))
+
+
+### Documentation
+
+* **archkeep:** record the hardening baseline and findings ledger ([#885](https://github.com/ecoma-io/archkeep/issues/885)) ([ca0c6c1](https://github.com/ecoma-io/archkeep/commit/ca0c6c134e60d7025d35943d8813a41637701226))
+* consolidate and harden the documentation tree before 1.0 ([#838](https://github.com/ecoma-io/archkeep/issues/838)) ([cef56cb](https://github.com/ecoma-io/archkeep/commit/cef56cbf78c69cf61dcdea5b2635edf12ec3703d))
+* refresh the 1.0 readiness checklist with the attestation measurements ([#834](https://github.com/ecoma-io/archkeep/issues/834)) ([d5edd19](https://github.com/ecoma-io/archkeep/commit/d5edd19860ccb763a614ec06f25ed9c0ddce6287))
+* refresh the quiet-stretch reading in the readiness checklist ([#836](https://github.com/ecoma-io/archkeep/issues/836)) ([8a032f6](https://github.com/ecoma-io/archkeep/commit/8a032f66ceddca315ada88275974cd738f196767))
+
 ## [0.27.1](https://github.com/ecoma-io/archkeep/compare/v0.27.0...v0.27.1) (2026-09-09)
 
 
