@@ -253,6 +253,110 @@ describe("clockViolations", () => {
   });
 });
 
+describe("recordOrigin — one read, and the read is what ships", () => {
+  it("samples clock.now() exactly once for the record", () => {
+    let reads = 0;
+    const record = recordOrigin({
+      by: "jane",
+      tool: "l",
+      clock: {
+        now: () => {
+          reads += 1;
+          return "2026-08-16T00:00:00.000Z";
+        },
+      },
+    });
+    expect(record.on).toBe("2026-08-16T00:00:00.000Z");
+    expect(reads).toBe(1);
+  });
+
+  it("never reads the clock when the author shape is already invalid", () => {
+    let reads = 0;
+    expect(() =>
+      recordOrigin({
+        by: "  ",
+        tool: "l",
+        clock: {
+          now: () => {
+            reads += 1;
+            return "2026-08-16T00:00:00.000Z";
+          },
+        },
+      }),
+    ).toThrow(/origin.by/);
+    expect(reads).toBe(0);
+  });
+
+  it("emits the answer validation saw — a two-faced clock cannot validate one value and ship another", () => {
+    let call = 0;
+    const record = recordOrigin({
+      by: "jane",
+      tool: "l",
+      clock: {
+        now: () => {
+          call += 1;
+          return call === 1 ? "2026-08-16T00:00:00.000Z" : "1999-12-31T23:59:59.999Z";
+        },
+      },
+    });
+    expect(record.on).toBe("2026-08-16T00:00:00.000Z");
+    expect(call).toBe(1);
+  });
+
+  it("never ships the clock's second answer, whatever type it is", () => {
+    /** @type {Array<string | number | null>} — what a lying clock answers after one valid read. */
+    const seconds = [42, "", null];
+    for (const second of seconds) {
+      let call = 0;
+      /** @type {import("./clock.mjs").Clock} — a two-faced clock under test. */
+      const clock = /** @type {any} */ ({
+        now: () => ((call += 1) === 1 ? "2026-08-16T00:00:00.000Z" : second),
+      });
+      const record = recordOrigin({ by: "jane", tool: "l", clock });
+      expect(record.on).toBe("2026-08-16T00:00:00.000Z");
+    }
+  });
+
+  it("refuses a clock that answers an empty string — one read, in the shared words", () => {
+    let reads = 0;
+    expect(() =>
+      recordOrigin({
+        by: "jane",
+        tool: "l",
+        clock: {
+          now: () => {
+            reads += 1;
+            return "";
+          },
+        },
+      }),
+    ).toThrow(/clock\.now\(\) must return a non-empty string/);
+    expect(reads).toBe(1);
+  });
+
+  it("judges the clock's structure before any read, in the shared words", () => {
+    expect(() => recordOrigin({ by: "jane", tool: "l", clock: /** @type {any} */ (null) })).toThrow(
+      /clock must be an object with a now\(\) function, got null/,
+    );
+    expect(() => recordOrigin({ by: "jane", tool: "l", clock: /** @type {any} */ ({}) })).toThrow(
+      /clock\.now must be a function returning a non-empty string/,
+    );
+  });
+
+  it("names a misused clock in clockViolations' own words — one vocabulary, minus the read", () => {
+    /** @type {import("./clock.mjs").Clock} — a lying clock under test. */
+    const lyingClock = /** @type {any} */ ({ now: () => 42 });
+    let error;
+    try {
+      recordOrigin({ by: "jane", tool: "l", clock: lyingClock });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe(`origin.on: ${clockViolations(lyingClock).join("; ")}`);
+  });
+});
+
 describe("recordOrigin — 10-run determinism", () => {
   it("produces byte-identical output across 10 consecutive calls with the same inputs", () => {
     const args = { by: "jane@example.com", tool: "archkeep:v1", clock: clock() };

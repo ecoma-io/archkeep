@@ -5,9 +5,10 @@
  * to `{attested, attribution}`. When `fileAttribution` cannot answer (returns
  * null), every decision is unattested.
  *
- * This is the shared helper both `buildProvenanceGraph` and the impact/scenario
- * evaluation callers use, so decision provenance is computed identically
- * everywhere — "via the same graph helper, never re-derived" (PR4).
+ * This is the shared helper the impact and scenario evaluation callers use, so
+ * decision provenance is computed identically everywhere — "via the same graph
+ * helper, never re-derived" (PR4). `buildProvenanceGraph` is not a caller: it
+ * reads attestation from its `decisionLifecycle` input directly (#882).
  *
  * @param {{id: string}[]} records ADR records
  * @param {(path: string) => {createdBy: object|null,
@@ -92,9 +93,6 @@ import { resolveDecisionRef, stripRuleFitnessPrefix, stripAdrPrefix } from "./ad
  *   Decision record lookup map.
  * @property {Set<string>} knownFitness
  *   Fitness record names for resolution.
- * @property {(path: string) => object|null} [fileAttribution]
- *   Resolves git attribution for a decision record file. Passed through to
- *   `computeDecisionProvenance`. Defaults to a function that always returns null.
  * @property {{id: string, attested: boolean, attribution: object|null}[]}
  *   decisionLifecycle
  * @typedef {object} ProvenanceGraphNode
@@ -172,7 +170,6 @@ export function buildProvenanceGraph({
   records = [],
   byId = new Map(),
   knownFitness = new Set(),
-  fileAttribution: _fileAttribution = () => null,
   decisionLifecycle = [],
 }) {
   const nodes = [];
@@ -408,7 +405,12 @@ export function buildProvenanceGraph({
       for (const nextId of sortedArray(record.supersedes)) {
         if (!visited.has(nextId)) {
           queue.push(nextId);
-          parentMap.set(nextId, currentId);
+          // First queued parent wins: when a second supersession path reaches
+          // a decision already queued, overwriting its parent would drop the
+          // first path's hop from the chain while `edges` keeps both relations.
+          if (!parentMap.has(nextId)) {
+            parentMap.set(nextId, currentId);
+          }
         }
       }
 
@@ -457,7 +459,9 @@ export function buildProvenanceGraph({
       causalChains.push({
         id: chainId,
         startNode: rowId,
-        endNode: `decision:${chainNodes[chainNodes.length - 1]}`,
+        // `chainNodes` entries are node ids already (`decision:<id>`); wrapping
+        // them a second time emitted the dangling `decision:decision:<id>`.
+        endNode: chainNodes[chainNodes.length - 1],
         hops: chainEdges,
       });
     }

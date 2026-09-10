@@ -52,6 +52,11 @@ function withoutAttribution() {
   return null;
 }
 
+/** The id set every edge and causal-chain endpoint has to resolve to. */
+function declaredNodeIds(graph) {
+  return new Set(graph.nodes.map((n) => n.id));
+}
+
 /** Decision lifecycle entries matching records above. */
 function makeLifecycle(attributionFn) {
   return records.map((r) => {
@@ -121,7 +126,6 @@ describe("buildProvenanceGraph", () => {
       records: [],
       byId: new Map(),
       knownFitness: new Set(),
-      fileAttribution: withoutAttribution,
       decisionLifecycle: [],
     });
 
@@ -138,7 +142,6 @@ describe("buildProvenanceGraph", () => {
       records: [],
       byId: new Map(),
       knownFitness: new Set(),
-      fileAttribution: withoutAttribution,
       decisionLifecycle: [],
     });
 
@@ -164,7 +167,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
@@ -188,7 +190,6 @@ describe("buildProvenanceGraph", () => {
       records: [],
       byId: new Map(),
       knownFitness: new Set(),
-      fileAttribution: withoutAttribution,
       decisionLifecycle: [],
     });
 
@@ -208,7 +209,6 @@ describe("buildProvenanceGraph", () => {
       records: [],
       byId: new Map(),
       knownFitness: new Set(),
-      fileAttribution: withoutAttribution,
       decisionLifecycle: [],
     });
 
@@ -233,7 +233,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withAttribution,
       decisionLifecycle: makeLifecycle(withAttribution),
     });
 
@@ -259,7 +258,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
@@ -277,7 +275,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withAttribution,
       decisionLifecycle: makeLifecycle(withAttribution),
     });
 
@@ -297,7 +294,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
@@ -316,7 +312,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
@@ -347,7 +342,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
@@ -366,7 +360,6 @@ describe("buildProvenanceGraph", () => {
       records: [],
       byId: new Map(),
       knownFitness: new Set(),
-      fileAttribution: withoutAttribution,
       decisionLifecycle: [],
     });
 
@@ -392,7 +385,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withAttribution,
       decisionLifecycle: makeLifecycle(withAttribution),
     });
 
@@ -408,7 +400,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withAttribution,
       decisionLifecycle: makeLifecycle(withAttribution),
     });
 
@@ -426,7 +417,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
@@ -452,14 +442,15 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withAttribution,
       decisionLifecycle: makeLifecycle(withAttribution),
     });
 
     expect(result.causalChains.length).toBeGreaterThanOrEqual(1);
     const chain = result.causalChains[0];
     expect(chain.startNode).toBe("row:depConstraints[0]:0");
-    expect(chain.endNode).toMatch(/^decision:/);
+    // The exact node id — `chainNodes` entries are node ids already, so one
+    // more `decision:` prefix resolved to no node at all.
+    expect(chain.endNode).toBe("decision:0001-bind-collaboration");
   });
 
   it("causal chains include evidence on each hop", () => {
@@ -489,6 +480,129 @@ describe("buildProvenanceGraph", () => {
       expect(hop.evidence[0].kind).toBeDefined();
       expect(hop.evidence[0].detail).toBeDefined();
     }
+  });
+
+  it("resolves every edge and causal-chain endpoint to a node the graph declares", () => {
+    const rows = [
+      {
+        kind: "depConstraints[0]",
+        attested: true,
+        origin: { by: "a", tool: "b" },
+        decisionRef: "adr:0002-scopes",
+        label: "c[0]",
+      },
+    ];
+    const result = buildProvenanceGraph({
+      repo,
+      rows,
+      records,
+      byId,
+      knownFitness,
+      decisionLifecycle: makeLifecycle(withAttribution),
+    });
+
+    // The walk below is meaningless if there is nothing to walk
+    expect(result.causalChains.length).toBeGreaterThanOrEqual(1);
+    expect(result.causalChains.some((c) => c.hops.length >= 1)).toBe(true);
+
+    const ids = declaredNodeIds(result);
+    const dangling = [];
+    const missing = (where, id) => {
+      if (!ids.has(id)) dangling.push(`${where}: ${id}`);
+    };
+    for (const edge of result.edges) {
+      missing(`edge ${edge.kind} from`, edge.from);
+      missing(`edge ${edge.kind} to`, edge.to);
+    }
+    for (const chain of result.causalChains) {
+      missing(`chain ${chain.id} startNode`, chain.startNode);
+      missing(`chain ${chain.id} endNode`, chain.endNode);
+      for (const hop of chain.hops) {
+        missing(`chain ${chain.id} hop from`, hop.fromNode);
+        missing(`chain ${chain.id} hop to`, hop.toNode);
+      }
+    }
+    expect(dangling).toEqual([]);
+  });
+
+  it("keeps both diamond supersession edges and hops by the first queued parent", () => {
+    // 0001-root supersedes 0002-left and 0003-right, and both of those
+    // supersede 0004-shared — BFS from the row's decision reaches 0004-shared
+    // twice, once through each path.
+    const diamondRecords = [
+      {
+        id: "0001-root",
+        status: "active",
+        supersedes: ["0002-left", "0003-right"],
+        supersededBy: [],
+        bindings: [],
+      },
+      {
+        id: "0002-left",
+        status: "superseded",
+        supersedes: ["0004-shared"],
+        supersededBy: ["0001-root"],
+        bindings: [],
+      },
+      {
+        id: "0003-right",
+        status: "superseded",
+        supersedes: ["0004-shared"],
+        supersededBy: ["0001-root"],
+        bindings: [],
+      },
+      {
+        id: "0004-shared",
+        status: "superseded",
+        supersedes: [],
+        supersededBy: ["0002-left", "0003-right"],
+        bindings: [],
+      },
+    ];
+    const diamondById = new Map(diamondRecords.map((r) => [r.id, r]));
+    const diamondLifecycle = diamondRecords.map((r) => ({
+      id: r.id,
+      attribution: { createdBy: null, lastChangedBy: null },
+      attested: false,
+    }));
+    const rows = [
+      {
+        kind: "depConstraints[0]",
+        attested: true,
+        origin: { by: "a", tool: "b" },
+        decisionRef: "adr:0001-root",
+        label: "c[0]",
+      },
+    ];
+    const result = buildProvenanceGraph({
+      repo,
+      rows,
+      records: diamondRecords,
+      byId: diamondById,
+      knownFitness: new Set(),
+      decisionLifecycle: diamondLifecycle,
+    });
+
+    // The complete graph keeps both relations into 0004-shared
+    const intoShared = result.edges.filter(
+      (e) => e.kind === "supersedes" && e.to === "decision:0004-shared",
+    );
+    expect(intoShared.map((e) => e.from).sort()).toEqual([
+      "decision:0002-left",
+      "decision:0003-right",
+    ]);
+
+    // The chain keeps one hop per BFS relation, and the second path reaching
+    // 0004-shared does not overwrite its first parent: 0002-left is sorted
+    // and queued before 0003-right, so the hop into 0004-shared is 0002-left's.
+    const chain = result.causalChains[0];
+    expect(chain.hops.map((h) => `${h.fromNode}→${h.toNode}`)).toEqual([
+      "row:depConstraints[0]:0→decision:0001-root",
+      "decision:0001-root→decision:0002-left",
+      "decision:0001-root→decision:0003-right",
+      "decision:0002-left→decision:0004-shared",
+    ]);
+    expect(chain.endNode).toBe("decision:0004-shared");
   });
 
   it("is deterministic — two calls produce byte-identical output", () => {
@@ -522,7 +636,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
@@ -563,7 +676,6 @@ describe("buildProvenanceGraph", () => {
       records: cycleRecords,
       byId: cycleById,
       knownFitness: new Set(),
-      fileAttribution: withoutAttribution,
       decisionLifecycle: cycleLifecycle,
     });
 
@@ -588,7 +700,6 @@ describe("buildProvenanceGraph", () => {
       records,
       byId,
       knownFitness,
-      fileAttribution: withoutAttribution,
       decisionLifecycle: makeLifecycle(withoutAttribution),
     });
 
