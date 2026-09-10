@@ -99,6 +99,27 @@ test("#245 — every analysis.yml job answers to analysis-gate, same both-direct
   );
 });
 
+test("nightly.yml carries exactly the jobs the nightly lane owns — no silent additions", () => {
+  // nightly.yml has no gate job by design (its own header: a nightly lane
+  // that blocked anything would turn every red run into urgent triage), so
+  // the both-direction rule #245 applies to ci.yml and analysis.yml cannot
+  // hold here. What CAN drift silently is the job list itself: a job added
+  // outside this pin widens what the nightly lane runs with nothing red,
+  // and a job removed from it narrows the nightly's coverage the same way.
+  // The roster IS the contract, so it is pinned as data — the same posture
+  // as the two gate job ids above, for a workflow whose header argues
+  // against having one.
+  const jobs = parseJobs(readWorkflow("nightly.yml"));
+  assert.deepEqual(
+    jobs.map((job) => job.id),
+    ["nightly-e2e", "nightly-core", "mutation-harness"],
+    "nightly.yml's job roster drifted. Add the job here AND to whatever " +
+      "summary or gate reads the nightly's output, or argue why the new job " +
+      "belongs in another workflow — a scheduled lane's job list is the one " +
+      "place a silent addition costs nobody a red check today.",
+  );
+});
+
 test("#230 — each workflow's conformance-gated publish jobs share one byte-identical if:", () => {
   // A publish job is identified structurally, not by name: it is any job that
   // needs verify-conformance, the differential gate whose header owns the
