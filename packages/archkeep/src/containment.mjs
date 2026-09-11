@@ -129,7 +129,7 @@ function within(root, absPath) {
  * @param {(path: string) => {isSymbolicLink: () => boolean}} lstat
  * @returns {string|null}
  */
-function deepestExistingAncestor(absPath, lstat) {
+export function deepestExistingAncestor(absPath, lstat) {
   let probe = absPath;
   for (;;) {
     try {
