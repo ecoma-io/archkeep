@@ -33,13 +33,11 @@
   <a href="https://github.com/ecoma-io/archkeep/issues/new?template=feature_request.yml">Feature Request</a>
 </p>
 
----
-
-## What Archkeep is
-
 <p align="center">
   <img src=".github/assets/banner.png" alt="Archkeep — an architecture authority for human and agentic software development: a deterministic authority that keeps the architecture your team declared aligned with the code your team keeps changing" width="100%" />
 </p>
+
+## What Archkeep is
 
 Archkeep is a deterministic architecture governance system for humans and
 coding agents. You declare the architecture you intend; Archkeep reads what
