@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.28.1](https://github.com/ecoma-io/archkeep/compare/v0.28.0...v0.28.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **archkeep:** order history snapshots by capture sequence, not filename bytes ([#895](https://github.com/ecoma-io/archkeep/issues/895)) ([0fcf97b](https://github.com/ecoma-io/archkeep/commit/0fcf97b395b9be3ce2af362b0f91bb3482ad23c1))
+* **archkeep:** decide historyOutputRefusal on the physical destination ([#896](https://github.com/ecoma-io/archkeep/issues/896)) ([4f9bd25](https://github.com/ecoma-io/archkeep/commit/4f9bd259e2932448977873303e3ed255c0986ab4))
+
+
+### Documentation
+
+* **archkeep:** record F6 and F7 as fixed in the hardening ledger ([#901](https://github.com/ecoma-io/archkeep/issues/901)) ([57060bd](https://github.com/ecoma-io/archkeep/commit/57060bdb3279ff269f188c8d8cf696cd7b34345c))
+* **archkeep:** record post-merge status in the hardening ledger ([#893](https://github.com/ecoma-io/archkeep/issues/893)) ([ec319db](https://github.com/ecoma-io/archkeep/commit/ec319dbffc038ace59481bb431e42143227f25ef))
+* **archkeep:** register the provenance bench in the re-take baseline ([#900](https://github.com/ecoma-io/archkeep/issues/900)) ([43e6801](https://github.com/ecoma-io/archkeep/commit/43e6801f8322a6d594ea37183d69b6ec1ceedfea))
+
 ## [0.28.0](https://github.com/ecoma-io/archkeep/compare/v0.27.1...v0.28.0) (2026-09-10)
 
 

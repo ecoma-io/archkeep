@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "tool": {
     "name": "@ecoma-io/archkeep",
-    "version": "0.28.0"
+    "version": "0.28.1"
   },
   "command": "discover",
   "workspace": {
