@@ -1,0 +1,39 @@
+{
+  // The language every other version is judged against. This repository's
+  // documentation is written in English first.
+  sourceLanguage: "en",
+
+  // The multilingual README program: one document, eleven language twins,
+  // GitHub-style suffixed twins (README.vi.md, README.ja.md, …). A suffixed
+  // pattern is the more specific claim, so README.ja.md classifies as ja even
+  // though the bare `{document}.md` pattern can also name it. The language
+  // set must agree with the selector line every README carries — the same
+  // eleven links, in this configuration's own order.
+  languages: {
+    en: "{document}.md",
+    vi: "{document}.vi.md",
+    zh: "{document}.zh.md",
+    ja: "{document}.ja.md",
+    es: "{document}.es.md",
+    hi: "{document}.hi.md",
+    ar: "{document}.ar.md",
+    pt: "{document}.pt.md",
+    bn: "{document}.bn.md",
+    ru: "{document}.ru.md",
+    fr: "{document}.fr.md",
+  },
+
+  // Deliberately untranslated for now: the bare `{document}.md` source
+  // pattern claims every markdown file in the repository — skills, rules,
+  // the whole docs tree — so the ignore list narrows the program to exactly
+  // one document until each joins deliberately. Widening to docs/** happens
+  // after this phase has been reviewed.
+  ignore: ["**", "!README.md"],
+
+  // Product and protocol names that stay in English in every translation.
+  glossary: ["GitHub Actions", "Archkeep", "OpenAI-compatible", "pull request", "Nx", "Moon"],
+
+  instructions: {
+    instruction: ".github/action-agents/harmonise/instruction.md",
+  },
+}

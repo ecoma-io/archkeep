@@ -7,17 +7,17 @@
 </p>
 <!-- harmonise:skip-end -->
 
-<!-- harmonise:skip-start -->
-
-<a href="README.md">English</a> | <a href="README.vi.md">Tiếng Việt</a> | <a href="README.zh.md">中文</a> | <a href="README.ja.md">日本語</a> | <a href="README.es.md">Español</a> | <a href="README.hi.md">हिन्दी</a> | <a href="README.ar.md">العربية</a> | <a href="README.pt.md">Português</a> | <a href="README.bn.md">বাংলা</a> | <a href="README.ru.md">Русский</a> | <a href="README.fr.md">Français</a>
-
-<!-- harmonise:skip-end -->
-
 <p align="center">
   <img src=".github/assets/logo.png" alt="Archkeep — an architecture authority for human and agentic software development: a deterministic authority that keeps the architecture your team declared aligned with the code your team keeps changing" width="64px" />
 </p>
 
 <h1 align="center">Archkeep</h1>
+
+<!-- harmonise:skip-start -->
+<p align="center">
+<a href="README.md">English</a> | <a href="README.vi.md">Tiếng Việt</a> | <a href="README.zh.md">中文</a> | <a href="README.ja.md">日本語</a> | <a href="README.es.md">Español</a> | <a href="README.hi.md">हिन्दी</a> | <a href="README.ar.md">العربية</a> | <a href="README.pt.md">Português</a> | <a href="README.bn.md">বাংলা</a> | <a href="README.ru.md">Русский</a> | <a href="README.fr.md">Français</a>
+</p>
+<!-- harmonise:skip-end -->
 
 <p align="center">
   <strong>An architecture authority for human and agentic software development.</strong><br />
@@ -33,13 +33,11 @@
   <a href="https://github.com/ecoma-io/archkeep/issues/new?template=feature_request.yml">Feature Request</a>
 </p>
 
----
-
-## What Archkeep is
-
 <p align="center">
   <img src=".github/assets/banner.png" alt="Archkeep — an architecture authority for human and agentic software development: a deterministic authority that keeps the architecture your team declared aligned with the code your team keeps changing" width="100%" />
 </p>
+
+## What Archkeep is
 
 Archkeep is a deterministic architecture governance system for humans and
 coding agents. You declare the architecture you intend; Archkeep reads what

@@ -1,0 +1,109 @@
+name: Harmonise
+
+# Dogfood: the organisation's `harmonise` action (ecoma-io/action-agents)
+# keeping this repository's README language set in step with the English
+# source — the multilingual README program the header's two protected regions
+# (badges, selector) were written for. The selector links ten twins that do
+# not exist yet; a missing twin is a missing document, not an English
+# fallback: the run classifies the pair unrecorded and proposes creating it,
+# and `dry-run: "true"` below keeps every proposal a proposal until a
+# maintainer flips the switch in a visible one-line diff.
+#
+# The ref is digest-pinned to the commit the released tag v0.12.1 names — the
+# same bytes `triage.yml` and `review.yml` run, and the same discipline: the
+# operator knows which bytes run before any of them do, and adopting a later
+# fix is a deliberate re-pin (`.github/semgrep/workflows.yaml`,
+# `workflow-action-not-pinned-to-sha`).
+#
+# The pull request this action maintains must run CI like any contributor's:
+# events raised by `GITHUB_TOKEN` are suppressed by GitHub's recursion
+# prevention, so a harmonise PR opened on the workflow token would sit there
+# with no checks at all. The App token minted below gives the run the
+# organisation App's identity, and its events start workflows the way a
+# contributor's do. That identity is stronger than the permissions block
+# below — the block binds only `GITHUB_TOKEN` — which is the same trade
+# `release.yml` makes, accepted because what a harmonise run may write is
+# already pinned in code: files inside the configured language patterns, one
+# branch of its own naming, nothing else.
+
+on:
+  schedule:
+    # Weekly, staggered from the triage and review windows rather than
+    # stacked on them.
+    - cron: "43 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Report drift and propose nothing.
+        required: false
+        default: "true"
+        type: string
+
+# The workflow-level floor grants nothing; the job below restates its reads
+# and holds every write, so a job added later inherits read-only instead of
+# silently widening.
+permissions: read-all
+
+# Two harmonise runs must never mutate the branch at once; unlike triage,
+# cancelling in progress would abandon half-published proposals, so queued
+# runs wait instead of being cancelled.
+concurrency:
+  group: harmonise
+  cancel-in-progress: false
+
+jobs:
+  harmonise:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # What a real run writes when it falls back to the workflow token: blobs,
+    # a tree, a commit, its own branch ref, and the one pull request. Nothing
+    # else — no issues, no comments, no merges.
+    permissions:
+      contents: write
+      pull-requests: write
+    # Hoisted so the App-token step's `if:` has something it is allowed to
+    # read — secrets cannot be referenced directly in step conditionals. Same
+    # arrangement as `release.yml`, including the fallback: empty credentials
+    # skip only this step, and the token line degrades to `github.token`
+    # instead of failing red.
+    env:
+      HARMONISE_APP_ID: ${{ secrets.ECOMA_APP_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Mint a GitHub App token
+        id: app-token
+        if: env.HARMONISE_APP_ID != ''
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.ECOMA_APP_ID }}
+          private-key: ${{ secrets.ECOMA_APP_KEY }}
+
+      - uses: ecoma-io/action-agents/harmonise@2f0e18a8e1ea5bdfa8fc690057ca1bbdfaa4f3a4 # v0.12.1
+        with:
+          github-token: ${{ steps.app-token.outputs.token || github.token }}
+          api-url: ${{ secrets.ECOMA_LLM_BASE_URL }}
+          api-key: ${{ secrets.ECOMA_LLM_API_KEY }}
+          model: harmonise
+          source-language: en
+          dry-run: ${{ inputs.dry-run || 'true' }}
+
+      # The run record — outcome, pair accounting, pull request identity — as
+      # a downloadable file. `always()` keeps the record for runs whose action
+      # step failed; a run that died before any record could be written
+      # produced no file. The record directory is hidden by design, so
+      # `include-hidden-files: true` is load-bearing: upload-artifact prunes
+      # hidden files by default and the glob then matches zero files while
+      # the step still reports success. `if-no-files-found: warn` keeps a
+      # declared write that lands nowhere loud instead of green over nothing.
+      - name: Upload the run record
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: harmonise-run-record
+          path: .harmonise-record/harmonise-record-*.json
+          include-hidden-files: true
+          if-no-files-found: warn
