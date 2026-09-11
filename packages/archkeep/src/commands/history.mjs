@@ -10,7 +10,8 @@
  *
  * `--capture` appends a snapshot of the current workspace first — writing
  * `<seq>-<sha8>.json` (a zero-padded monotonic sequence and the snapshot's
- * architecture identity, so filename byte-sort IS history order) — then
+ * architecture identity; `readSnapshots` parses the leading sequence, so
+ * capture-sequence order IS history order) — then
  * produces the record that includes it. Capture deduplicates: when the
  * current architecture identity matches the last snapshot, no new file is
  * written and no empty transition is manufactured. The capture answer — was
@@ -34,9 +35,11 @@
  * An index file would be a second copy of facts the snapshot files already
  * hold, and two copies drift — the same reason `scripts/check-packages.mjs`
  * derives its target list from `ci.yml` rather than holding a copy
- * (`../../../../AGENTS.md`). The directory is ordered by filename byte-sort;
- * a snapshot is replaced or deleted by moving its file; a `history` that
- * cannot make sense of the directory says so instead of guessing.
+ * (`../../../../AGENTS.md`). The directory is ordered by capture sequence —
+ * `readSnapshots` parses each filename's leading numeric sequence, never
+ * byte order, which a sequence widened past 9999 would rewind; a snapshot
+ * is replaced or deleted by moving its file; a `history` that cannot make
+ * sense of the directory says so instead of guessing.
  *
  * ## What a transition can and cannot assert
  *
@@ -183,6 +186,14 @@ export function eventSnapshotSide({ revision, projects, dependencies, policyFing
  * may share an architecture identity at non-adjacent positions (an A → B → A
  * evolution is real history); only capture dedups, against the last file.
  *
+ * The files are returned in capture-sequence order: the leading numeric
+ * sequence parsed from each filename, never filename byte order — at the
+ * 9999→10000 boundary byte order places a five-digit `10000-…` before
+ * `1001-…`, rewinding the record. Byte order is only the deterministic
+ * tiebreak for equal sequences; a name with no numeric prefix sorts after
+ * every numbered snapshot, byte-ordered among themselves, so a foreign file
+ * never interleaves with (and silently rewrites) the record.
+ *
  * @param {string} dir Absolute path to the history directory.
  * @param {string} [root] The workspace root, when the caller has one. A
  *   directory whose STRING lies inside the workspace but whose realpath
@@ -221,7 +232,24 @@ export function readSnapshots(dir, root) {
     );
   }
   names = names.filter((name) => name.endsWith(".json") && !name.endsWith(".json.tmp"));
-  names.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  // History order is the capture SEQUENCE, not filename bytes: the sequence
+  // widens past 9999 (`nextSequence`), where byte-sort would order
+  // `10000-…` between `1000-…` and `1001-…` and rewind the record. Parse
+  // each leading `\d+` once and sort numerically; byte order is the
+  // deterministic tiebreak for equal sequences. A name with no numeric
+  // prefix cannot be sequenced — it sorts after every numbered snapshot
+  // (`Infinity`), byte-ordered among itself, never displacing the record.
+  const sequenced = names.map((name) => {
+    const match = /^(\d+)-/.exec(name);
+    return {
+      name,
+      sequence: match === null ? Number.POSITIVE_INFINITY : Number.parseInt(match[1], 10),
+    };
+  });
+  sequenced.sort(
+    (a, b) => a.sequence - b.sequence || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
+  );
+  names = sequenced.map((entry) => entry.name);
 
   const files = [];
   for (const name of names) {
@@ -273,13 +301,14 @@ export function shortId(id) {
  * The zero-padded sequence number for `--capture`, taken from the highest
  * existing snapshot filename. `0001` for a fresh directory.
  *
- * The width widens from a four-digit minimum rather than overflowing: a
- * `10000` that padded to four digits would byte-sort *before* `9999-…` and
- * silently rewind history order, and the sequence regex would stop seeing the
- * 5-digit name so repeated captures would clobber the same file. Fresh
- * directories start at `0001`; each subsequent capture pads to at least the
- * width the next number needs, so the sequence always advances and no two
- * captures ever target the same file.
+ * The width is a stable filename shape, not an ordering mechanism:
+ * `readSnapshots` parses the leading sequence numerically, so a five-digit
+ * `10000-…` follows `9999-…` and history order can never rewind at the
+ * width boundary. The four-digit minimum keeps a young history's filenames
+ * uniformly shaped, and the width only ever grows to what the next number
+ * needs — which is what actually keeps two captures from ever targeting
+ * the same filename: the sequence advances past every existing name, so no
+ * produced name repeats one that exists, on any width.
  *
  * @param {{files: {name: string}[]}} read From `readSnapshots`.
  * @returns {string} Zero-padded sequence, at least four digits.
