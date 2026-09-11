@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.29.0](https://github.com/ecoma-io/archkeep/compare/v0.28.1...v0.29.0) (2026-09-11)
+
+
+### Features
+
+* complete the harmonise rollout for the README set ([#909](https://github.com/ecoma-io/archkeep/issues/909)) ([979a4ed](https://github.com/ecoma-io/archkeep/commit/979a4ed2af4b7c2a08a2c1862fa25ad0b630afc4))
+
+
+### Bug Fixes
+
+* **workspace:** fail the release lane on commits release-please cannot parse ([#910](https://github.com/ecoma-io/archkeep/issues/910)) ([a18e420](https://github.com/ecoma-io/archkeep/commit/a18e420bfd25c80b5dcf1a80c333a82de288093f)), closes [#903](https://github.com/ecoma-io/archkeep/issues/903)
+
+
+### Documentation
+
+* adopt multilingual README convention ([#908](https://github.com/ecoma-io/archkeep/issues/908)) ([57059da](https://github.com/ecoma-io/archkeep/commit/57059da6acd8dba663e46c4cd77c006071f854aa)), closes [#907](https://github.com/ecoma-io/archkeep/issues/907)
+* refresh the 1.0 readiness checklist with the 2026-09-11 measurement ([#904](https://github.com/ecoma-io/archkeep/issues/904)) ([1650a15](https://github.com/ecoma-io/archkeep/commit/1650a15221cf05b2792b34b0076e3b30a95b23f0))
+* **workspace:** correct the partial-finding semantics and a truncated test comment ([#912](https://github.com/ecoma-io/archkeep/issues/912)) ([d83e447](https://github.com/ecoma-io/archkeep/commit/d83e447ae7ecb06495cfb03990438541000a0206))
+
 ## [0.28.1](https://github.com/ecoma-io/archkeep/compare/v0.28.0...v0.28.1) (2026-09-11)
 
 
