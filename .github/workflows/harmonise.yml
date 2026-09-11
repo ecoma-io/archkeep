@@ -83,7 +83,7 @@ jobs:
           app-id: ${{ secrets.ECOMA_APP_ID }}
           private-key: ${{ secrets.ECOMA_APP_KEY }}
 
-      - uses: ecoma-io/action-agents/harmonise@a1972dcc618bad24aac0b48bd1849cb99c218182 # v0.13.0
+      - uses: ecoma-io/action-agents/harmonise@1d147e34868b06bfc6156d031a2f56d94d5f8c0c # v0.13.1
         with:
           github-token: ${{ steps.app-token.outputs.token || github.token }}
           api-url: ${{ secrets.ECOMA_LLM_BASE_URL }}
