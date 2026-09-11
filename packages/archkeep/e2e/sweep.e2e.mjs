@@ -2,36 +2,49 @@
 // an unchanged committed tree, must produce byte-identical stdout AND the same
 // exit code AND stable stderr.
 //
-// The three existing cases in this file prove graph/check/impact byte-identity
-// on one tree each. The audit's empirical matrix (workstream E, E-F03) proved
-// the rest of the surface byte-identical on two runs too, but that matrix
-// lived under `.claude/tmp/` and enforced nothing: a future edit that made any
-// of those commands order- or time-dependent would go green against the
-// contract. This sweep is that matrix, gated.
+// The roster is `COMMAND_NAMES` in `cli.mjs`. Every machine-readable verb has
+// a case below except three documented exceptions: `graph` and `impact` are
+// pinned in `determinism.e2e.mjs`; `history --capture` differs on an
+// unchanged tree in exactly one readable field — the always-present
+// `result.captured.duplicate` boolean (E-F05) — so it lives in
+// `history.e2e.mjs`, which pins that one-field contract instead; and
+// `rules add` is a stateful WRITE, so a second run sees the tree the first
+// left behind — a different scenario than this contract — and its lanes live
+// in `rules.e2e.mjs`. Swept here: drift, reconcile (read and --propose),
+// context, provenance, adr, discover (read and --propose), fitness
+// (pass/fail/no-policy), explain, health (tree and history), history (read),
+// debt, diff, delta, change, rules (verify, list, info), check (json/sarif
+// across five trees), waivers, trajectory, evolution, report, decisions, and
+// scenario.
 //
 // Two wall-clock fields are disclosed in the envelope's own `coverage.notes`
 // (the note names them and says to exclude them from any diff or hash):
 // `debt`'s `result.sampleTime` and `waivers`' `result.waivers[].remainingMs`.
 // They are excised from the parsed JSON before comparison, and each case
 // asserts the disclosure note exists — the note is the contract's proof that
-// the drift is documented rather than silent. `history --capture` is not
-// swept here: its two captures of an unchanged tree differ in exactly one
-// readable field, the always-present `result.captured.duplicate` boolean
-// (E-F05), so it lives in `history.e2e.mjs`, which pins that one-field
-// contract instead.
+// the drift is documented rather than silent. No other swept command carries
+// a run-varying field: the trajectory, evolution, report, decisions, and
+// scenario envelopes were checked clock-free when their cases were added, and
+// a future wall-clock field must arrive with its disclosure note and an
+// excise in the case that catches it.
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { packArtifact } from "./helpers/artifact.mjs";
-import { createNativeLanguageConsumer, createNxLanguageConsumer } from "./helpers/consumer.mjs";
+import {
+  commitFiles,
+  createNativeLanguageConsumer,
+  createNxLanguageConsumer,
+} from "./helpers/consumer.mjs";
 import { archkeep } from "./helpers/run.mjs";
 import {
   determinismSweepFiles,
   determinismSweepProfilesFiles,
   sweepIntents,
 } from "./fixtures/determinism-sweep.mjs";
+import { CORE_REACHES_APP } from "./fixtures/violations.mjs";
 
 let artifact;
 let clean; // native monorepo + matching intent + ADR
@@ -445,6 +458,151 @@ describe("determinism sweep", () => {
       assertDeterministic(empty.root, ["check", "--format", "json"], { expectExit: 3 });
     } finally {
       empty.cleanup();
+    }
+  });
+
+  it("trajectory <history-dir> --format json is byte-identical over a two-observation history", () => {
+    // Capture deduplicates an unchanged tree, so a one-capture history would
+    // only reach the insufficient_history refusal; the aggregation lane this
+    // case sweeps needs two distinct observations — the capture → change →
+    // capture shape history.e2e.mjs's evolution case established.
+    const consumer = makeSweep(artifact, sweepIntents.CLEAN_INTENT);
+    const dir = freshHistoryDir();
+    try {
+      expect(archkeep(consumer.root, ["history", dir, "--capture"]).exitCode).toBe(0);
+      commitFiles(consumer.root, CORE_REACHES_APP, "core reaches up into app");
+      expect(archkeep(consumer.root, ["history", dir, "--capture"]).exitCode).toBe(0);
+      assertDeterministic(consumer.root, ["trajectory", dir, "--format", "json"], {
+        expectExit: 0,
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      consumer.cleanup();
+    }
+  });
+
+  it("evolution --base --format json is byte-identical across a committed range, exit 0", () => {
+    // Consumers are born with one commit; a second makes `--base HEAD~1` a
+    // real two-revision range. This case owns its consumer because the shared
+    // `clean` tree must stay at its creation commit for the cases above.
+    const consumer = makeSweep(artifact, sweepIntents.CLEAN_INTENT);
+    try {
+      commitFiles(consumer.root, CORE_REACHES_APP, "core reaches up into app");
+      assertDeterministic(consumer.root, ["evolution", "--base", "HEAD~1", "--format", "json"], {
+        expectExit: 0,
+      });
+    } finally {
+      consumer.cleanup();
+    }
+  });
+
+  it("report --format json is byte-identical, exit 0", () => {
+    assertDeterministic(clean.root, ["report", "--format", "json"], { expectExit: 0 });
+  });
+
+  it("decisions <adr-id> --format json is byte-identical on unresolved and resolved chains", () => {
+    // The fixture's only ADR binds `intentForbiddenEdge`, a row that does not
+    // exist, so the shared clean consumer reaches the exit-3 unresolved lane —
+    // the same bytes the corpus goldens pin, which is why the shared fixture
+    // must stay untouched. The registry trusts only git-tracked bytes, so the
+    // resolved exit-0 lane needs its own consumer whose tree carries a second
+    // ADR from creation, binding the one row CLEAN_INTENT really carries.
+    assertDeterministic(clean.root, ["decisions", "0001-layers", "--format", "json"], {
+      expectExit: 3,
+    });
+    const consumer = createNativeLanguageConsumer(
+      artifact,
+      (packageName, peers, packageManager) => {
+        const files = determinismSweepFiles(
+          packageName,
+          peers,
+          packageManager,
+          sweepIntents.CLEAN_INTENT,
+        );
+        files["docs/adr/0002-resolved.md"] = [
+          "---",
+          "id: 0002-resolved",
+          "status: accepted",
+          "bindings:",
+          "  - forbidden[0] core→app",
+          "---",
+          "",
+          "Decisions have layers.",
+          "",
+        ].join("\n");
+        return files;
+      },
+    );
+    try {
+      assertDeterministic(consumer.root, ["decisions", "0002-resolved", "--format", "json"], {
+        expectExit: 0,
+      });
+      const result = archkeep(consumer.root, ["decisions", "0002-resolved", "--format", "json"]);
+      expect(result.json.result.walk.ok).toBe(true);
+    } finally {
+      consumer.cleanup();
+    }
+  });
+
+  it("scenario <project> --scenario-file --format json is byte-identical, exit 0", () => {
+    const dir = freshHistoryDir();
+    try {
+      const scenarioFile = join(dir, "scenario.json");
+      writeFileSync(
+        scenarioFile,
+        `${JSON.stringify({
+          changes: [
+            { type: "dependency_added", source: "app", target: "core", edgeType: "static" },
+          ],
+        })}\n`,
+        "utf8",
+      );
+      assertDeterministic(
+        clean.root,
+        ["scenario", "app", "--scenario-file", scenarioFile, "--format", "json"],
+        { expectExit: 0 },
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rules list and rules info --catalog --format json are byte-identical, exit 0", () => {
+    // list/info read only catalog JSON — never artifact bytes — so a catalog
+    // whose artifact does not exist still drives the descriptive exit-0 lanes
+    // (verify's missing-artifact finding is pinned separately above).
+    const dir = freshHistoryDir();
+    try {
+      const catalog = join(dir, "catalog.json");
+      writeFileSync(
+        catalog,
+        `${JSON.stringify(
+          {
+            version: 1,
+            rules: [
+              {
+                name: "no-nested-imports",
+                artifact: "rules/no-such-rule.wasm",
+                sha256: "a".repeat(64),
+                contract: "1",
+              },
+            ],
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+      assertDeterministic(clean.root, ["rules", "list", "--catalog", catalog, "--format", "json"], {
+        expectExit: 0,
+      });
+      assertDeterministic(
+        clean.root,
+        ["rules", "info", "no-nested-imports", "--catalog", catalog, "--format", "json"],
+        { expectExit: 0 },
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });
