@@ -8052,6 +8052,43 @@ describe("`history` capture and describe against the Nx fixture", () => {
     }
   });
 
+  it("refuses --output through an unresolvable symlink loop instead of guessing from the spelling (bug #888)", async () => {
+    // The physical comparison is only a claim when the destination CAN be
+    // resolved. A symlink loop makes `realpathSync` answer ELOOP — not a
+    // missing-path error — so the fallback contract does not apply: no
+    // component of the answer is provable, and answering from the lexical
+    // spelling would be the silent direction (a guard that cannot reach a
+    // verdict guesses "safe" exactly when it must not). The refusal IS the
+    // claim: the physical destination could not be proven outside the
+    // history directory. Before the no-verdict ruling the catch-all
+    // degraded to the lexical comparison, the run proceeded, and the write
+    // failed the ordinary way (exit 3) — never the refusal.
+    const streams = env();
+    expect(await runCli(["history", histDir, "--capture", "--format", "json"], streams)).toBe(
+      EXIT.ok,
+    );
+    const loopA = join(histDir, "loop-a");
+    const loopB = join(histDir, "loop-b");
+    symlinkSync("loop-b", loopA);
+    symlinkSync("loop-a", loopB);
+    try {
+      const loopStreams = env();
+      expect(
+        await runCli(
+          ["history", histDir, "--format", "json", "--output", join(loopA, "report.json")],
+          loopStreams,
+        ),
+      ).toBe(EXIT.usage);
+      expect(loopStreams.lines.err.join("\n")).toContain("cannot be proven outside");
+      // A refusal is a no-write: nothing lands among the snapshots, and the
+      // loop links themselves are all that leaked.
+      expect(readdirSync(histDir)).not.toContain("report.json");
+    } finally {
+      rmSync(loopA, { force: true });
+      rmSync(loopB, { force: true });
+    }
+  });
+
   it("keeps refusing the string-inside spelling when the history directory does not exist yet (bug #888 fallback)", async () => {
     // The physical comparison needs both sides to exist; a `--capture` run
     // creates the directory later, so at guard time it may not. The fallback
