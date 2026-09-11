@@ -181,6 +181,9 @@ jobs:
       # and compiles nothing extra of this repository's — the rebuild that
       # `packages/archkeep-rule-sdk-rust/rebuild-example.sh` argues CI should
       # not do stays out.
+      # Not retry-wrapped: rustup itself retries download failures boundedly
+      # (RUSTUP_MAX_RETRIES, default 3), so the fetch layer already carries
+      # the same protection this change adds to curl.
       - name: Add the Rust components and target the rules crate's typecheck
         run: |
           rustup component add clippy rustfmt
@@ -482,6 +485,9 @@ jobs:
       # without clippy (the legs' copy of this step argues it against the
       # runner image's own software list); the target std installs without
       # compiling anything extra of this repository's.
+      # Not retry-wrapped: rustup itself retries download failures boundedly
+      # (RUSTUP_MAX_RETRIES, default 3), so the fetch layer already carries
+      # the same protection this change adds to curl.
       - name: Add the Rust components and target the SDK's typecheck
         run: |
           rustup component add clippy rustfmt
@@ -501,6 +507,8 @@ jobs:
       # here rather than taken from the runner image's preinstalled copy so a
       # new Ruff release cannot rewrite the verdicts on its own schedule.
       # `packages/archkeep-rule-sdk-python/ruff.toml` argues the rule roster.
+      # Not retry-wrapped: digest-pinned action with no retry input — the
+      # ruff fetch is the action's own HTTP client, not this step's.
       - name: Install the pinned Ruff the Python SDK's lint target runs
         uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
         with:
@@ -510,6 +518,8 @@ jobs:
       # Go the runner image ships this month — the same determinism the
       # Node matrix buys, and `go-version-file` keeps the floor owned by the
       # module that requires it.
+      # Not retry-wrapped: digest-pinned action with no retry input — the Go
+      # toolchain fetch is the action's own HTTP client, not this step's.
       - name: Pin the Go toolchain the Go SDK's targets run
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -522,12 +532,20 @@ jobs:
       # v2.12.2 release artifact itself. The `lint` target in
       # `packages/archkeep-rule-sdk-go/moon.yml` argues the linter roster and
       # why `go vet` is not run beside it.
+      # The download itself retries bounded — `--retry 3 --retry-all-errors
+      # --retry-delay 10` — because a transient 5xx from the release endpoint
+      # must not fail the pipeline on an unchanged tree (measured: ci run
+      # 34457993424 died on exactly that, curl exit 22). The checksum line
+      # below stays OUTSIDE the retry on purpose: it fails loudly on a wrong
+      # or partial download, and a retry must never paper over bytes that do
+      # not match the pin.
       - name: Install the pinned golangci-lint the Go SDK's lint target runs
         run: |
           set -euo pipefail
           dir="$RUNNER_TEMP/golangci-lint"
           mkdir -p "$dir"
           curl --silent --show-error --fail --location \
+            --retry 3 --retry-all-errors --retry-delay 10 \
             --output "$dir/golangci-lint.tar.gz" \
             "https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz"
           echo "8df580d2670fed8fa984aac0507099af8df275e665215f5c7a2ae3943893a553  $dir/golangci-lint.tar.gz" | sha256sum --check --strict
