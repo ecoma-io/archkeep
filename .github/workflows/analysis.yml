@@ -193,9 +193,14 @@ jobs:
       # Exit contract, matching the binary's own: 0 clean · 2 leaks · anything
       # else a scan that did not complete, which fails loudly — never dressed up
       # as green.
+      # The curl fetch retries bounded (3 × 10s, --retry-all-errors): a
+      # transient 5xx from the release endpoint must not fail the scan on an
+      # unchanged tree. The checksum line stays outside the retry and fails
+      # loudly on a wrong or partial download.
       - name: Install gitleaks 8.24.3
         run: |
           curl --fail --silent --show-error --location \
+            --retry 3 --retry-all-errors --retry-delay 10 \
             "https://github.com/zricethezav/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz" \
             --output "$RUNNER_TEMP/gitleaks.tar.gz"
           echo "9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c  $RUNNER_TEMP/gitleaks.tar.gz" \

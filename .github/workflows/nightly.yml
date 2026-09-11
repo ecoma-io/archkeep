@@ -94,6 +94,9 @@ jobs:
       # survive into a Moon task's PATH — measured there). Running the
       # unfiltered `...:lint` matrix without them fails the first job that
       # reaches an SDK target, so they are load-bearing here, not ceremony.
+      # None of the three fetches is retry-wrapped: rustup retries its own
+      # downloads (RUSTUP_MAX_RETRIES, default 3), and the two digest-pinned
+      # actions expose no retry input.
       - name: Add the Rust components and target the SDK's targets run
         run: |
           rustup component add clippy rustfmt
@@ -109,12 +112,18 @@ jobs:
         with:
           go-version-file: packages/archkeep-rule-sdk-go/go.mod
 
+      # The curl fetch retries bounded (3 × 10s, --retry-all-errors): a
+      # transient 5xx from the release endpoint must not fail the run on an
+      # unchanged tree — the same defect ci run 34457993424 died of. The
+      # checksum line stays outside the retry and fails loudly on a wrong or
+      # partial download.
       - name: Install the pinned golangci-lint the Go SDK's lint target runs
         run: |
           set -euo pipefail
           dir="$RUNNER_TEMP/golangci-lint"
           mkdir -p "$dir"
           curl --silent --show-error --fail --location \
+            --retry 3 --retry-all-errors --retry-delay 10 \
             --output "$dir/golangci-lint.tar.gz" \
             "https://github.com/golangci/golangci-lint/releases/download/v2.12.2/golangci-lint-2.12.2-linux-amd64.tar.gz"
           echo "8df580d2670fed8fa984aac0507099af8df275e665215f5c7a2ae3943893a553  $dir/golangci-lint.tar.gz" | sha256sum --check --strict
