@@ -791,28 +791,32 @@ function historyDirFrom(options, cwd) {
 
 /**
  * The physical location `path` names, resolved through every intermediate
- * symlink. When a component does not exist yet, `realpathSync` answers ENOENT
- * and the fallback walks up to the deepest existing ancestor
- * (`deepestExistingAncestor` — the same primitive the containment probe in
- * `../containment.mjs` walks), resolves THAT physically, and appends the
- * not-yet-existing remainder lexically: a component that does not exist
- * cannot be a symlink, so its lexical spelling is its only spelling. When no
- * component exists at all, the lexical `resolve()` result is the whole
- * answer.
+ * symlink. When a component does not exist yet (`ENOENT`/`ENOTDIR` — the
+ * only errors that mean "missing"), `realpathSync` fails and the fallback
+ * walks up to the deepest existing ancestor (`deepestExistingAncestor` — the
+ * same primitive the containment probe in `../containment.mjs` walks),
+ * resolves THAT physically, and appends the not-yet-existing remainder
+ * lexically: a component that does not exist cannot be a symlink, so its
+ * lexical spelling is its only spelling. When no component exists at all,
+ * nothing is provable and the answer is `null`.
  *
  * @param {string} path An absolute, already-`resolve`d path.
- * @returns {string} The physical destination, or the lexical form when the
- *   path does not exist.
+ * @returns {string|null} The physical destination, the lexical form when the
+ *   path is missing, or `null` when the destination cannot be resolved at
+ *   all (a symlink loop, an unreadable component) — a no-verdict signal the
+ *   caller must refuse on, never guess from.
  */
 function physicalDestination(path) {
   try {
     return realpathSync(path);
-  } catch {
+  } catch (error) {
+    if (error.code !== "ENOENT" && error.code !== "ENOTDIR") return null;
     const ancestor = deepestExistingAncestor(path, lstatSync);
-    if (ancestor === null) return resolve(path);
+    if (ancestor === null) return null;
     try {
       return resolve(realpathSync(ancestor), relative(ancestor, path));
-    } catch {
+    } catch (error) {
+      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") return null;
       return resolve(path);
     }
   }
@@ -834,7 +838,10 @@ function physicalDestination(path) {
  * history directory through symlinks rather than comparing strings — and
  * this guard now matches it: the realpath of the output's parent against the
  * realpath of the history directory, falling back to the lexical `resolve()`
- * result for components that do not exist yet. Refusal is EQUALITY only: a
+ * result for components that do not exist yet. A destination that cannot be
+ * resolved at all (a symlink loop, an unreadable component) is refused: it
+ * cannot be PROVEN outside the history directory, and answering from the
+ * spelling would be the silent direction. Refusal is EQUALITY only: a
  * report in a SUBDIRECTORY of the history directory is not read back
  * (`readSnapshots` is non-recursive) and stays allowed. The resolved-string
  * comparison runs first, unchanged.
@@ -863,10 +870,23 @@ export function historyOutputRefusal(options, cwd) {
   // Fast path: the resolved string already names the history directory.
   if (dirname(outputAbs) === dir) return refusal;
   // Physical path: the spelling differs but the write would land in the
-  // history directory all the same — a symlink alias of it, for example.
-  if (physicalDestination(dirname(outputAbs)) === physicalDestination(dir)) {
-    return refusal;
+  // history directory all the same — a symlink alias of it, for example. A
+  // `null` destination means the physical answer is unprovable (a symlink
+  // loop, an unreadable component): refusing IS the claim there, because a
+  // destination that cannot be resolved also cannot be proven outside the
+  // history directory.
+  const outputPhysical = physicalDestination(dirname(outputAbs));
+  const dirPhysical = physicalDestination(dir);
+  if (outputPhysical === null || dirPhysical === null) {
+    return (
+      `archkeep: --output '${options.output}' could not be resolved to a ` +
+      `physical destination, so it cannot be proven outside the history ` +
+      `directory '${dir}' — refusing rather than guessing from the spelling. ` +
+      `Check the path for symlink loops or unreadable components, and write ` +
+      `somewhere resolvable.`
+    );
   }
+  if (outputPhysical === dirPhysical) return refusal;
   return null;
 }
 
