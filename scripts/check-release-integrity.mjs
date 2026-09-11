@@ -100,7 +100,7 @@ const LANES_PARSE = /** @type {typeof parseConventionalCommits} */ (parseConvent
  * @property {string} sha full commit sha
  * @property {string} subject first line of the commit message
  * @property {string} reason the parser's own report, or the no-debug-line case named
- * @property {"dropped" | "partial"} kind dropped: absent from the output; partial: present but debug-named
+ * @property {"dropped" | "partial"} kind dropped: absent from the output; partial: present in the output but carrying fewer entries than it handed the parser
  */
 
 /**

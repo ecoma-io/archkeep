@@ -171,6 +171,7 @@ test("yieldsLaneEntry agrees with the splitter about what reaches the parser", (
   );
 });
 test("laneEntryCount mirrors the splitter's piece count", () => {
+  // The count a partial finding compares against: one entry-shaped message
   // in front of a merge-commit subject, zero in plain prose, two when a
   // nested block is extracted for separate parsing.
   assert.equal(
