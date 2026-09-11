@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.28.1](https://github.com/ecoma-io/archkeep/compare/v0.28.0...v0.28.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* **archkeep:** order history snapshots by capture sequence, not filename bytes ([#895](https://github.com/ecoma-io/archkeep/issues/895)) ([0fcf97b](https://github.com/ecoma-io/archkeep/commit/0fcf97b395b9be3ce2af362b0f91bb3482ad23c1))
+
+
+### Documentation
+
+* **archkeep:** record post-merge status in the hardening ledger ([#893](https://github.com/ecoma-io/archkeep/issues/893)) ([ec319db](https://github.com/ecoma-io/archkeep/commit/ec319dbffc038ace59481bb431e42143227f25ef))
+* **archkeep:** register the provenance bench in the re-take baseline ([#900](https://github.com/ecoma-io/archkeep/issues/900)) ([43e6801](https://github.com/ecoma-io/archkeep/commit/43e6801f8322a6d594ea37183d69b6ec1ceedfea))
+
 ## [0.28.0](https://github.com/ecoma-io/archkeep/compare/v0.27.1...v0.28.0) (2026-09-10)
 
 
