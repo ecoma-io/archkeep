@@ -12,10 +12,11 @@ import {
   snapshotIdentity,
 } from "./history.mjs";
 import { compareSnapshotMetadata } from "./snapshot-meta.mjs";
+import { trajectoryCommand } from "./trajectory.mjs";
 import { SCHEMA_VERSION } from "../report/json.mjs";
 
 // `readSnapshots` reads through node:fs, so its filesystem path is driven
-// with a mocked fs — the `.tmp`-filter, byte-sort order, and identity
+// with a mocked fs — the `.tmp`-filter, capture-sequence order, and identity
 // computation are pinned without touching disk. `historyCommand`'s own
 // capture path uses injected IO seams (same pattern as `diff`'s
 // `readBaseline` seam), so it needs no fs at all.
@@ -135,6 +136,38 @@ function snapshotsFrom(files) {
 }
 
 const readSnapshotsFromMap = (map) => () => ({ files: Object.values(map) });
+
+/**
+ * The #887 repro: six capture-shaped snapshots straddling the 9999→10000
+ * width boundary, in the byte order a real directory listing yields. A
+ * byte-sorted read places `10000-…` between `1000-…` and `1001-…` (a
+ * rewound record); capture-sequence order pairs `9999→10000` last.
+ *
+ * @returns {{names: string[], filesByName: Record<string, string>}}
+ */
+function mixedWidthHistory() {
+  const names = [
+    "0001-a.json",
+    "0999-b.json",
+    "1000-c.json",
+    "1001-d.json",
+    "9999-e.json",
+    "10000-f.json",
+  ];
+  const filesByName = Object.fromEntries(
+    names.map((name, i) => [
+      name,
+      JSON.stringify(
+        envelope({
+          projects: [
+            { name: String.fromCharCode(97 + i), root: `libs/${i + 1}`, type: "lib", tags: [] },
+          ],
+        }),
+      ),
+    ]),
+  );
+  return { names, filesByName };
+}
 
 describe("snapshotIdentity", () => {
   it("is stable for identical snapshots and different for a changed edge set", () => {
@@ -345,7 +378,7 @@ describe("shortId", () => {
 });
 
 describe("readSnapshots", () => {
-  it("returns the snapshots in filename byte-sort order", () => {
+  it("returns the snapshots in capture-sequence order", () => {
     readdirSync.mockReturnValue(["0002-b.json", "0001-a.json"]);
     const filesByName = {
       "0001-a.json": JSON.stringify(
@@ -359,6 +392,45 @@ describe("readSnapshots", () => {
 
     const { files } = readSnapshots("/ws/hist");
     expect(files.map((f) => f.name)).toEqual(["0001-a.json", "0002-b.json"]);
+  });
+
+  it("orders snapshots by capture sequence, not filename bytes, across the 9999→10000 width boundary (#887)", () => {
+    // The issue's repro: byte-sort places the widened `10000-…` between
+    // `1000-…` and `1001-…`, rewinding the record (…1000 → 10000 → 1001 →
+    // 9999). The record must read the capture sequence: …9999 → 10000.
+    const { names, filesByName } = mixedWidthHistory();
+    readdirSync.mockReturnValue([...names].sort());
+    readFileSync.mockImplementation((p) => filesByName[p.split("/").pop()]);
+    const { files } = readSnapshots("/ws/hist");
+    expect(files.map((f) => f.name)).toEqual(names);
+  });
+
+  it("is deterministic: two reads of the same directory agree regardless of listing order", () => {
+    const { names, filesByName } = mixedWidthHistory();
+    const byteOrder = [...names].sort();
+    readdirSync.mockReturnValueOnce(byteOrder).mockReturnValueOnce([...byteOrder].reverse());
+    readFileSync.mockImplementation((p) => filesByName[p.split("/").pop()]);
+    const first = readSnapshots("/ws/hist").files.map((f) => f.name);
+    const second = readSnapshots("/ws/hist").files.map((f) => f.name);
+    expect(first).toEqual(names);
+    expect(second).toEqual(first);
+  });
+
+  it("keeps byte-sort order for a pure four-digit history (backward compatible)", () => {
+    // Every sequence below 10000 has the same width, so numeric order and
+    // byte order coincide — a directory this change must leave byte-identical.
+    const names = ["0001-a.json", "0002-b.json", "0003-c.json", "0004-d.json", "0005-e.json"];
+    const filesByName = Object.fromEntries(names.map((name) => [name, JSON.stringify(envelope())]));
+    readdirSync.mockReturnValue([
+      "0005-e.json",
+      "0002-b.json",
+      "0004-d.json",
+      "0001-a.json",
+      "0003-c.json",
+    ]);
+    readFileSync.mockImplementation((p) => filesByName[p.split("/").pop()]);
+    const { files } = readSnapshots("/ws/hist");
+    expect(files.map((f) => f.name)).toEqual(names);
   });
 
   it("computes each snapshot's identity", () => {
@@ -415,12 +487,19 @@ describe("nextSequence", () => {
     expect(nextSequence({ files: Object.values(read) })).toBe("0008");
   });
 
-  it("widens the width past nine-thousand nine-hundred and ninety-nine so byte-sort never rewinds history order", () => {
-    // A sequence fixed forever at four digits would byte-sort "10000-…"
-    // before "9999-…" and rewind the record. The width must grow with the
-    // sequence so the next name stays after the last real snapshot.
+  it("advances the sequence past the four-digit ceiling", () => {
+    // The width ceiling is cosmetic, not an ordering mechanism:
+    // `readSnapshots` parses the leading sequence numerically, so a
+    // five-digit `10000-…` follows `9999-…` and the record can never rewind
+    // at the boundary. What the widening guarantees is monotonic filenames:
+    // the next name is never one that already exists.
     const read = snapshotsFrom({ "9999-a.json": envelope() });
     expect(nextSequence({ files: Object.values(read) })).toBe("10000");
+  });
+
+  it("stays five digits wide once the history has passed 9999", () => {
+    const read = snapshotsFrom({ "10000-a.json": envelope() });
+    expect(nextSequence({ files: Object.values(read) })).toBe("10001");
   });
 
   it("keeps the four-digit minimum for a small history", () => {
@@ -621,6 +700,22 @@ describe("computeEvolution", () => {
     expect(snapshots).toHaveLength(1);
     expect(transitions).toHaveLength(0);
   });
+
+  it("pairs 9999→10000 last over the mixed-width history (#887)", () => {
+    // The repro's read side: `readSnapshots` over byte-ordered names must
+    // hand computeEvolution the capture sequence, so the last transition is
+    // exactly 9999-e → 10000-f — never a byte-sorted …1000 → 10000 → 1001 →
+    // 9999 pair that silently rewinds the record's end.
+    const { names, filesByName } = mixedWidthHistory();
+    readdirSync.mockReturnValue([...names].sort());
+    readFileSync.mockImplementation((p) => filesByName[p.split("/").pop()]);
+    const { files } = readSnapshots("/ws/hist");
+    const { snapshots, transitions } = computeEvolution(files);
+    expect(snapshots.map((s) => s.name)).toEqual(names);
+    expect(transitions.map((t) => [t.from, t.to])).toEqual(
+      names.slice(0, -1).map((from, i) => [from, names[i + 1]]),
+    );
+  });
 });
 
 const baseContext = (graph) => ({
@@ -769,6 +864,25 @@ describe("historyCommand", () => {
         io: { readSnapshots: readSnapshotsFromMap(read) },
       }),
     ).toThrow(/incomplete coverage/);
+  });
+});
+
+describe("trajectoryCommand over a mixed-width history (#887)", () => {
+  it("aggregates the capture-sequence order, not the rewound byte order", () => {
+    // `trajectory` reads the SAME reader (`readSnapshots`) as `history`, so
+    // a mixed-width directory must aggregate 0001 first and 10000 last —
+    // byte order would make the record end at 9999 with 10000 lost mid-way.
+    const { names, filesByName } = mixedWidthHistory();
+    readdirSync.mockReturnValue([...names].sort());
+    readFileSync.mockImplementation((p) => filesByName[p.split("/").pop()]);
+    const { files } = readSnapshots("/ws/hist");
+    const result = trajectoryCommand("/ws/hist", baseContext(), {
+      io: { readSnapshots: () => ({ files }), resolveProvenance: () => null },
+    });
+    expect(result.status).toBe("ok");
+    expect(result.trajectory.observations.first).toBe("0001-a.json");
+    expect(result.trajectory.observations.last).toBe("10000-f.json");
+    expect(result.trajectory.transitions.count).toBe(5);
   });
 });
 

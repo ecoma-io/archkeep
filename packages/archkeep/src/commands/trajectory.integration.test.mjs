@@ -99,7 +99,7 @@ function snapshotBytes(projects, dependencies, policy) {
 
 /**
  * Writes one snapshot under the `<seq>-<sha8-ish>.json` naming convention the
- * capture side uses, so filename byte-sort is history order here too.
+ * capture side uses, so capture-sequence order is history order here too.
  *
  * @param {number} seq
  * @param {Parameters<snapshotBytes>} args

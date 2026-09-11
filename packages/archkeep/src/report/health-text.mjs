@@ -13,7 +13,7 @@
  * silent gap.
  *
  * Determinism: the metric order is fixed, and the trend rows are the snapshots
- * in byte-sort order (`../commands/history.mjs` orders them). This module
+ * in history order (`../commands/history.mjs` orders them). This module
  * decides nothing — a formatter that filtered would be a rule wearing a
  * formatter's name (`../README.md`).
  *

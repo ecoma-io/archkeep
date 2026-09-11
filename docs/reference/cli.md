@@ -308,7 +308,7 @@ The directory is a single positional argument. It is a directory of `graph
 --format json` snapshots, not a git ref or an index file — the directory itself
 is the sole source of truth (see `docs/usage/history.md`). `--capture` writes
 `<sequence>-<sha8>.json` (zero-padded monotonic sequence plus the architecture
-identity's first eight hex chars, so filename byte-sort IS history order) and
+identity's first eight hex chars, so capture-sequence order IS history order) and
 deduplicates when the current architecture identity already is the last
 snapshot and the provider has not changed — a pure provider migration surfaces
 as a transition rather than being swallowed by the identity match. An empty
@@ -556,8 +556,8 @@ explicit edit, never by the tool. Descriptive.
 ### `history <dir>`
 
 Reads every `graph --format json` snapshot in a directory and describes how the
-architecture evolved across them: each snapshot in history order (filename
-byte-sort) and each transition between consecutive snapshots, classified by the
+architecture evolved across them: each snapshot in history order — the
+leading capture sequence of each filename — and each transition between consecutive snapshots, classified by the
 signals the snapshots actually carry. A changed graph is an architecture
 change; a changed `policy.fingerprint` is a policy/intent change; a changed
 `workspace.provider` is a provider change; provenance (git commit) advancing

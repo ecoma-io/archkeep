@@ -134,7 +134,8 @@ the resolution order.
 - **`history`** (`./history.mjs`'s `historyCommand`) — the architecture's
   evolution across a consumer-managed directory of `graph --format json`
   snapshots. Reads every snapshot (the directory is the sole source of truth —
-  no index, no database), in filename byte-sort (history) order, and classifies
+  no index, no database), in capture-sequence order (each filename's leading
+  numeric sequence, not byte order), and classifies
   each transition by what the snapshots carry: graph diff (architecture),
   `policy.fingerprint` (policy/intent), `workspace.provider` (provider), and
   provenance advance with neither changed (code drift). One-sided or cross-repo

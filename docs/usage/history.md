@@ -65,8 +65,9 @@ archkeep history .archkeep/history --capture
 ```
 
 It writes `<sequence>-<sha8>.json` — a zero-padded monotonic sequence and the
-snapshot's architecture identity's first eight hex characters, so filename
-byte-sort **is** history order. Each snapshot is a full `graph --format json`
+snapshot's architecture identity's first eight hex characters, so
+capture-sequence order — the leading number of each filename — **is** history
+order. Each snapshot is a full `graph --format json`
 envelope (not a delta), so it is content-addressable and self-validating on
 read.
 
@@ -98,8 +99,8 @@ history.
 artifacts directory; locally, wherever you keep snapshots. There is no index
 file and no database. The directory itself is the record:
 
-- Order is filename byte-sort, so replacing or deleting a snapshot is moving
-  its file.
+- Order is the leading numeric sequence of each snapshot filename, so
+  replacing or deleting a snapshot is moving its file.
 - `0001-*.json`, `0002-*.json`, … created by `--capture` are already in order.
 - An empty directory is not an empty history — it is no record at all, and the
   command says so (exit 3).

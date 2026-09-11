@@ -64,11 +64,12 @@ import {
  * The zero-padded sequence number for the next event, taken from the highest
  * existing event filename: `0000` for a fresh directory. An event log is
  * zero-based — the first event is index 0 — unlike history's capture
- * ordinals, which start at `0001`. The width widens from a four-digit minimum
- * rather than overflowing, for the same reason history's `nextSequence`
- * documents: a `10000` padded to four digits would byte-sort before `9999-…`
- * and silently rewind the log, and the sequence regex would stop seeing the
- * 5-digit name so repeated writes would clobber one file.
+ * ordinals, which start at `0001`. The width widens from a four-digit
+ * minimum rather than being pinned to it: the sequence regex reads any
+ * width, so the parsed maximum keeps advancing past `9999`, and the width
+ * growing to exactly what the next number needs is what keeps repeated
+ * writes from clobbering one file — the sequence advances past every
+ * existing name, so no produced name repeats one that exists, on any width.
  *
  * @param {string[]} names Event filenames from the directory read.
  * @returns {string} Zero-padded sequence, at least four digits.
