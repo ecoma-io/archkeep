@@ -6,6 +6,7 @@
 ### Bug Fixes
 
 * **archkeep:** order history snapshots by capture sequence, not filename bytes ([#895](https://github.com/ecoma-io/archkeep/issues/895)) ([0fcf97b](https://github.com/ecoma-io/archkeep/commit/0fcf97b395b9be3ce2af362b0f91bb3482ad23c1))
+* **archkeep:** decide historyOutputRefusal on the physical destination ([#896](https://github.com/ecoma-io/archkeep/issues/896)) ([4f9bd25](https://github.com/ecoma-io/archkeep/commit/4f9bd259e2932448977873303e3ed255c0986ab4))
 
 
 ### Documentation
