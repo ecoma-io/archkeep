@@ -8012,6 +8012,202 @@ describe("`history` capture and describe against the Nx fixture", () => {
     expect(existsSync(join(histDir, "report.json"))).toBe(false);
   });
 
+  it("refuses --output through a symlink alias of the history directory (bug #888)", async () => {
+    // `resolve()` normalizes `..` segments but never resolves symlinks, so
+    // the guard's string comparison saw `hist-alias` as a different
+    // directory while the write PHYSICALLY landed among the snapshots: the
+    // issue reproduces exit 0, then every later run over the poisoned
+    // directory refusing (a `history` envelope read back as a graph
+    // snapshot). This fixture's history directory lives OUTSIDE the
+    // workspace, where `writeOutputReport`'s containment probe returns null
+    // for a write target outside the root — the poisoning guard is the ONLY
+    // law that could refuse, which is the exact hole the issue fell
+    // through.
+    const streams = env();
+    expect(await runCli(["history", histDir, "--capture", "--format", "json"], streams)).toBe(
+      EXIT.ok,
+    );
+    const alias = `${histDir}-alias`;
+    symlinkSync(histDir, alias);
+    try {
+      const aliasStreams = env();
+      expect(
+        await runCli(
+          ["history", histDir, "--format", "json", "--output", join(alias, "report.json")],
+          aliasStreams,
+        ),
+      ).toBe(EXIT.usage);
+      expect(aliasStreams.lines.err.join("\n")).toContain("inside the history directory");
+      // The refusal is a no-write: the snapshot directory is untouched, and
+      // the next plain run still describes the history instead of refusing
+      // on a poisoned baseline.
+      expect(readdirSync(histDir)).not.toContain("report.json");
+      expect(await runCli(["history", histDir], env())).toBe(EXIT.ok);
+    } finally {
+      // Hygiene for the shared fixture: the unfixed guard lets the alias run
+      // write the report through the symlink, and a leaked report would
+      // poison every later capture in this describe.
+      rmSync(join(histDir, "report.json"), { force: true });
+      rmSync(alias, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps refusing the string-inside spelling when the history directory does not exist yet (bug #888 fallback)", async () => {
+    // The physical comparison needs both sides to exist; a `--capture` run
+    // creates the directory later, so at guard time it may not. The fallback
+    // is the lexical `resolve()` result, and the string-equal spelling must
+    // keep refusing — the silent direction this pins is a physical-only
+    // implementation that answered null on ENOENT and let the report land in
+    // a directory a later capture would create, poisoning it exactly like
+    // the alias above.
+    const missingBase = mkdtempSync(join(tmpdir(), "polyglot-cli-hist-missing-"));
+    const missingHist = join(missingBase, "hist");
+    try {
+      const streams = env();
+      expect(
+        await runCli(
+          [
+            "history",
+            missingHist,
+            "--format",
+            "json",
+            "--output",
+            join(missingHist, "report.json"),
+          ],
+          streams,
+        ),
+      ).toBe(EXIT.usage);
+      expect(streams.lines.err.join("\n")).toContain("inside the history directory");
+      expect(existsSync(missingHist)).toBe(false);
+    } finally {
+      rmSync(missingBase, { recursive: true, force: true });
+    }
+  });
+
+  it("does not widen the law to a subdirectory of the history directory", async () => {
+    // A report in a NOT-YET-EXISTING subdirectory differs from the history
+    // directory lexically AND physically, so the guard stays silent —
+    // `readSnapshots` reads only the directory itself, never recursively, so
+    // such a report is not read back as a snapshot. The write then fails the
+    // ordinary way on the missing parent, never through the self-footgun
+    // refusal.
+    const streams = env();
+    expect(await runCli(["history", histDir, "--capture", "--format", "json"], streams)).toBe(
+      EXIT.ok,
+    );
+    const subStreams = env();
+    expect(
+      await runCli(
+        ["history", histDir, "--format", "json", "--output", join(histDir, "sub", "report.json")],
+        subStreams,
+      ),
+    ).toBe(EXIT.error);
+    const errText = subStreams.lines.err.join("\n");
+    expect(errText).toContain("could not write");
+    expect(errText).not.toContain("inside the history directory");
+  });
+
+  it("refuses the in-workspace alias spelling by the guard before containment's symlink refusal (bug #888)", async () => {
+    // The issue's second observed configuration: history directory INSIDE
+    // the workspace, sibling alias next to it. Before the physical
+    // destination fix the guard compared strings, let the spelling through,
+    // and the run was refused only later — by `writeOutputReport`'s
+    // containment probe ("'…' is a symlink — writing through it would land
+    // somewhere other than the path '…' names", exit 3, quoted in the
+    // issue). Both laws refuse now; this pins the guard firing FIRST: exit 2
+    // usage, the "inside the history directory" message, and no report among
+    // the snapshots.
+    const inWsRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-hist-inalias-"));
+    try {
+      const writeInWs = (relativePath, text) => {
+        mkdirSync(join(inWsRoot, relativePath, ".."), { recursive: true });
+        writeFileSync(join(inWsRoot, relativePath), text);
+      };
+      writeInWs(
+        "archkeep.json",
+        JSON.stringify({
+          projects: {
+            declared: [{ root: "libs/domain", name: "domain", tags: ["layer:domain"] }],
+          },
+          coverage: {
+            exempt: [
+              {
+                path: "module-boundaries.config.mjs",
+                reason: "workspace tooling config at the root, not itself a project",
+              },
+            ],
+          },
+        }),
+      );
+      writeInWs(
+        "module-boundaries.config.mjs",
+        `export const depConstraints = [
+  { sourceTag: "layer:domain", onlyDependOnLibsWithTags: ["layer:domain"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: ["build"],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+      );
+      writeInWs("libs/domain/go.mod", "module example.com/domain\n\ngo 1.24\n");
+      writeInWs("libs/domain/doc.go", "package domain\n");
+      const inWsFiles = [
+        "archkeep.json",
+        "module-boundaries.config.mjs",
+        "libs/domain/go.mod",
+        "libs/domain/doc.go",
+      ];
+
+      const historyDirInWs = join(inWsRoot, ".archkeep", "history");
+      mkdirSync(historyDirInWs, { recursive: true });
+      const streams = () => {
+        const out = [];
+        const err = [];
+        return {
+          out: (text) => out.push(text),
+          err: (text) => err.push(text),
+          lines: { out, err },
+          cwd: inWsRoot,
+          listFiles: () => inWsFiles,
+        };
+      };
+
+      expect(
+        await runCli(["history", ".archkeep/history", "--capture", "--format", "json"], streams()),
+      ).toBe(EXIT.ok);
+      expect(
+        readdirSync(historyDirInWs).filter((n) => n.endsWith(".json") && !n.endsWith(".json.tmp")),
+      ).toHaveLength(1);
+
+      symlinkSync(historyDirInWs, join(inWsRoot, ".archkeep", "history-alias"));
+      const aliasStreams = streams();
+      expect(
+        await runCli(
+          [
+            "history",
+            ".archkeep/history",
+            "--format",
+            "json",
+            "--output",
+            ".archkeep/history-alias/report.json",
+          ],
+          aliasStreams,
+        ),
+      ).toBe(EXIT.usage);
+      expect(aliasStreams.lines.err.join("\n")).toContain("inside the history directory");
+      expect(readdirSync(historyDirInWs)).not.toContain("report.json");
+    } finally {
+      rmSync(inWsRoot, { recursive: true, force: true });
+    }
+  });
+
   it("ignores a .json.tmp left by an interrupted capture", async () => {
     // Atomic capture writes `<name>.json.tmp` then renames; an interrupted
     // write leaves the tmp behind, and that must never count as a snapshot.
