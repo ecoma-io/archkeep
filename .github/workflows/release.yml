@@ -134,6 +134,29 @@ jobs:
           app-id: ${{ secrets.ECOMA_APP_ID }}
           private-key: ${{ secrets.ECOMA_APP_KEY }}
 
+      # The release-integrity gate runs before release-please reads anything:
+      # release-please silently drops a commit whose message its parser cannot
+      # tokenize (a debug log is the only trace), so this gate is the only
+      # place the defect can stop a release. It runs the lane's own parse over
+      # the lane's own range and holds the parser lock in
+      # scripts/release-integrity.lock.json to the pin below — bumping that
+      # pin without re-recording the lock turns this step red. Full history is
+      # fetched because the range starts at the manifest's tag, and the token
+      # does not stay on disk — the same workflow-checkout-persists-credentials
+      # rule the reformat checkout below argues.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Check release integrity before release-please reads the commits
+        run: node scripts/check-release-integrity.mjs
+
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
         with:

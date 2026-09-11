@@ -164,6 +164,17 @@ jobs:
       # repository's history; the script's header names them.
       - run: node scripts/check-artifact-hygiene.mjs
 
+      # The commits the release lane will parse, parsed by the lane's own
+      # parser before they can merge. release-please silently drops a commit
+      # whose message its parser cannot tokenize, and a bad commit already on
+      # main cannot be reworded — it would brick every future release, so a
+      # pull request is the only place the defect can be refused. The second
+      # step holds the parser lock (scripts/release-integrity.lock.json) to
+      # the action pin in release.yml, over the network, so an action bump
+      # cannot move the parser under the gate unnoticed.
+      - run: node scripts/check-release-integrity.mjs
+      - run: node scripts/check-release-integrity.mjs --verify-action
+
       # The rules crate's `lint` target runs `cargo clippy`, and the hosted
       # runner's Rust toolchain ships without that component — measured against
       # the ubuntu-24.04 runner image's own software list, which names Cargo,
