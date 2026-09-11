@@ -106,6 +106,18 @@ grows — the signature of a linear, Map-based implementation rather than an
 accidental quadratic one. What the rows deliberately do not cover, a widening
 snapshot sequence, is registered as the ledger's F5 rather than rounded over.
 
+## Provenance benchmark
+
+`node packages/archkeep/e2e/bench/provenance-bench.mjs` — medians over 20
+reps over `buildProvenanceGraph`'s decision → row binding-edge scan, scaled
+across decisions × rows × bindings. It joined this list after the baseline
+day, so it has no baseline-day row; its recorded reading is that the scan's
+per-element cost stays flat across the grid — linear per binding, no hidden
+quadratic — and that the one optimization the block admits, hoisting the
+row-side rule-fitness prefix strip, was prototyped, proven byte-identical,
+and bought nothing: the bench is the tripwire that catches a change moving
+that constant.
+
 ## CLI check wall time
 
 `time` around the same packed CLI's `check` over this repository:
@@ -148,7 +160,7 @@ node scripts/check-cli-docs-roster.mjs
 moon run archkeep:test
 pnpm e2e
 pnpm readiness
-node packages/archkeep/e2e/bench/history-bench.mjs
+node packages/archkeep/e2e/bench/provenance-bench.mjs
 ```
 
 Plus the two measurements that need a packed artifact: the CLI's `check` over
