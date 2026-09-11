@@ -27,7 +27,7 @@
   // ten pairs × several chunk requests each, two pairs at a time, missed
   // the first real dispatch's wall clock. Four pairs at once — the
   // action's own maximum — halves it.
-  concurrency: 4,
+  concurrency: 1,
 
   // Deliberately untranslated for now: the bare `{document}.md` source
   // pattern claims every markdown file in the repository — skills, rules,
