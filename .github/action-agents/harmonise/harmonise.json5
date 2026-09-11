@@ -23,6 +23,12 @@
     fr: "{document}.fr.md",
   },
 
+  // Chunked translation of the 33 KiB README is provider-latency-bound:
+  // ten pairs × several chunk requests each, two pairs at a time, missed
+  // the first real dispatch's wall clock. Four pairs at once — the
+  // action's own maximum — halves it.
+  concurrency: 4,
+
   // Deliberately untranslated for now: the bare `{document}.md` source
   // pattern claims every markdown file in the repository — skills, rules,
   // the whole docs tree — so the ignore list narrows the program to exactly

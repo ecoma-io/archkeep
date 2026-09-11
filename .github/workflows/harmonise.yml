@@ -55,7 +55,7 @@ concurrency:
 jobs:
   harmonise:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     # What a real run writes when it falls back to the workflow token: blobs,
     # a tree, a commit, its own branch ref, and the one pull request. Nothing
     # else — no issues, no comments, no merges.
