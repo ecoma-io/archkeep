@@ -71,8 +71,16 @@
  * owns those (`./README.md`).
  */
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import {
+  existsSync,
+  lstatSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import {
   blindSpotRows,
@@ -80,7 +88,7 @@ import {
   unresolvableLiteralCount,
 } from "../analysis/source-util.mjs";
 import { canonicalizeJson } from "../canonical.mjs";
-import { containmentViolation } from "../containment.mjs";
+import { containmentViolation, deepestExistingAncestor } from "../containment.mjs";
 import { classifyEvolution } from "../governance/evolution-event.mjs";
 import { jsonEnvelope, renderJson } from "../report/json.mjs";
 import { formatHistoryReport } from "../report/history-text.mjs";
@@ -782,11 +790,54 @@ function historyDirFrom(options, cwd) {
 }
 
 /**
+ * The physical location `path` names, resolved through every intermediate
+ * symlink. When a component does not exist yet, `realpathSync` answers ENOENT
+ * and the fallback walks up to the deepest existing ancestor
+ * (`deepestExistingAncestor` — the same primitive the containment probe in
+ * `../containment.mjs` walks), resolves THAT physically, and appends the
+ * not-yet-existing remainder lexically: a component that does not exist
+ * cannot be a symlink, so its lexical spelling is its only spelling. When no
+ * component exists at all, the lexical `resolve()` result is the whole
+ * answer.
+ *
+ * @param {string} path An absolute, already-`resolve`d path.
+ * @returns {string} The physical destination, or the lexical form when the
+ *   path does not exist.
+ */
+function physicalDestination(path) {
+  try {
+    return realpathSync(path);
+  } catch {
+    const ancestor = deepestExistingAncestor(path, lstatSync);
+    if (ancestor === null) return resolve(path);
+    try {
+      return resolve(realpathSync(ancestor), relative(ancestor, path));
+    } catch {
+      return resolve(path);
+    }
+  }
+}
+
+/**
  * `history`'s self-footgun guard: writing the history report back into the
  * very directory `history` reads would poison every later run (the report
  * envelope is a `history` envelope, which `parseBaseline` refuses as a
  * non-`graph` snapshot). Declared by the command that owns the law and
  * enforced by the driver's write door; `null` means no refusal.
+ *
+ * The decision is made on the PHYSICAL destination, not the string spelling:
+ * `resolve()` normalizes `..` segments but never resolves symlinks, so an
+ * alias of the history directory (`hist-alias -> hist`) makes `dirname` of
+ * the output differ from the directory argument while the write would land
+ * in the SAME directory. The read side of this command family already
+ * decides on the physical path — `readSnapshots`'s containment resolves the
+ * history directory through symlinks rather than comparing strings — and
+ * this guard now matches it: the realpath of the output's parent against the
+ * realpath of the history directory, falling back to the lexical `resolve()`
+ * result for components that do not exist yet. Refusal is EQUALITY only: a
+ * report in a SUBDIRECTORY of the history directory is not read back
+ * (`readSnapshots` is non-recursive) and stays allowed. The resolved-string
+ * comparison runs first, unchanged.
  *
  * @param {{output: string|null, paths: string[]}} options This run's parsed
  *   flags.
@@ -805,12 +856,16 @@ export function historyOutputRefusal(options, cwd) {
     ? resolve(options.output)
     : resolve(cwd, options.output);
   const dir = historyDirFrom(options, cwd);
-  if (dirname(outputAbs) === dir) {
-    return (
-      `archkeep: --output '${options.output}' is inside the history directory '${dir}' — ` +
-      `writing the report there would be read back as a snapshot on the next run. ` +
-      `Write it somewhere else.`
-    );
+  const refusal =
+    `archkeep: --output '${options.output}' is inside the history directory '${dir}' — ` +
+    `writing the report there would be read back as a snapshot on the next run. ` +
+    `Write it somewhere else.`;
+  // Fast path: the resolved string already names the history directory.
+  if (dirname(outputAbs) === dir) return refusal;
+  // Physical path: the spelling differs but the write would land in the
+  // history directory all the same — a symlink alias of it, for example.
+  if (physicalDestination(dirname(outputAbs)) === physicalDestination(dir)) {
+    return refusal;
   }
   return null;
 }
