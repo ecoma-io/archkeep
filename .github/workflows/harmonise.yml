@@ -9,10 +9,11 @@ name: Harmonise
 # and `dry-run: "true"` below keeps every proposal a proposal until a
 # maintainer flips the switch in a visible one-line diff.
 #
-# The ref is digest-pinned to the commit the released tag v0.12.1 names — the
-# same bytes `triage.yml` and `review.yml` run, and the same discipline: the
-# operator knows which bytes run before any of them do, and adopting a later
-# fix is a deliberate re-pin (`.github/semgrep/workflows.yaml`,
+# The ref is digest-pinned to the commit the released tag v0.13.0 names — the
+# chunked-translation pipeline this repository's oversized README needs. The
+# same discipline as `triage.yml` and `review.yml`: the operator knows which
+# bytes run before any of them do, and adopting a later fix is a deliberate
+# re-pin (`.github/semgrep/workflows.yaml`,
 # `workflow-action-not-pinned-to-sha`).
 #
 # The pull request this action maintains must run CI like any contributor's:
@@ -82,7 +83,7 @@ jobs:
           app-id: ${{ secrets.ECOMA_APP_ID }}
           private-key: ${{ secrets.ECOMA_APP_KEY }}
 
-      - uses: ecoma-io/action-agents/harmonise@2f0e18a8e1ea5bdfa8fc690057ca1bbdfaa4f3a4 # v0.12.1
+      - uses: ecoma-io/action-agents/harmonise@a1972dcc618bad24aac0b48bd1849cb99c218182 # v0.13.0
         with:
           github-token: ${{ steps.app-token.outputs.token || github.token }}
           api-url: ${{ secrets.ECOMA_LLM_BASE_URL }}
