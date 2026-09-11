@@ -94,22 +94,23 @@ As with Claude Code, no gate depends on any of this — the editor-time hooks in
 
 ## The commands
 
-| Command                                       | What it does                                                                                                 |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `pnpm format`                                 | Prettier, in place                                                                                           |
-| `pnpm format:check`                           | Prettier, read-only — what CI runs                                                                           |
-| `pnpm lint`                                   | Every project's `lint` target through Moon — ESLint for the JS/TS half, the language linters for the rest    |
-| `pnpm test`                                   | The gate scripts' own tests (`node --test` over `scripts/*.test.mjs`), through Moon                          |
-| `pnpm typecheck`                              | The gate scripts' JSDoc (`tsc --noEmit`), through Moon — each package has its own target                     |
-| `pnpm check-packages`                         | Asserts every `packages/*` directory plus `scripts/` is a project Moon can see, with CI targets              |
-| `node scripts/check-skills.mjs`               | The skills gate: shape, citations, and the plugin-manifest version chain                                     |
-| `node scripts/check-docs-links.mjs`           | Fails on any doc reference that cannot resolve — a gone target, a dead anchor                                |
-| `node scripts/check-cli-docs-roster.mjs`      | Holds every documented command count and roster to `COMMAND_NAMES` in cli.mjs                                |
-| `node scripts/check-docs-claims-parity.mjs`   | Validates factual claims in docs against actual code: violations, presets, MCP tools, and skills counts      |
-| `node scripts/check-installation-prereqs.mjs` | Holds installation.md's prerequisites to `packages/archkeep/package.json`                                    |
-| `node scripts/check-contributing-parity.mjs`  | Holds this document's roster and hooks to ci.yml and lefthook.yml — this row is part of what it checks       |
-| `node scripts/check-artifact-hygiene.mjs`     | Fails on a committed `.wasm` carrying its build machine — a home directory, a credential, a tooling variable |
-| `pnpm e2e`                                    | Packs the artifact and drives it as an installed CLI, end to end — CI runs it in two shards                  |
+| Command                                       | What it does                                                                                                                                                                     |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm format`                                 | Prettier, in place                                                                                                                                                               |
+| `pnpm format:check`                           | Prettier, read-only — what CI runs                                                                                                                                               |
+| `pnpm lint`                                   | Every project's `lint` target through Moon — ESLint for the JS/TS half, the language linters for the rest                                                                        |
+| `pnpm test`                                   | The gate scripts' own tests (`node --test` over `scripts/*.test.mjs`), through Moon                                                                                              |
+| `pnpm typecheck`                              | The gate scripts' JSDoc (`tsc --noEmit`), through Moon — each package has its own target                                                                                         |
+| `pnpm check-packages`                         | Asserts every `packages/*` directory plus `scripts/` is a project Moon can see, with CI targets                                                                                  |
+| `node scripts/check-skills.mjs`               | The skills gate: shape, citations, and the plugin-manifest version chain                                                                                                         |
+| `node scripts/check-docs-links.mjs`           | Fails on any doc reference that cannot resolve — a gone target, a dead anchor                                                                                                    |
+| `node scripts/check-cli-docs-roster.mjs`      | Holds every documented command count and roster to `COMMAND_NAMES` in cli.mjs                                                                                                    |
+| `node scripts/check-docs-claims-parity.mjs`   | Validates factual claims in docs against actual code: violations, presets, MCP tools, and skills counts                                                                          |
+| `node scripts/check-installation-prereqs.mjs` | Holds installation.md's prerequisites to `packages/archkeep/package.json`                                                                                                        |
+| `node scripts/check-contributing-parity.mjs`  | Holds this document's roster and hooks to ci.yml and lefthook.yml — this row is part of what it checks                                                                           |
+| `node scripts/check-artifact-hygiene.mjs`     | Fails on a committed `.wasm` carrying its build machine — a home directory, a credential, a tooling variable                                                                     |
+| `pnpm e2e`                                    | Packs the artifact and drives it as an installed CLI, end to end — CI runs it in two shards                                                                                      |
+| `node scripts/check-release-integrity.mjs`    | Fails on a commit the release lane would silently drop — release-please's own parser over the manifest's tag range; `--verify-action` holds the parser lock to the pinned action |
 
 Plus every project's own targets — a different suite, not a superset of the one
 above. Locally, the full form:

@@ -53,6 +53,39 @@ Do not hand-edit these. It rewrites both on its next run:
   Prettier's preferred one disagree.
 - The version in `packages/archkeep/package.json`.
 
+### The integrity gate in front of it
+
+release-please silently drops a commit whose message its parser cannot
+tokenize — the drop is reported only through a debug log, and the release
+still goes out green without it. The trigger is a message line where a word
+sits immediately before parentheses that nest (`word(word(word))`, which the
+parser reads as a scope and throws on); the parser it resolves
+(`@conventional-commits/parser` 0.4.1, unreleased since 2021) has no fix to
+upgrade to ([googleapis/release-please#2878](https://github.com/googleapis/release-please/issues/2878)).
+
+`node scripts/check-release-integrity.mjs` runs the lane's own parse at the
+locked version over the lane's own range — the most recent version whose tag
+resolves, to `HEAD`. Candidates start at the tag named by
+`.release-please-manifest.json` and walk the manifest's own history: on a
+release pull request and on the release-merge push the manifest's
+working-tree version is the _next_ release, whose tag exists only after the
+action runs, so the boundary is the last released version, one manifest
+generation back. It fails on any commit whose entry-shaped message the lane's
+splitter would hand the parser and that the parse dropped anyway — first-line
+conventional headers, nested conventional paragraphs, and
+`BEGIN_NESTED_COMMIT` blocks alike. `release.yml` runs it
+before release-please on every release push, and CI runs it (plus
+`--verify-action`, which holds the parser lock to the pinned action over the
+network) on every pull request, because a bad commit already merged to `main`
+cannot be reworded and would brick every future release.
+
+`scripts/release-integrity.lock.json` records the parser identity the lane
+runs: the action pin, the release-please it bundles, and the parser that
+resolves. The root devDependencies pin both packages exact — the gate parses
+with the lane's parser, not a lookalike. Bumping the action is a deliberate
+re-measure: re-pin in `release.yml`, re-record the lock, and align the
+devDependencies in one commit; the gate fails everywhere until they agree.
+
 ### The release pull request title
 
 `chore(archkeep): release <version>` — not release-please's default. The

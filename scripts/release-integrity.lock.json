@@ -1,0 +1,10 @@
+{
+  "$comment": "The release lane's parser identity, recorded so the integrity gate (`scripts/check-release-integrity.mjs`) and the lane it guards cannot drift apart.\n\nThe lane is `googleapis/release-please-action` pinned by commit SHA in `.github/workflows/release.yml`. A JS action runs its committed `dist/`, so the release-please bundled at build time is frozen by the SHA — re-measured, not assumed: the action's `package.json` declares `release-please: ^17.6.0`, and `release-please-config.json`'s own history records 17.6.0 as the version v5.0.0 bundles. release-please 17.6.0 resolves `@conventional-commits/parser ^0.4.1` to 0.4.1, the package's final publish (2021-01-07) — which is why the nested-parentheses parser throw behind issue #903 cannot be escaped by upgrading within the action's range.\n\nThe root `package.json` devDependencies pin both packages at these exact versions — that is what the gate imports, so the gate runs the lane's own parser. Editing this file is the deliberate act: bump the action SHA here and in release.yml in one commit, re-measure the bundled release-please and its parser resolution, and update the devDependencies to match. `check-release-integrity.mjs --verify-action` fetches the pinned action's package.json and fails when its range no longer admits the recorded release-please — a re-pin without a re-measure is red, never silent.",
+  "action": {
+    "repo": "googleapis/release-please-action",
+    "sha": "45996ed1f6d02564a971a2fa1b5860e934307cf7",
+    "version": "v5.0.0"
+  },
+  "releasePlease": "17.6.0",
+  "parser": "0.4.1"
+}
