@@ -76,8 +76,34 @@ confirm it.
    record whose status is `superseded` still binds its rows until a
    replacement is authored.
 
-3. **Declare, then make the smallest coherent change.** For a workflow-bearing
-   change, declare against the step-4 baseline (`archkeep change <baseline>
+3. **Capture the baseline before declaring or editing (BASELINE):**
+
+   ```
+   archkeep delta --capture --output delta-base.json   # before the change
+   archkeep delta delta-base.json --format json        # after the change
+   ```
+
+   Capture on a clean, committed tree — the baseline side of the event-write
+   precondition is decided here, the head side at commit
+   (docs/doctrine/agent-workflow-protocol.md).
+
+   For the violation half of the same question — which violations did THIS
+   change introduce or resolve — the compare after the change answers it. When
+   the change is architectural and a graph snapshot exists (from a prior
+   `archkeep graph --format json --output baseline.json` run),
+   `archkeep diff baseline.json --format json` shows the projects and edges
+   added or removed, and — with a boundary config — which added edges violate
+   boundaries and which removed edges resolve them.
+
+   Both sides are re-judged under the current law, so a policy edit between
+   capture and compare cannot fabricate an introduced/resolved pair. Exit 1
+   means the change introduced a violation no active waiver covers; an
+   introduced-but-waived entry is reported without gating, and belongs in the
+   step-9 report as an accepted cost, not silence. Exit 3 is a refusal or an
+   unclassifiable item — never "no change".
+
+4. **Declare, then make the smallest coherent change.** For a workflow-bearing
+   change, declare against the step-3 baseline (`archkeep change <baseline>
 --intent <manifest>`) before editing, then change the code, staying inside
    the import directions the context described.
    A source-code change is **not** automatically an architecture change; an
@@ -111,32 +137,6 @@ confirm it.
    nothing. Before writing one at all, check whether a declared `fitness` row
    already says it: a fitness function needs no toolchain, no artifact and no
    hash ([docs/usage/custom-rules.md](https://github.com/ecoma-io/archkeep/blob/main/docs/usage/custom-rules.md)).
-
-4. **Capture the baseline before declaring or editing (BASELINE):**
-
-   ```
-   archkeep delta --capture --output delta-base.json   # before the change
-   archkeep delta delta-base.json --format json        # after the change
-   ```
-
-   Capture on a clean, committed tree — the baseline side of the event-write
-   precondition is decided here, the head side at commit
-   (docs/doctrine/agent-workflow-protocol.md).
-
-   For the violation half of the same question — which violations did THIS
-   change introduce or resolve — the compare after the change answers it. When
-   the change is architectural and a graph snapshot exists (from a prior
-   `archkeep graph --format json --output baseline.json` run),
-   `archkeep diff baseline.json --format json` shows the projects and edges
-   added or removed, and — with a boundary config — which added edges violate
-   boundaries and which removed edges resolve them.
-
-   Both sides are re-judged under the current law, so a policy edit between
-   capture and compare cannot fabricate an introduced/resolved pair. Exit 1
-   means the change introduced a violation no active waiver covers; an
-   introduced-but-waived entry is reported without gating, and belongs in the
-   step-9 report as an accepted cost, not silence. Exit 3 is a refusal or an
-   unclassifiable item — never "no change".
 
 5. **Check constraints.** Run the authoritative gate:
 
@@ -184,7 +184,7 @@ confirm it.
    An empty dependents list is a claim ("nothing depends on this"), not a shrug.
    For a change that does not alter what a project exposes (an internal
    implementation detail, a test, a comment), this step is skipped — that is
-   the step-3 shortcut: done once the check is green, no heavier machinery.
+   the step-4 shortcut: done once the check is green, no heavier machinery.
 
 8. **Re-run relevant checks.** Fix any violation by changing the code, not the
    law, and re-run the full check until it is green. A declared custom rule
