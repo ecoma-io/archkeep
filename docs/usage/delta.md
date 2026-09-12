@@ -5,10 +5,10 @@ current tree: `introduced` | `resolved` | `unchanged` | `unknown`, both sides
 judged under the current law.
 
 ```shell
-archkeep delta --capture --output delta-base.json   # at the base commit
-archkeep delta delta-base.json                      # at head
-archkeep delta delta-base.json --format json
-archkeep delta delta-base.json --format sarif    # for GitHub code scanning
+archkeep delta --capture --output .archkeep/base.json   # at the base commit
+archkeep delta .archkeep/base.json                      # at head
+archkeep delta .archkeep/base.json --format json
+archkeep delta .archkeep/base.json --format sarif    # for GitHub code scanning
 ```
 
 `delta` answers the question a review actually asks about one change: **which
@@ -50,8 +50,8 @@ captured, and the consumer orchestrates the checkout —
 that argument:
 
 ```shell
-git checkout main && archkeep delta --capture --output delta-base.json
-git checkout my-branch && archkeep delta delta-base.json
+git checkout main && archkeep delta --capture --output .archkeep/base.json
+git checkout my-branch && archkeep delta .archkeep/base.json
 ```
 
 In CI, capture at the merge base (or on every `main` build, as an artifact)
@@ -62,7 +62,7 @@ and compare on the branch.
 A run over a tree that introduced one violation:
 
 ```text
-baseline  delta-base.json — 1a2b3c4d, 6 records, 2 projects
+baseline  .archkeep/base.json — 1a2b3c4d, 6 records, 2 projects
 head      5e6f7a8b, 7 records, 2 projects
 ⚠ 1 introduced violation
   kernel → outer  onlyTagsConstraintViolation  (0 at base, 1 at head)
@@ -256,13 +256,13 @@ the reasons [ci.md](ci.md#sarif-and-github-code-scanning) gives:
 ```yaml
 # The gate. Fails the job — exit 1 on introduced findings, exit 3 on "no verdict".
 - name: Delta against the merge-base baseline
-  run: pnpm exec archkeep delta delta-base.json
+  run: pnpm exec archkeep delta .archkeep/base.json
 
 # The presentation. Runs even when the gate just failed — the annotations
 # matter most on a red run — and its own exit code decides nothing.
 - name: Render the delta as SARIF
   if: ${{ !cancelled() }}
-  run: pnpm exec archkeep delta delta-base.json --format sarif --output delta.sarif
+  run: pnpm exec archkeep delta .archkeep/base.json --format sarif --output delta.sarif
   continue-on-error: true
 
 - uses: github/codeql-action/upload-sarif@v3

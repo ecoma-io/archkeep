@@ -285,9 +285,45 @@ describe("evaluate", () => {
   });
 
   // The corrected mechanism sentences the doc-truth gate requires (audit
-  // WS1-F01/F02/F03). `allGood` carries them so the baseline fixtures
-  // exercise the require-half of the gate, and each regression test below
-  // reverts one to prove the fail-half is loud.
+  // WS1-F01/F02/F03), plus — deliberately NOT derived from the anchor table —
+  // one hand-written sentence per protocol forcing point
+  // (`skill-protocol.mjs`). The independence is the point: the fixtures must
+  // satisfy the gate the way real skill prose would, so an anchor weakened to
+  // match only itself turns every fixture red instead of green, and a
+  // requirement added to the table without a sentence here fails `allGood`
+  // immediately — a forcing point lands with its test or not at all.
+  const protocolSentences = {
+    "arch-context": [
+      "A change that is not an architecture change is trivial: run `check` once and stop there.",
+      "Exit 3 is a STOP, not a warning, and nothing downstream may claim clean.",
+      "A foreign verdict routes to the repo whose law produced it, and is never overridden locally.",
+    ],
+    "arch-change": [
+      "Capture the baseline before declaring or editing. Capture on a clean, committed tree.",
+      "Run `archkeep delta --capture --output .archkeep/base.json`.",
+      "For a workflow-bearing change, declare against the baseline with `--intent <manifest>` before editing.",
+      "Reconcile after implementing.",
+      "A `policy.changedSinceBase: true` routes back to DECLARE.",
+      "Pass `--event-out` to write the audit trail.",
+    ],
+    "arch-check": [
+      "A non-empty gap row is NOT a clean claim — stage the files or stop.",
+      "VERIFY runs the `waivers` command on every green check — mandatory: it names what the green run hid.",
+      "Exit 3 is never clean; UNKNOWN / INCOMPLETE never silently becomes PASS.",
+    ],
+    "arch-review": [
+      "With artifacts missing, report INCOMPLETE, naming the missing artifacts.",
+      "COMPLETE requires quoting the baseline identity, the `reconciliation.verdict`, and the event artifact path.",
+      "When the waivers step found rows, quote the suppression delta.",
+      "Exit 1 or exit 3 blocks approval, and an exit 0 whose `coverageGaps` row is non-empty blocks the same way.",
+      "A scoped run is disclosed as scoped, and disclosure does not earn approval.",
+      "A foreign verdict routes to the owning repo, never overridden locally.",
+    ],
+    "arch-migrate": [
+      "A law edit is itself a change under the workflow.",
+      "Clearing the coverage read is the only step that may not be skipped.",
+    ],
+  };
   const correctedText = (dir) => {
     const byDir = {
       "arch-change":
@@ -312,7 +348,7 @@ describe("evaluate", () => {
         "`reconcile --propose` derive candidates marked proposed / " +
         "notAuthoritative, and no command writes architecture-intent.json.",
     };
-    return byDir[dir] ?? "";
+    return [byDir[dir], ...(protocolSentences[dir] ?? [])].filter(Boolean).join(" ");
   };
 
   const allGood = () =>
@@ -355,6 +391,47 @@ describe("evaluate", () => {
     });
     assert.equal(result.failures.length, 0);
     assert.ok(result.lines.some((l) => l.startsWith("ok")));
+  });
+
+  it("fails naming the requirement whose forcing-point sentence a skill dropped (#935)", () => {
+    // The silent direction: a dropped forcing-point sentence is byte-for-byte
+    // identical to text that never taught it, so the failure must name the
+    // requirement id — not a generic "requirements unmet" shrug.
+    const skills = allGood().map((s) =>
+      s.dir === "arch-review"
+        ? {
+            ...s,
+            text: s.text.replace(
+              / When the waivers step found rows, quote the suppression delta\./u,
+              "",
+            ),
+          }
+        : s,
+    );
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(
+      result.failures.some((f) => f.includes("REVIEW-QUOTES-SUPPRESSION-DELTA")),
+      JSON.stringify(result.failures),
+    );
+  });
+
+  it("fails on a cross-skill step-number citation", () => {
+    // `arch-change step 3` rots the moment arch-change renumbers. The failure
+    // names the citing file and the offending spans.
+    const skills = allGood().map((s) =>
+      s.dir === "arch-context"
+        ? { ...s, text: `${s.text} As arch-change step 3 teaches, capture first.` }
+        : s,
+    );
+    const result = evaluate({ ...baseFacts, skills });
+    assert.ok(
+      result.failures.some((f) => f.includes("step number")),
+      JSON.stringify(result.failures),
+    );
+    assert.ok(
+      result.lines.some((l) => l.includes("cross-skill step-number citation")),
+      JSON.stringify(result.lines),
+    );
   });
 
   it("fails when a copied skill file differs from the canonical one", () => {

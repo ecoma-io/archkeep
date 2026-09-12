@@ -595,6 +595,7 @@ describe("backward compatibility — the repository's own registry (wave 2)", ()
       "0008-snapshot-identity-per-family",
       "0009-moon-derived-tags-provider-policy",
       "0010-moon-workspace-layout-inference",
+      "0011-agent-workflow-protocol",
     ]);
     for (const record of records) {
       expect(record.status).toBe("accepted");

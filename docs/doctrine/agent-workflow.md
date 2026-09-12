@@ -1,10 +1,13 @@
 # The agent workflow
 
 Measured status of the layer that makes a coding agent prove an architectural
-change, and the failure taxonomy that a redesign must close. This page records
-what was measured, not yet what was decided: the protocol design drafted
-against this taxonomy is [the protocol page](agent-workflow-protocol.md),
-pending review in [ecoma-io/archkeep#921](https://github.com/ecoma-io/archkeep/issues/921).
+change, and the failure taxonomy the protocol closes. The measurements below
+are what was measured, at 0.29.0, before any redesign; the protocol adopted
+against this taxonomy is [the protocol
+page](agent-workflow-protocol.md), and its adoption is recorded in
+[ADR 0011](../adr/0011-agent-workflow-protocol.md). The measurement text is
+kept as written — a measurement record reworded after the fact would read as
+a fact about a tree that no longer exists.
 
 Every measurement below was reproduced on a throwaway native-provider workspace
 (`archkeep.json` `projects.declared` plus a `module-boundaries.config.mjs`
@@ -161,10 +164,10 @@ falsifiable: the evaluation suite below is the test, and any scenario the
 existing surfaces cannot score sends the work back to the engine — with the
 evidence, not with a hunch.
 
-## Per-skill verdicts (draft)
+## Per-skill verdicts (as landed)
 
-Pending adversarial review; the classes each verdict exists to close are in
-parentheses:
+The verdicts the adopted protocol implements; the classes each verdict exists
+to close are in parentheses:
 
 - **arch-context — keep, as the entry point.** Extends the trivial/heavy
   classification arch-change step 4 and arch-review's When-to-use clause already
@@ -248,20 +251,15 @@ unscorable hole (open decision 5), not an oversight.
   minor bump named in the changelog, per the [compatibility
   contract](../development/release.md#release-stages-the-0x-line-and-the-parked-candidate).
 
-## Open decisions for review
+## The decisions, resolved
 
-1. Where the protocol text lives (per-skill steps vs one shared page the
-   skills cite).
-2. Whether class A/F escalation is prose-plus-example (skills) or a
-   machine-checkable artifact the skills require (and which one — a
-   `--event-out` file vs the change envelope itself).
-3. Whether arch-review's inverted skip clause needs an engine-side
-   companionship (a `review --requires-baseline` shape) or stays skill-side.
-4. The evaluation suite's harness: shell fixtures vs the MCP tool surface.
-5. Whether declaration ordering — pre-declaration versus post-hoc
-   self-attestation — must become auditable, an engine-side question the
-   taxonomy flags but does not answer.
-
-None of these decide code today. The gate for writing code is reviewer
-sign-off on the taxonomy and the evaluation suite — the same order this page
-argues the agent should be held to.
+The five decisions this page ended on were answered by the protocol's
+[D1–D5](agent-workflow-protocol.md) and recorded in
+[ADR 0011](../adr/0011-agent-workflow-protocol.md): the steps live in the
+five skills (1); completion evidence is the change envelope plus the event
+file (2); arch-review's refusal stays skill-side (3); the suite is shell
+fixtures plus per-scenario protocol bindings, not the MCP surface (4); and
+declaration ordering stayed unaudited — [post-hoc declaration and baseline
+re-capture are named
+residuals](agent-workflow-protocol.md#decisions) (5), reopenable only as an
+engine capability decision with its own compatibility cost.

@@ -233,7 +233,8 @@ function emptyRowsManifest(overrides = {}) {
  *   baselinePath?: string, intent?: object|undefined, config?: object|undefined,
  *   eventOut?: string,
  *   writeEvent?: (dir: string, event: object) => {id: string, duplicate: boolean},
- *   loadIntentOverride?: (root: string, opts?: object) => Promise<object|undefined>}} input
+ *   loadIntentOverride?: (root: string, opts?: object) => Promise<object|undefined>,
+ *   listUntracked?: (root: string) => string[]}} input
  */
 async function run({
   ctx,
@@ -244,6 +245,7 @@ async function run({
   eventOut,
   writeEvent,
   loadIntentOverride,
+  listUntracked,
 }) {
   return changeCommand(baselinePath, "intent.json", ctx ?? contextOf(), {
     config: law ?? config(),
@@ -255,6 +257,7 @@ async function run({
     ...(eventOut === undefined ? {} : { eventOut }),
     ...(writeEvent === undefined ? {} : { writeEvent }),
     ...(loadIntentOverride === undefined ? {} : { loadIntentOverride }),
+    ...(listUntracked === undefined ? {} : { listUntracked }),
   });
 }
 
@@ -874,6 +877,12 @@ describe("the event identity gate (--event-out) (#701)", () => {
           intent: manifest({ base: { commit } }),
           eventOut: "events",
           writeEvent: capture,
+          // This fixture runs with `.git` renamed away — no worktree for the
+          // untracked-universe audit (#927) to ask. It states the empty
+          // complement through the seam, the same way every other outside-
+          // the-process reach is injected here; the audit's git failure in a
+          // real workspace stays loud.
+          listUntracked: () => [],
         }),
       ).rejects.toThrow(/committed head/u);
     } finally {

@@ -81,8 +81,10 @@ catch { process.exit(3); }
   printf '%s' "$v"
 }
 
-# Half 1, act one: run change. Observed live: the untracked file is invisible
-# to it — the adversarial move defeats the change command outright.
+# Half 1, act one: run change. The verdict over the tracked universe still
+# stands (matched, exit 0), but the envelope now carries the same universe
+# boundary check states (#927): the untracked-files row names the file the
+# comparison never read.
 set +e
 OUT="$("$ARCHKEEP_CLI" change .archkeep/base.json --intent intent.json --format json 2>/dev/null)"
 CODE_UNTRACKED=$?
@@ -91,6 +93,8 @@ printf '%s' "$OUT" > change-untracked.json
 echo "OBSERVED change_exit_untracked=$CODE_UNTRACKED"
 VERDICT_UNTRACKED="$(field change-untracked.json '((d.decision || {}).verdict)' 'untracked change')"
 echo "OBSERVED change_verdict_untracked=$VERDICT_UNTRACKED"
+CHANGE_GAP="$(field change-untracked.json '((d.coverage || {}).coverageGaps || []).filter(g => g.kind === "untracked-files").map(g => (g.files || []).join(",")).join(",")' 'untracked change')"
+echo "OBSERVED change_gap_file=$CHANGE_GAP"
 
 # Half 1, act two: the verify signal. Observed live: check emits the gap row
 # but still exits 0 — the evidence is engine-enforced, the stop is not.
@@ -117,17 +121,24 @@ VERDICT_STAGED="$(field change-staged.json '((d.result || {}).reconciliation || 
 echo "OBSERVED change_verdict_staged=$VERDICT_STAGED"
 UNEXPECTED_ROW="$(field change-staged.json '(((d.result || {}).reconciliation || {}).unexpected || []).map(r => r.kind + ":" + r.from + ">" + r.to).join(",")' 'staged change')"
 echo "OBSERVED unexpected_row=$UNEXPECTED_ROW"
+STAGED_GAP="$(field change-staged.json '((d.coverage || {}).coverageGaps || []).filter(g => g.kind === "untracked-files").map(g => (g.files || []).join(",")).join(",")' 'staged change')"
+echo "OBSERVED staged_change_gap=$STAGED_GAP"
 
-# Score: the gap row must name the untracked file, and the staged state must
-# be convicted. The stop itself is the VERIFY step's mandate — the skill text
-# that forces it is what the suite measures around.
+# Score: both envelopes must disclose the universe boundary, and the staged
+# state must be convicted. The check gap is the VERIFY step's signal; the
+# change gap (#927) is the RECONCILE envelope's — the evidence REVIEW quotes
+# carries the same boundary the VERIFY run states. The stop itself is the
+# VERIFY step's mandate — the skill text that forces it is what the suite
+# measures around.
 if [ "$GAP_KIND" = "untracked-files" ] \
    && [ "$GAP_FILE" = "libs/domain/extra.ts" ] \
+   && [ "$CHANGE_GAP" = "libs/domain/extra.ts" ] \
+   && [ -z "$STAGED_GAP" ] \
    && [ "$CODE_STAGED" -eq 1 ] \
    && [ "$VERDICT_STAGED" = "undeclared" ]; then
   echo "SCORE pass"
   exit 0
 fi
-echo "note: expected an untracked-files gap row naming libs/domain/extra.ts, then a staged change exiting 1 with verdict undeclared" >&2
+echo "note: expected untracked-files gap rows naming libs/domain/extra.ts in check AND change, none after staging, then a staged change exiting 1 with verdict undeclared" >&2
 echo "SCORE fail"
 exit 1

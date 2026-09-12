@@ -79,13 +79,15 @@ confirm it.
 3. **Capture the baseline before declaring or editing (BASELINE):**
 
    ```
-   archkeep delta --capture --output delta-base.json   # before the change
-   archkeep delta delta-base.json --format json        # after the change
+   archkeep delta --capture --output .archkeep/base.json   # before the change
+   archkeep delta .archkeep/base.json --format json        # after the change
    ```
 
-   Capture on a clean, committed tree — the baseline side of the event-write
-   precondition is decided here, the head side at commit
-   (docs/doctrine/agent-workflow-protocol.md).
+   The evidence snapshot lives at `.archkeep/base.json` — the one name the
+   review's completion bar quotes (`arch-review`'s COMPLETE step). Capture on a
+   clean, committed tree — the baseline side of the event-write precondition is
+   decided here, the head side at commit
+   ([docs/doctrine/agent-workflow-protocol.md](https://github.com/ecoma-io/archkeep/blob/main/docs/doctrine/agent-workflow-protocol.md)).
 
    For the violation half of the same question — which violations did THIS
    change introduce or resolve — the compare after the change answers it. When
@@ -199,10 +201,14 @@ confirm it.
    audit trail): a baseline captured dirty poisons the event write —
    `assertReproducibleEventIdentity` sees baseDirty and refuses with exit 3,
    so stop and re-capture from a clean tree. Without `--event-out` the run
-   stays an ordinary run. State the projects and edges introduced or removed,
-   the evidence commands that verified them, and any coverage gap (exit 3) you
-   could not clear. State the law the gate ran with — the exact `--config
-<NAME>` (or the `boundaryConfig` value) the check resolved.
+   stays an ordinary run. A `policy.changedSinceBase: true` at this step routes
+   back to DECLARE: re-declare the change against the law now in effect, or
+   revert the law edit and declare that revert as its own declared change — a
+   green a law edit manufactured is not a reconciliation. State the projects
+   and edges introduced or removed, the evidence commands that verified them,
+   and any coverage gap (exit 3) you could not clear. State the law the gate
+   ran with — the exact `--config <NAME>` (or the `boundaryConfig` value) the
+   check resolved.
 
 ## Interpreting exit codes
 
@@ -214,7 +220,7 @@ confirm it.
   site's `verdict`, the governing row's `allowed` direction verbatim from the
   law, and the author's declared `remediation` — where `remediation: null`
   means consult the constraint row and its `decisionRef`/ADR rather than
-  improvise a fix (`arch-check`, step 5). Exit 1
+  improvise a fix (`arch-check`, "Explain individual findings"). Exit 1
   from `check` also covers intent findings — a forbidden path appeared or an
   allowed relationship is missing — which may point at a code change, not a
   policy one.

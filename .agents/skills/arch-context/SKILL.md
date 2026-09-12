@@ -183,8 +183,9 @@ answer is to surface it, never to ignore it.
 8. **Understand the surrounding governance surfaces when the facts need
    context.** These are descriptive, never gates — they do not report boundary
    findings:
-   `archkeep waivers` lists the term-bound suppressions a violation under review
-   may be covered by; `archkeep health` reports per-metric verdicts (unmeasured
+   `archkeep waivers` names every `boundarySuppressions` row — the waivers with
+   their terms and the permanent suppressions with what each hides; `archkeep
+health` reports per-metric verdicts (unmeasured
    is `unknown`/`not_applicable`, never zero); `archkeep debt <dir>` ages waivers,
    gaps and drift across snapshots; `archkeep fitness` (when the policy declares
    a `fitness` export) judges the workspace's named quality gates and exits 1
@@ -209,10 +210,16 @@ answer is to surface it, never to ignore it.
 
 ## Choosing the minimum sufficient set
 
-First apply arch-change step 3's classification: a change that is not an
-architecture change is trivial — run `check` once and stop there, with no
-baseline, no contract, and none of the machinery below. For workflow-bearing
-work the default is `context` (+ `--plan` for a code change). Add:
+First apply `arch-change`'s architecture-change classification (its DECLARE
+step): a change that is not an architecture change is trivial — run `check`
+once and stop there, with no baseline, no contract, and none of the machinery
+below. For workflow-bearing
+work the default is `context` (+ `--plan` for a code change). A boundary
+verdict produced under another repository's law — the dogfooding repo's own
+boundary law quoted into an issue or review here, for example — routes to the
+repo whose law produced it: this workspace's declared state is the only law
+that can judge this workspace, and a foreign finding is never overridden
+locally to dispose of it. Add:
 
 - `impact` — when the change alters a project others depend on (its API, its
   output, or its very existence).
