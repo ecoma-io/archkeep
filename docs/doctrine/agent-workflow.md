@@ -167,7 +167,7 @@ Pending adversarial review; the classes each verdict exists to close are in
 parentheses:
 
 - **arch-context — keep, as the entry point.** Extends the trivial/heavy
-  classification arch-change step 3 and arch-review's When-to-use clause already
+  classification arch-change step 4 and arch-review's When-to-use clause already
   define (G)
   rather than inventing a second one: its first job becomes applying that
   existing test — trivial (no baseline, no contract, `check` alone) versus
