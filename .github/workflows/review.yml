@@ -72,7 +72,7 @@ jobs:
           fetch-depth: 1
 
       - id: review
-        uses: ecoma-io/action-agents/review@2f0e18a8e1ea5bdfa8fc690057ca1bbdfaa4f3a4 # v0.12.1
+        uses: ecoma-io/action-agents/review@46a6cc2e36fcb3d9d488c04b90507cf6a32b8244 # v0.13.2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           api-url: ${{ secrets.ECOMA_LLM_BASE_URL }}
