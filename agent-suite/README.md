@@ -42,7 +42,9 @@ node agent-suite/run.mjs --gate    # gate: exit 1 unless every scenario scores p
 ```
 
 The report mode is how the before-table is produced; the gate mode is what
-the skill-change pull request runs after the text lands.
+CI runs on every pull request (the `agent-suite` job in
+`.github/workflows/ci.yml`, inside `ci-gate`'s `needs`) and what the
+skill-change pull request ran after the text landed.
 
 ## Rules the scenarios obey
 

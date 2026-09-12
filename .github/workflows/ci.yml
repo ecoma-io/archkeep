@@ -587,6 +587,36 @@ jobs:
             pnpm exec moon run archkeep-rule-sdk-rust:lint archkeep-rule-sdk-rust:test archkeep-rule-sdk-rust:typecheck archkeep-rule-sdk-go:lint archkeep-rule-sdk-go:test archkeep-rule-sdk-go:typecheck archkeep-rule-sdk-python:lint archkeep-rule-sdk-python:test
           fi
 
+  agent-suite:
+    name: Agent suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The adversarial evaluation suite (#925) as a per-PR metric, not a
+    # one-time before/after record: ten fixtures whose gate exits 1 on any
+    # fail or broken row, so a scenario that stops scoring — a flipped
+    # transcript marker, a dropped disclosure, a regressed engine-half
+    # observation — fails the pull request loudly. No affected-detection
+    # skip, deliberately: the score moves on engine changes, skill-text
+    # changes, and scenario edits alike, and it is only a metric if every
+    # PR carries it. The suite is deterministic and wall-clock-free by
+    # design (each scenario README states its determinism argument),
+    # spawns the CLI from this source tree, and sets its own per-fixture
+    # git identity (`git config user.email suite@invalid`), so the job
+    # needs no secrets and no toolchain beyond Node and git.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: ARCHKEEP_CLI="$PWD/packages/archkeep/cli.mjs" node agent-suite/run.mjs --gate
+
   verify-e2e:
     name: Verify (E2E ${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
@@ -682,7 +712,7 @@ jobs:
     # Visible, and enforced: scripts/ci-drift-pins.test.mjs reads this file and
     # fails when a job sits outside `needs`, or when `needs` names a job that
     # does not exist.
-    needs: [verify-core, verify-e2e, verify-native]
+    needs: [verify-core, verify-e2e, verify-native, agent-suite]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
