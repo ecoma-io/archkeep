@@ -68,6 +68,10 @@
         "reason": "the opencode plugin that runs the shared editor-hook gates (scripts/editor-hooks/) at edit time, outside any package's own lint/test/typecheck target."
       },
       {
+        "path": "agent-suite/run.mjs",
+        "reason": "the agent-workflow evaluation suite's runner — workspace apparatus run by hand (node agent-suite/run.mjs), type-checked by scripts/tsconfig.json, outside any package's own lint/test/typecheck target. The scenario fixtures beside it are bash and markdown, not analyzable."
+      },
+      {
         "path": "*.mjs",
         "reason": "root-level tool configuration read by the tools that consume it directly (eslint.config.mjs, commitlint.config.mjs, and this repository's own module-boundaries.config.mjs), not owned by any declared project."
       }
