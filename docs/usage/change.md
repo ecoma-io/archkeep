@@ -172,10 +172,23 @@ first question) and both lists are always present in full — precedence hides
 nothing.
 
 What counts as _material_ is exactly what [`diff`](diff.md) has always
-reported: projects added, removed, or metadata-changed, and project-to-project
-edges added or removed. Renamed variables, moved helpers inside one project,
-formatting, comments, and test-only edits produce none of these, so they are
-not architecture and this command does not pretend they are.
+reported: projects added, removed, or `metadata-changed`, and
+project-to-project edges added or removed. Renamed variables, moved helpers
+inside one project, formatting, comments, and test-only edits produce none of
+these, so they are not architecture and this command does not pretend they
+are.
+
+**The verdict is over the tracked universe, and the envelope says so.** The
+files this command reads come from `git ls-files`, so a project-owned file
+that was never `git add`-ed never entered the comparison — a `matched`
+verdict over such a tree is a true statement about a partial universe. The
+envelope carries `coverage.coverageGaps` with an `untracked-files` row naming
+every such file (the [coverage reference](../reference/json-output.md) owns
+the row vocabulary), the same disclosure [the checking
+command](checking.md) prints — so the
+evidence a review quotes carries the boundary its verdict is bounded by. The
+row changes no verdict and no exit code; staging the file moves it into the
+judged universe, which usually convicts the declaration as `undeclared`.
 
 ## Policy interaction
 

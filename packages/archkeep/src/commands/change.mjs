@@ -128,7 +128,8 @@ import { writeEvent } from "../governance/evolution-store.mjs";
 import { judgeIntent } from "../architecture-intent/judge.mjs";
 import { INTENT_FILE, loadIntent } from "../architecture-intent/model.mjs";
 import { debtChangeDiff } from "../governance/debt-ledger.mjs";
-import { resolveCommandContext } from "./context.mjs";
+import { resolveCommandContext, untrackedOwnedFiles } from "./context.mjs";
+import { listUntrackedFiles } from "../workspace.mjs";
 import { resolvePolicy } from "./policy.mjs";
 
 /**
@@ -645,6 +646,7 @@ function judgeDeclaredConstraints(intent, io) {
  * @param {{config?: object|null, readBaseline?: (path: string) => object,
  *   readIntent?: (path: string) => Promise<object>, now?: string,
  *   loadIntentOverride?: (root: string, opts?: object) => Promise<object|undefined>,
+ *   listUntracked?: (root: string) => string[],
  *   eventOut?: string, writeEvent?: (dir: string, event: object,
  *   io?: object) => {id: string, duplicate: boolean}}} [io]
  *   The resolved boundary config (required — constraints are judged under it
@@ -690,6 +692,13 @@ export async function changeCommand(
     // run's base and head graphs. Injectable so tests drive it without disk;
     // defaults to the canonical loader. Absent intent ⇒ no ids are emitted.
     loadIntentOverride,
+    // The untracked-universe seam (#927): the disclosure below asks git what
+    // the worktree holds beyond the index (`../workspace.mjs`'s
+    // `listUntrackedFiles`), and a test drives it without a subprocess the
+    // same way every other outside-the-process reach here is driven. A caller
+    // whose tracked universe was built by other means than git passes its own
+    // listing — or `() => []` to state the universe had no complement.
+    listUntracked = listUntrackedFiles,
     // The store seam, injectable so tests drive the write without disk and
     // embedders can route it; defaults to the canonical append-only store.
     writeEvent: writeEventSeam = writeEvent,
@@ -897,6 +906,31 @@ export async function changeCommand(
     );
   }
 
+  // The tracked-universe boundary, the same audit `check` runs (#675): the
+  // analysis universe is `git ls-files` verbatim, so a project-owned file git
+  // never tracked never entered this comparison — and before this row a
+  // `matched` verdict over such a tree was byte-for-byte the clean tree's
+  // envelope (#927). Disclosure, not a second gate — the exact bargain
+  // `check`'s `untracked-files` row holds (./check.mjs: what is forbidden is
+  // not exit 0, it is silence): the verdict over the tracked universe stands,
+  // no exit code and no verdict field moves, but the reconciliation names the
+  // files its universe omitted, because the workflow's REVIEW step quotes
+  // this envelope as completion evidence
+  // (`../../../../docs/doctrine/agent-workflow-protocol.md`, D2), and the
+  // evidence a review quotes must carry the same universe boundary the
+  // VERIFY step's own `check` run states. The key is contributed only when
+  // the list is non-empty, so a tree with nothing beyond its index reports
+  // exactly the bytes it reported before — the golden gate holds
+  // `../corpus/goldens/change.json` to that.
+  const untrackedOwned = untrackedOwnedFiles({
+    untracked: listUntracked(root),
+    // The projects the comparison itself judged — `headGraphForDiff` above —
+    // not a second answer from the context: the disclosure names files whose
+    // absence the verdict's own graph could not see, so its ownership test
+    // reads the same project list that graph was built from.
+    projects: headGraphForDiff.projects,
+  });
+
   const coverage = {
     complete: true,
     projects: headGraphForDiff.projects.length,
@@ -909,6 +943,9 @@ export async function changeCommand(
     // `blindSpotRows` is the one mapping every other command's coverage block
     // carries.
     blindSpots: blindSpotRows(analysis.failures),
+    ...(untrackedOwned.length > 0
+      ? { coverageGaps: [{ kind: "untracked-files", files: untrackedOwned }] }
+      : {}),
     notes,
   };
 

@@ -290,3 +290,108 @@ describe("#675 — intent-to-add files are inside the universe (pinned)", () => 
     expect(untrackedGap(envelope)?.files ?? []).not.toContain("libs/alpha/alpha-reach.go");
   });
 });
+
+/**
+ * Builds a native-provider workspace whose committed state is clean, captures
+ * a baseline, and writes a change-intent manifest pinning that commit — the
+ * setup `change` needs. `untracked` is written after the baseline, so the
+ * declaration was written against a tree that did not contain the file the
+ * verdict is later asked about.
+ */
+function makeChangeWorkspace(untracked) {
+  const ws = makeWorkspace([]);
+  mkdirSync(join(ws.root, ".archkeep"), { recursive: true });
+  const capture = spawnSync(
+    process.execPath,
+    [CLI, "delta", "--capture", "--output", ".archkeep/base.json"],
+    {
+      cwd: ws.root,
+      encoding: "utf8",
+      timeout: SPAWN_BUDGET_MS,
+      killSignal: "SIGKILL",
+      env: environmentForTree(),
+    },
+  );
+  expect(capture.status).toBe(0);
+  const baseCommit = ws.git(["rev-parse", "HEAD"]);
+  expect(baseCommit.status).toBe(0);
+  writeFileSync(
+    join(ws.root, "intent.json"),
+    JSON.stringify({
+      version: "1",
+      base: { commit: baseCommit.stdout.trim() },
+      summary: "no declared consequences",
+      projects: { add: [], remove: [] },
+      edges: { add: [], remove: [] },
+      constraints: { noNewViolations: true },
+    }),
+  );
+  for (const [relativePath, text] of untracked) {
+    mkdirSync(join(ws.root, relativePath, ".."), { recursive: true });
+    writeFileSync(join(ws.root, relativePath), text);
+  }
+  return ws;
+}
+
+/** Spawns the real CLI `change` over `root` and parses the JSON envelope. */
+const runChangeJson = (root) => {
+  const run = spawnSync(
+    process.execPath,
+    [CLI, "change", ".archkeep/base.json", "--intent", "intent.json", "--format", "json"],
+    {
+      cwd: root,
+      encoding: "utf8",
+      timeout: SPAWN_BUDGET_MS,
+      killSignal: "SIGKILL",
+      env: environmentForTree(),
+    },
+  );
+  return { status: run.status, envelope: JSON.parse(run.stdout), stderr: run.stderr };
+};
+
+describe("#927 — the change envelope carries the same universe boundary", () => {
+  const ws = makeChangeWorkspace([["libs/alpha/alpha-reach.go", ALPHA_REACHING]]);
+  afterAll(() => rmSync(ws.root, { recursive: true, force: true }));
+
+  it("a matched verdict over a tree with an untracked violating file is not silent", () => {
+    const { status, envelope } = runChangeJson(ws.root);
+    // The verdict over the tracked universe stands — the declaration matched,
+    // nothing tracked crossed — and the exit code does not move. What must
+    // not happen is byte-for-byte silence about the file the universe
+    // omitted: REVIEW quotes this envelope as completion evidence, so the
+    // evidence carries the same boundary the VERIFY step's check run states.
+    expect(status).toBe(EXIT.ok);
+    expect(envelope.status).toBe("ok");
+    expect(envelope.result.reconciliation.verdict).toBe("matched");
+    const gap = untrackedGap(envelope);
+    expect(gap).toBeDefined();
+    expect(gap.files).toEqual(["libs/alpha/alpha-reach.go"]);
+    // The disclosure is a gap, not a withheld verdict: `complete` stays true
+    // over the judged surface.
+    expect(envelope.coverage.complete).toBe(true);
+  });
+
+  it("staging the file removes the gap and convicts the declaration", () => {
+    const add = ws.git(["add", "libs/alpha/alpha-reach.go"]);
+    expect(add.status).toBe(0);
+    const { status, envelope } = runChangeJson(ws.root);
+    expect(status).toBe(EXIT.violations);
+    expect(envelope.status).toBe("findings");
+    expect(envelope.result.reconciliation.verdict).toBe("undeclared");
+    // The file is inside the universe now — the row that named it is gone.
+    expect(untrackedGap(envelope)).toBeUndefined();
+  });
+
+  it("a tree with nothing beyond its index carries no coverageGaps key", () => {
+    // The byte-stability half of the contract: the key is contributed only
+    // when the audit names files, so a clean tree's envelope reports exactly
+    // the bytes it reported before — the golden gate holds
+    // `../corpus/goldens/change.json` to that.
+    const clean = makeChangeWorkspace([]);
+    afterAll(() => rmSync(clean.root, { recursive: true, force: true }));
+    const { status, envelope } = runChangeJson(clean.root);
+    expect(status).toBe(EXIT.ok);
+    expect(envelope.result.reconciliation.verdict).toBe("matched");
+    expect("coverageGaps" in envelope.coverage).toBe(false);
+  });
+});
