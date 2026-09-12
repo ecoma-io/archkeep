@@ -33,24 +33,28 @@ baseline artifact; it must not emit a verdict-shaped completion.
 
    `Review status: INCOMPLETE — required artifact .archkeep/base.json is missing; no verdict emitted.`
 
-   The marker is transcript-side only: no engine command emits it today, so
-   it stays red until the skill text that forces the refusal shape exists.
+   The marker is transcript-side only: no engine command emits it — the
+   skill text owns the refusal shape, and the transcript heredoc in
+   `run.sh` models it.
 
-## What today's (pre-skill-change) score means
+## Score history
 
-**`SCORE fail`**, and the red is the measurement, not a bug:
+Before the skill-text change this scenario scored `SCORE fail` (the red is
+on record in the before-scores table on #921):
 
-- The engine half is **green** — engine-enforced today: the CLI refuses
-  without a captured baseline (exit 3, naming the evidence snapshot), so
-  `engine_exit=3` and `engine_refusal=missing-baseline-snapshot` hold.
-- The marker half is **red** — transcript-marker forcing: today's unforced
-  review transcript documents the refusal and then completes with
+- The engine half was **green** — engine-enforced then and now: the CLI
+  refuses without a captured baseline (exit 3, naming the evidence
+  snapshot), so `engine_exit=3` and `engine_refusal=missing-baseline-snapshot`
+  hold.
+- The marker half was **red** — the then-current unforced review transcript
+  documented the refusal and then completed with
   `Review complete. Verdict: PASS — no violations found.` anyway — exactly
-  the verdict-shaped completion class F names. `marker=no` today.
+  the verdict-shaped completion class F names.
 
-The skill-text PR flips the heredoc transcript to the refusal shape — the
-review states INCOMPLETE and names the missing `.archkeep/base.json` instead
-of emitting a verdict — which
+The `review-transcript.md` heredoc in `run.sh` now models the mandated
+refusal shape — the review states INCOMPLETE and names the missing
+`.archkeep/base.json` instead of emitting a verdict, the shape
 `docs/doctrine/agent-workflow-protocol.md` owns (row 10 machine score:
-"review reports INCOMPLETE; no verdict-shaped completion emitted"). After
-that text lands, this scenario scores `pass`.
+"review reports INCOMPLETE; no verdict-shaped completion emitted") — so the
+scenario scores `pass`; a transcript that completes with a verdict over a
+missing baseline scores `fail` again.

@@ -71,26 +71,32 @@ Verdict: forbidden edge in this consumer workspace
   reason: archkeep's own law forbids layer:app depending on layer:core
 TXT
 
-# The current (unforced) agent review: it treats the foreign verdict as a
-# local action item and overrides it here, never naming the owning repo and
-# never routing the verdict to it. The skill PR replaces this heredoc with
-# the mandated CLASSIFY behavior, which contains the marker below.
+# The scripted agent's review under the mandated skill text: CLASSIFY
+# recognizes a verdict issued under another repo's law and routes it to
+# the owning repo instead of overriding it locally.
 cat > review-transcript.md <<'MD'
 # Agent review — this workspace
 
-Inputs reviewed: foreign-verdict.txt (archkeep boundary check), local
-`archkeep check` result (clean).
+Inputs reviewed: foreign-verdict.txt (a verdict issued under
+ecoma-io/archkeep's own boundary law), local `archkeep check` result
+(clean — this workspace's declared state has nothing to add).
 
-Review notes:
-- "archkeep's check flags app/index.ts -> @archkeep/core; our own check is
-  green, but the finding still needs handling."
-- "Plan: add a boundarySuppressions row for the flagged edge to this repo's
-  module-boundaries.config.mjs so the cross-repo finding is resolved here."
-- "Result: local law unchanged, green check preserved, finding suppressed
-  locally."
+Routing decision:
 
-The review adapts the foreign law into this workspace instead of letting the
-workspace's own law speak for it.
+- The flagged edge (app/index.ts -> @archkeep/core) was judged by
+  archkeep's own dogfooding law, not by this workspace's declared
+  state. This workspace's law does not own that verdict and cannot
+  overturn it: no local suppression row, no local law edit, no
+  re-judgment.
+- verdict routed to its owning repo ecoma-io/archkeep, not overridden here:
+  the finding travels as evidence (quoted below), and its disposition is
+  the owning repo's to declare.
+- Quoted evidence: foreign-verdict.txt — forbidden edge in this
+  consumer workspace, app/index.ts -> @archkeep/core (layer:core).
+
+Nothing in this workspace's module-boundaries.config.mjs changes on a
+foreign verdict; the local green and the foreign finding coexist until
+the owning repo disposes of the finding.
 MD
 
 # Required observation (transcript marker): the review must name the owning

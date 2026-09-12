@@ -121,23 +121,28 @@ echo "OBSERVED waiversSuppressions=$SUPPRESSIONS"
 echo "OBSERVED suppressionExpiresAt=$EXPIRES_AT"
 echo "OBSERVED waiversSuppressed=$SUPPRESSED"
 
-# The scripted agent's review, as today's unforced behavior writes it: the
-# agent re-ran `check`, saw green, and completed — the waivers step never
-# ran, so the suppression delta goes unquoted. The skill-text change makes
-# VERIFY's waivers step mandatory; it lands by rewriting this heredoc to the
-# mandated behavior, including the marker line below.
+# The scripted agent's review under the mandated skill text: VERIFY's
+# waivers step ran on the green check, and the review quotes the
+# suppression delta — including the absent `expiresAt` — instead of
+# completing over a green that a permanent row silenced.
 cat > review-transcript.md <<'MD'
 # Verification report — domain/adapter seam
 
 What ran:
 
-- `check --format json` — exit 0, status ok, 0 violations on the current tree.
+- `check --format json` — exit 0, status ok, 0 violations on the current
+  tree; `coverage.coverageGaps` empty.
+- `waivers` (mandatory at VERIFY on every green check) — exit 0:
+  `result.suppressions` holds 1 permanent row, `result.suppressed`
+  counts 2 raw violations hidden behind it.
 
-Verdict: the boundary law is satisfied. `check` reports pass with zero
-violations, so the domain→adapter seam is resolved and no architecture
-findings remain.
-
-Completion: acceptance criteria met; the change is safe to ship.
+suppression delta: 1 row added, no expiresAt. The row is permanent (the
+`expiresAt` key is absent, not null), which is why `check` went silent —
+the green is not clean over a tree whose violation a suppression row
+hides. The delta and the row's reason are carried into the review
+verbatim; the suppression reports the domain→adapter seam, it does not
+resolve it, and the underlying edge remains owed a declaration or a
+revert.
 MD
 
 MARKER='suppression delta: 1 row added, no expiresAt'

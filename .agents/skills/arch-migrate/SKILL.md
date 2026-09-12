@@ -12,25 +12,22 @@ root, or one that was written long enough ago that nobody trusts it. Also when
 onboarding a large legacy tree where hand-writing the model up front would be
 guesswork.
 
-Not for a workspace that already has a model the team stands behind. There the
-change is an ordinary one (`arch-change`), the verdict is `arch-check`, and a
-model that has merely gone stale is `arch-review`'s step on a stale model —
-this skill is for the case where the model does not exist yet, or must be
-rebuilt from scratch.
+Not for a workspace that already has a model the team stands behind. There
+the change is an ordinary one (`arch-change`), the verdict is `arch-check`,
+and a merely stale model is `arch-review`'s step — this skill is for when the
+model does not exist yet, or must be rebuilt from scratch.
 
 ## Why
 
 An agent asked to "set up Archkeep here" will, by default, write an
-`architecture-intent.json` from whatever it inferred while reading the code.
-That file is law: `check` gates on it, and CI turns red on it. A model produced
-by inference and adopted without review is a law nobody authored — and because
-it was derived from the code as it currently stands, it silently blesses every
-violation the repository already contains. The resulting green run is the
-worst possible outcome: an enforced architecture that enforces the mess.
+`architecture-intent.json` from what it observes. That file is law: `check`
+gates on it. A model produced by inference and adopted without review is a
+law nobody authored — and because it was derived from the code as it stands,
+it silently blesses every violation the repository already contains.
 
-The `--propose` surfaces exist so the derivation and the adoption are separate
-acts. Archkeep derives; a human adopts. The agent's job is to make the second
-act easy to perform and easy to refuse — never to perform it silently.
+The `--propose` surfaces exist so the derivation and the adoption are
+separate acts. Archkeep derives; a human adopts. The agent's job is to make
+the second act easy to perform and easy to refuse.
 
 ## How
 
@@ -42,9 +39,8 @@ act easy to perform and easy to refuse — never to perform it silently.
    ```
 
    Exit 3 naming `nx.json`, `archkeep.json` or `.moon` means there is no
-   workspace to govern yet. Adding the marker is a repository decision — say
-   which one the repository should carry and why, and let the human make it.
-   Do not create it silently as a side effect of "setting up".
+   workspace to govern yet. Adding the marker is a repository decision: say
+   which one to carry, and why, and let the human make it — never silently.
 
 2. **Observe, and clear coverage before anything else.**
 
@@ -157,11 +153,18 @@ act easy to perform and easy to refuse — never to perform it silently.
    wrong, change that side, re-run. **The ranking is not the decision.** A
    candidate list run mid-migration will readily propose relaxing the very
    intent row that names the violation being migrated away from — its own
-   wording is "relax the row **or** change the boundary", because it cannot
-   tell which is right. Adopting the relaxation makes the run green by
-   deleting the rule, which is the one outcome the migration exists to
-   prevent. When a candidate would weaken a rule, do not apply it: name it and
-   escalate.
+   wording is "relax the row **or** change the boundary". When a candidate
+   would weaken a rule, do not apply it: name it and escalate.
+
+   **A law edit is itself a change under the workflow.** Capture the baseline
+   before the edit (or reuse the existing one), declare the law change, then
+   implement and reconcile — the edit arrives as a declared change with its
+   evidence, not as a diff that happens to relax a row. `delta` reports
+   `policyChanged`; `change` reports `policy.changedSinceBase: true`, routing
+   back to DECLARE — the re-declare loop. That routing outlaws the gamed
+   green: editing a `depConstraints` row to silence a violation without
+   declaration. Honest exits: a declared law change, or a revert justified
+   as its own declared change.
 
 7. **Enforce, and hand over the gate.**
 
@@ -178,9 +181,7 @@ act easy to perform and easy to refuse — never to perform it silently.
 8. **Report the migration.** State: which marker the workspace carries, what
    coverage gaps were cleared and how, which candidates were adopted, which
    were inverted or dropped and why, the model files written, and the final
-   `check` exit code with the law it ran under. A migration whose report does
-   not say which candidates were rejected cannot be reviewed — it reads as if
-   the tool decided.
+   `check` exit code with the law it ran under.
 
 The whole path, with the detail each step needs, is
 [docs/usage/migration.md](https://github.com/ecoma-io/archkeep/blob/main/docs/usage/migration.md).
@@ -228,8 +229,7 @@ cross while being helpful:
   narrowing the model, not by loosening the law until the count reaches zero.
   Report the count and the list; do not silently edit the Intent to shrink it.
 - **A proposal that contradicts the team's stated architecture** — trust the
-  team, not the derivation. The proposal describes the code as it is, and the
-  point of the migration is that the code as it is is not yet what was
-  intended.
+  team, not the derivation: the proposal describes the code as it is, which
+  is not yet what was intended.
 - **Exit 2** — usage error: a positional argument a command does not take, or
   an unknown flag. Fix the invocation.
