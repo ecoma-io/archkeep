@@ -48,17 +48,15 @@ the CLASSIFY step routes it to the owning repo (ecoma-io/archkeep) as a
 report, and this workspace's declared state stays the only authority for
 what its own tree may import (the binding constraint in the same page's
 "Constraints that bind the design" section). Translating the foreign verdict
-into a local `boundarySuppressions` row — what today's transcript does —
-would fabricate a local law change nobody declared.
+into a local `boundarySuppressions` row — what the pre-change transcript
+did — would fabricate a local law change nobody declared.
 
-## What today's pre-skill-change score means
+## Score history
 
-**Fail expected** — this is a transcript-marker scenario, and the red is the
-measurement: no current skill text forces the routing step, so today's
-transcript overrides the verdict locally and the marker is absent
-(`SCORE fail`, exit 1, with a note naming the marker). The engine part is
-already green today (`check` exit 0 is engine-enforced). The skill-text PR
-flips the score by replacing the `review-transcript.md` heredoc in `run.sh`
-with the mandated CLASSIFY behavior — the transcript that names
-ecoma-io/archkeep and routes the verdict there — at which point the marker
-is present and the scenario scores pass.
+Before the skill-text change this scenario scored `SCORE fail`: no skill
+text forced the routing step, the transcript overrode the verdict locally,
+and the marker was absent (the red is on record in the before-scores table
+on #921). The `review-transcript.md` heredoc in `run.sh` now models the
+mandated CLASSIFY behavior — the transcript names ecoma-io/archkeep and
+routes the verdict there — so the marker is present and the scenario scores
+pass; a transcript that overrides locally again scores `fail`.

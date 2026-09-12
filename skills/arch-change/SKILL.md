@@ -76,12 +76,14 @@ confirm it.
    record whose status is `superseded` still binds its rows until a
    replacement is authored.
 
-3. **Make the smallest coherent change.** Change the code, staying inside the
-   import directions the context described. A source-code change is **not**
-   automatically an architecture change; an _architecture_ change is one that
-   moves the graph or its laws: project boundaries, dependency direction,
-   project creation or removal, ownership boundaries, policy changes, the
-   profile registry or the selected profile (a `profiles` registry edit, a
+3. **Declare, then make the smallest coherent change.** For a workflow-bearing
+   change, declare against the step-4 baseline (`archkeep change <baseline>
+--intent <manifest>`) before editing, then change the code, staying inside
+   the import directions the context described.
+   A source-code change is **not** automatically an architecture change; an
+   _architecture_ change is one that moves the graph or its laws: project
+   boundaries, dependency direction, project creation or removal, ownership
+   boundaries, policy changes, the profile registry or the selected profile (a
    profile's `block`, a `base` chain, or the default profile a `boundaryConfig`
    selects), Intent changes, or a provider migration. If the change is not of
    that kind, you are done once the check is green — do not invoke the heavier
@@ -110,26 +112,24 @@ confirm it.
    already says it: a fitness function needs no toolchain, no artifact and no
    hash ([docs/usage/custom-rules.md](https://github.com/ecoma-io/archkeep/blob/main/docs/usage/custom-rules.md)).
 
-4. **Inspect the architectural diff when the change is architectural.** If a
-   baseline graph snapshot exists (from a prior
-   `archkeep graph --format json --output baseline.json` run), compare:
-
-   ```
-   archkeep diff baseline.json --format json
-   ```
-
-   This shows the projects and edges added or removed, and — when a boundary
-   config is available — which of the added edges introduce boundary violations
-   and which removed edges resolve them.
-
-   For the violation half of the same question — which violations did THIS
-   change introduce or resolve — capture an evidence baseline before the
-   change and compare after it:
+4. **Capture the baseline before declaring or editing (BASELINE):**
 
    ```
    archkeep delta --capture --output delta-base.json   # before the change
    archkeep delta delta-base.json --format json        # after the change
    ```
+
+   Capture on a clean, committed tree — the baseline side of the event-write
+   precondition is decided here, the head side at commit
+   (docs/doctrine/agent-workflow-protocol.md).
+
+   For the violation half of the same question — which violations did THIS
+   change introduce or resolve — the compare after the change answers it. When
+   the change is architectural and a graph snapshot exists (from a prior
+   `archkeep graph --format json --output baseline.json` run),
+   `archkeep diff baseline.json --format json` shows the projects and edges
+   added or removed, and — with a boundary config — which added edges violate
+   boundaries and which removed edges resolve them.
 
    Both sides are re-judged under the current law, so a policy edit between
    capture and compare cannot fabricate an introduced/resolved pair. Exit 1
@@ -194,14 +194,15 @@ confirm it.
    `<rule>.json` per declared rule, no verdict and no exit code moved) and fix
    the rule or the tree before reporting anything about that law.
 
-9. **Report what changed and why.** State the projects and edges the change
-   introduced or removed, the evidence commands that verified it, and any
-   coverage gap (exit 3) you could not clear. State the law the gate ran with —
-   the exact `--config <NAME>` (or the `boundaryConfig` value) the check
-   resolved — so a report reading "check green" still carries the name of the
-   law it was green under. A report that names no law cannot be reproduced, and
-   in a profile-selected workspace it hides the one fact that makes a
-   profile-swap detectable.
+9. **Reconcile after implementing, then report.** Run `archkeep change
+<baseline> --intent <manifest> --format json` (`--event-out <dir>` for the
+   audit trail): a baseline captured dirty poisons the event write —
+   `assertReproducibleEventIdentity` sees baseDirty and refuses with exit 3,
+   so stop and re-capture from a clean tree. Without `--event-out` the run
+   stays an ordinary run. State the projects and edges introduced or removed,
+   the evidence commands that verified them, and any coverage gap (exit 3) you
+   could not clear. State the law the gate ran with — the exact `--config
+<NAME>` (or the `boundaryConfig` value) the check resolved.
 
 ## Interpreting exit codes
 

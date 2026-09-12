@@ -74,8 +74,13 @@ leave it sound must show the check green.
 
    - **Exit 0** — no violations found, every selected file analyzed, and — when
      an intent file exists and is tracked — the declared architecture agrees
-     with the observed graph. The number of files, projects, and imports
-     inspected is stated beside the verdict.
+     with the observed graph. Green over untracked files is honest only
+     because the envelope discloses the gap: `coverage.coverageGaps` (kind
+     `untracked-files`) names the files the gate did not judge; the files,
+     projects, and imports inspected are stated beside the verdict. A
+     non-empty gap row is NOT a clean claim — stage the files or stop (the
+     workflow's VERIFY stops on it; class D,
+     `docs/doctrine/agent-workflow.md`).
    - **Exit 1** — findings: boundary violations, intent findings (a forbidden
      relationship appeared, an allowed one went missing), waiver-entangled
      ones (a violation an active waiver accepts is still exit `1`, only moved
@@ -216,22 +221,22 @@ leave it sound must show the check green.
   checked and all complied — and "no findings" from a scoped run says nothing
   about the files outside its scope. **A permanent suppression is the one
   documented exception to "checked and complied."** A `boundarySuppressions`
-  row with no `expiresAt` removes a real violation from the findings entirely,
-  by design: exit 0 can mean the workspace is genuinely clean, or that it is
-  clean except for what is permanently suppressed, and `check`'s own output
-  does not distinguish the two — unlike a waiver (a row WITH `expiresAt`),
-  which stays a finding under "accepted violations" until its term lapses
-  rather than disappearing (`arch-review`, "Waivers / exceptions"). To tell
-  which "empty" a green run is, run `archkeep waivers`: it names every
-  `boundarySuppressions` row — a waiver with its term, a permanent suppression
-  with what it is hiding — the one surface that distinguishes the two. In a
-  profile workspace, a run that
-  reports unexpectedly green can also mean the law being enforced changed —
-  check the plugin options and the `--config`/`boundaryConfig` selector
-  against what was in effect when the change was made (the option-change
-  check `arch-review` step 2 runs), not only the code under review.
-- **UNKNOWN / INCOMPLETE never silently becomes PASS.** A coverage gap, an
-  unreadable file, a no-verdict intent, an unresolved profile — each withholds
+  row with no `expiresAt` removes a real violation from the findings entirely —
+  `check` is silent under it, so exit 0 can mean genuinely clean or clean
+  except for what is permanently suppressed. The workflow's VERIFY step runs
+  the `waivers` command on every green check — mandatory: the command
+  names every `boundarySuppressions` row, permanent suppressions included,
+  and the envelope splits them:
+  `result.suppressions[]` names the permanent rows (`expiresAt` is ABSENT, not
+  null), `result.waivers[]` the temporary ones (`expiresAt` + `remainingMs`),
+  `result.suppressed` counts the raw violations hidden (`arch-review`,
+  "Waivers / exceptions"). In a profile workspace, an unexpectedly green run
+  can also mean the law changed — check the plugin options and
+  `--config`/`boundaryConfig` against what was in effect when the change was
+  made (`arch-review` step 2 runs), not only the code under review.
+- **UNKNOWN / INCOMPLETE never silently becomes PASS.** An unreadable file, a
+  `notAnalyzed` coverage row, a no-verdict intent, an unresolved profile —
+  each withholds
   the verdict instead of folding into the green. An unresolved decision is the
   same rule in the agent's hands: `check` resolves each row's `decisionRef`
   against the ADR registry and names an unresolved one inline and under

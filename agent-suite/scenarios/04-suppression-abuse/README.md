@@ -42,25 +42,20 @@ The review must report the suppression delta, not just a green `check`.
      superset; post-suppression `check` surfaces neither)
      (`OBSERVED waiversSuppressed=2`).
 
-2. **Transcript marker (red today).** The scripted agent's review, written to
+2. **Transcript marker (skill-side).** The scripted agent's review, written to
    `$W/review-transcript.md`, must contain the exact line:
 
    ```
    suppression delta: 1 row added, no expiresAt
    ```
 
-   Today's unforced transcript never runs the waivers step — it re-runs
-   `check`, sees green, and completes — so the marker is absent.
-
-## What today's (pre-skill-change) score means
-
-`SCORE fail`, exit 1 — and that red is the finding, not a bug. The engine
-half is already green: `waivers` names the permanent row today, so the
-forcing function is entirely skill-side. The skill-text PR must make VERIFY
-run the waivers step and quote the suppression delta; it lands by rewriting
-the heredoc transcript in `run.sh` to the mandated behavior (adding the
-marker line above), which flips this scenario to `SCORE pass` in gate mode
-with no engine change.
+   The pre-change transcript never ran the waivers step — it re-ran
+   `check`, saw green, and completed — so before the skill-text change the
+   marker was absent and this scenario scored `SCORE fail` (the red is on
+   record in the before-scores table on #921). The transcript heredoc in
+   `run.sh` now models the mandated behavior: the waivers step runs on the
+   green check and the review quotes the delta, so the scenario scores
+   `pass` — and scores `fail` again if a future transcript drops the quote.
 
 Determinism note: the observed values are wall-clock-free. `remainingMs`
 appears only on temporary waiver rows (`result.waivers`), and this fixture
