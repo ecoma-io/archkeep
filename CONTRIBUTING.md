@@ -410,6 +410,31 @@ Reviews come from a maintainer. No automated reviewer is configured: the defect
 class no deterministic gate can decide — a path that reports nothing — is owned
 by the maintainer reading the diff.
 
+### Architecture-bearing changes
+
+This repository dogfoods the tool it ships: a change that moves the project
+graph or its laws — `module-boundaries.config.mjs`, a workspace's intent
+manifest, provider wiring, the rule catalog — arrives through the same
+workflow the arch-* skills mandate, not just the checks above. Concretely:
+
+1. **Baseline.** On a clean, committed tree, capture the current truth with
+   `node packages/archkeep/cli.mjs delta --capture --output .archkeep/base.json`.
+   A baseline captured on a dirty tree poisons the later evidence write.
+2. **Declare.** Describe the change in an intent file — what should exist
+   after the change, declared as graph rows, not as a prose promise.
+3. **Reconcile.** After the change,
+   `node packages/archkeep/cli.mjs change .archkeep/base.json --intent <intent> --format json`
+   scores the declaration against the baseline: `pass` or a named divergence,
+   never a shrug. Quote the verdict and the baseline identity in the pull
+   request description.
+
+The full evidence-forced workflow — including the VERIFY step's `check` run
+and the REVIEW step's evidence table — is specified in
+the [agent-workflow protocol](docs/doctrine/agent-workflow-protocol.md), and
+[change.md](docs/usage/change.md) documents the commands. Trivial changes
+stay cheap: a typo fix, a doc edit, a one-line comment captures nothing — the
+protocol has a floor, not just a ceiling.
+
 ### How a pull request lands
 
 **Squash, always.** Merge commits and rebase merges are switched off in
