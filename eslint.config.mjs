@@ -120,8 +120,8 @@ export default [
     // builds. `projectService` hands each file to its nearest tsconfig
     // program; a file outside every program is a hard error here rather
     // than a silent untyped pass, which is why the four root-level configs
-    // and the agent-suite runner sit in this block's `ignores`:
-    // `scripts/tsconfig.json` now includes them (they were a
+    // and the agent-suite runner + protocol gate sit in this block's
+    // `ignores`: `scripts/tsconfig.json` now includes them (they were a
     // verification-free zone before), so `tsc` judges their types, but they
     // belong to no project directory the service can map — and no test file
     // gets the typed rules, because the typed programs exist for shipped
@@ -134,6 +134,7 @@ export default [
       "module-boundaries.config.mjs",
       ".opencode/**/*.js",
       "agent-suite/run.mjs",
+      "agent-suite/protocol-gate.mjs",
     ],
     languageOptions: {
       parserOptions: {

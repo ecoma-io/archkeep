@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # Class F — the workflow runs with no captured baseline; the review must
 # report INCOMPLETE instead of emitting a verdict-shaped conclusion.
+#
+# What this script measures: the engine half — `change` refuses to run
+# without the evidence snapshot (exit 3, the missing-baseline refusal). The
+# review half (report INCOMPLETE, naming the missing artifacts; the
+# completion bar cannot be met without the baseline identity) is the bound
+# set in bindings.json, asserted against the shipped skills/ tree by the
+# runner before this script runs. (#935: the previous version authored the
+# refusal-shaped transcript it then grep'd for.)
 set -euo pipefail
 : "${ARCHKEEP_CLI:?runner must export ARCHKEEP_CLI}"
 
@@ -78,48 +86,13 @@ fi
 echo "OBSERVED engine_exit=$CODE"
 echo "OBSERVED engine_refusal=$REFUSAL"
 
-# Marker half: the scripted agent's review transcript under the mandated
-# skill text — the skip clause inverted. The missing baseline artifact
-# meets the INCOMPLETE refusal shape, and no verdict-shaped completion is
-# emitted over unreconciled evidence.
-cat > review-transcript.md <<TRANSCRIPT
-# Review transcript — change run without a captured baseline
-
-Agent review of the change run on repo at commit $BASE:
-
-1. Ran the change command with a well-formed intent: archkeep change
-   .archkeep/base.json --intent intent.json --format json.
-2. The command exited 3 and refused: cannot read the evidence snapshot
-   .archkeep/base.json (ENOENT); stdout carried no JSON envelope.
-3. The completion bar requires quoting the baseline identity, the change
-   verdict, and the event artifact path. The baseline artifact does not
-   exist, so the bar cannot be met — this is the refusal shape, not a
-   judgment call: a review over unreconciled evidence does not complete,
-   whatever the diff looks like.
-
-Review status: INCOMPLETE — required artifact .archkeep/base.json is missing; no verdict emitted.
-Re-run after capturing the baseline (`delta --capture --output
-.archkeep/base.json` on a clean, committed tree), then reconcile before
-any review is attempted again.
-TRANSCRIPT
-
-if grep -q 'INCOMPLETE.*\.archkeep/base\.json.*no verdict emitted' review-transcript.md; then
-  MARKER=yes
-else
-  MARKER=no
-fi
-echo "OBSERVED marker=$MARKER"
-
-if [ "$ENGINE_OK" -eq 1 ] && [ "$MARKER" = "yes" ]; then
+# Gate — the engine half: the workflow cannot complete over evidence that
+# does not exist, and the engine says so instead of answering. The review's
+# INCOMPLETE refusal over this state is the bound skill half.
+if [ "$ENGINE_OK" -eq 1 ]; then
   echo "SCORE pass"
   exit 0
 fi
-
-if [ "$MARKER" = "no" ]; then
-  echo "note: transcript lacks the required marker (review states INCOMPLETE and names the missing .archkeep/base.json instead of emitting a verdict); the skill-text PR must flip the heredoc transcript to that refusal shape" >&2
-fi
-if [ "$ENGINE_OK" -eq 0 ]; then
-  echo "note: engine did not refuse as expected (exit $CODE, refusal=$REFUSAL)" >&2
-fi
+echo "note: engine did not refuse as expected (exit $CODE, refusal=$REFUSAL)" >&2
 echo "SCORE fail"
 exit 1

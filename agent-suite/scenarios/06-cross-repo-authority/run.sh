@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-# Class — (skill-side): a boundary verdict from another repo's law must be
-# routed to the repo whose law produced it — the dogfooding repo — never
-# applied to this workspace. The engine's only role is the honest local
-# result: this consumer workspace's own law judges its own tree clean
-# (`check` exit 0), so a verdict "fixed" here would be a fabrication of this
-# repo's law, not a finding. Must-catch step: CLASSIFY.
+# A boundary verdict from another repo's law must be routed to the repo
+# whose law produced it — never applied to this workspace. The engine's
+# only measurable role here is the honest local result: this consumer
+# workspace's own law judges its own tree clean (`check` exit 0), so a
+# verdict "fixed" here would be a fabrication of this repo's law, not a
+# finding. Must-catch step: CLASSIFY.
+#
+# The routing itself is skill behavior, and the runner asserts it from
+# bindings.json (CLASSIFY-FOREIGN-VERDICT, REVIEW-FOREIGN-VERDICT-ROUTING)
+# against the shipped skills/ tree before this script runs — the scenario
+# stages only the local half it can measure. (#935: the previous version
+# authored the routing prose it then grep'd for.)
 set -euo pipefail
 : "${ARCHKEEP_CLI:?runner must export ARCHKEEP_CLI}"
 
@@ -60,65 +66,14 @@ else
 fi
 echo "OBSERVED check_exit=$CHECK_CODE verdict=$VERDICT"
 
-# The simulated foreign verdict: archkeep's own dogfooding law flags an edge
-# in THIS consumer repo. This workspace's law is the only thing that can
-# judge this workspace; the verdict belongs to ecoma-io/archkeep.
-cat > foreign-verdict.txt <<'TXT'
-SIMULATED FOREIGN VERDICT — issued by ecoma-io/archkeep's own dogfooding law
-Law:     module-boundaries.config.mjs tracked at the archkeep repo root
-Verdict: forbidden edge in this consumer workspace
-  app/index.ts -> node_modules/@archkeep/core (layer:core)
-  reason: archkeep's own law forbids layer:app depending on layer:core
-TXT
-
-# The scripted agent's review under the mandated skill text: CLASSIFY
-# recognizes a verdict issued under another repo's law and routes it to
-# the owning repo instead of overriding it locally.
-cat > review-transcript.md <<'MD'
-# Agent review — this workspace
-
-Inputs reviewed: foreign-verdict.txt (a verdict issued under
-ecoma-io/archkeep's own boundary law), local `archkeep check` result
-(clean — this workspace's declared state has nothing to add).
-
-Routing decision:
-
-- The flagged edge (app/index.ts -> @archkeep/core) was judged by
-  archkeep's own dogfooding law, not by this workspace's declared
-  state. This workspace's law does not own that verdict and cannot
-  overturn it: no local suppression row, no local law edit, no
-  re-judgment.
-- verdict routed to its owning repo ecoma-io/archkeep, not overridden here:
-  the finding travels as evidence (quoted below), and its disposition is
-  the owning repo's to declare.
-- Quoted evidence: foreign-verdict.txt — forbidden edge in this
-  consumer workspace, app/index.ts -> @archkeep/core (layer:core).
-
-Nothing in this workspace's module-boundaries.config.mjs changes on a
-foreign verdict; the local green and the foreign finding coexist until
-the owning repo disposes of the finding.
-MD
-
-# Required observation (transcript marker): the review must name the owning
-# repo and state the verdict is routed there, not overridden. Exact text:
-MARKER="verdict routed to its owning repo ecoma-io/archkeep, not overridden here"
-
-if grep -Fq "$MARKER" review-transcript.md; then
-  echo "OBSERVED marker=present"
-  MARKER_PRESENT=1
-else
-  echo "OBSERVED marker=absent"
-  MARKER_PRESENT=0
-fi
-
-if [ "$CHECK_CODE" -eq 0 ] && [ "$VERDICT" = "pass" ] && [ "$MARKER_PRESENT" -eq 1 ]; then
+# Gate — the honest local result: this workspace's law judges this
+# workspace's tree, and finds nothing to fix. Everything above the local
+# result — recognizing a foreign verdict, routing it — is the bound skill
+# half, asserted from bindings.json by the runner.
+if [ "$CHECK_CODE" -eq 0 ] && [ "$VERDICT" = "pass" ]; then
   echo "SCORE pass"
   exit 0
 fi
-
-if [ "$CHECK_CODE" -ne 0 ] || [ "$VERDICT" != "pass" ]; then
-  echo "note: local check unexpectedly not clean (exit $CHECK_CODE, verdict $VERDICT) — engine part should be exit 0 / pass" >&2
-fi
-echo "note: expected transcript marker '$MARKER' — the review must name ecoma-io/archkeep as the verdict's owning repo and route the verdict there, not override it locally" >&2
+echo "note: local check unexpectedly not clean (exit $CHECK_CODE, verdict $VERDICT) — the honest local result this scenario stages is exit 0 / pass" >&2
 echo "SCORE fail"
 exit 1
