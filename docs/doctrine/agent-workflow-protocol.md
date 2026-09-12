@@ -157,8 +157,11 @@ the design's most consequential skill-side change.
 A 0.x minor, named in the changelog as a behavior change: what agents are
 told differs on an unchanged workspace, which is the documented definition of
 a breaking-shaped change on this line — and exactly what a 0.x minor is for.
-No API, config, output contract, or exit code moves (classification 3, not
-4–5, against the freeze manifest). Migration is: ship the skill text and this
+No frozen surface moves — API, config schema, output contracts, and exit codes
+stay byte-stable — and the change is still classification 4 under the
+compatibility contract (what an unchanged workspace is told would differ),
+which on the 0.x line is exactly the minor-with-named-behavior-change above.
+Migration is: ship the skill text and this
 page together in one PR; consumers who vendor skills get the new behavior on
 next vendor with no action; nothing is renamed, so the byte-mirror, the
 manifests, and the gate scripts are untouched. The evaluation suite runs

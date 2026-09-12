@@ -109,7 +109,8 @@ definition of done.
 The mirror failure: the same workflow text faces a one-line typo and a
 boundary redesign. The trivial/heavy classification already exists — arch-change
 step 3 ("if the change is not of that kind, you are done once the check is
-green") and arch-review step 2 — but it governs only the skills' own steps: it
+green") and arch-review's When-to-use clause ("for a trivial edit …
+`arch-check` alone may suffice") — but it governs only the skills' own steps: it
 says nothing about the change contract, which no skill mentions, so nothing
 decides _when the contract is warranted_. The agent either skips the machinery
 everywhere or drags a typo through a nine-step protocol. Both directions are
@@ -165,7 +166,8 @@ Pending adversarial review; the classes each verdict exists to close are in
 parentheses:
 
 - **arch-context — keep, as the entry point.** Extends the trivial/heavy
-  classification arch-change step 3 and arch-review step 2 already define (G)
+  classification arch-change step 3 and arch-review's When-to-use clause already
+  define (G)
   rather than inventing a second one: its first job becomes applying that
   existing test — trivial (no baseline, no contract, `check` alone) versus
   workflow-bearing (baseline + declaration) — and teaching that
