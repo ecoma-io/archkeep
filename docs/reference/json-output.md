@@ -22,8 +22,8 @@ archkeep graph --format json
 archkeep graph --format json --output snapshot.json
 archkeep diff snapshot.json --format json
 archkeep diff snapshot.json --format json --output structural-diff.json
-archkeep delta delta-base.json --format json
-archkeep delta delta-base.json --format json --output delta.json
+archkeep delta .archkeep/base.json --format json
+archkeep delta .archkeep/base.json --format json --output delta.json
 archkeep waivers --format json
 archkeep waivers --format json --output waivers.json
 archkeep history .archkeep/history --format json

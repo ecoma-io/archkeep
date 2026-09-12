@@ -63,7 +63,7 @@ that dependency is allowed, no new boundary violation — then edits code, then
 runs:
 
 ```shell
-archkeep change .archkeep/change-base.json --intent change-intent.json --format json
+archkeep change .archkeep/base.json --intent change-intent.json --format json
 ```
 
 The verdict is one of four: `matched`, `undeclared` (the delta contains

@@ -36,6 +36,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { unmetRequirements } from "./skill-protocol.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -668,6 +669,48 @@ export function evaluate({
   // (paren-anchored to the standard-frontmatter list), so a corrected "must
   // not contain `metadata`" phrasing stays green while a listing that includes
   // it still fails.
+
+  // 7d. The protocol forcing points. The agent-workflow protocol's load-bearing
+  // claims are tabulated in `skill-protocol.mjs` — one table, consumed twice:
+  // here, against the texts a pull request edits, and by
+  // `agent-suite/protocol-gate.mjs`, inside every agent-suite scenario. The
+  // second consumer is what closes #935: the suite used to pass 10/10 with the
+  // skill layer deleted, because its scenarios authored their own compliant
+  // fixtures; now a scenario binds the requirements it exercises and re-checks
+  // them against the shipped skill text, so deleting a skill sentence fails
+  // this gate AND turns the scenario red. The gate matches anchors against
+  // whitespace-flattened text — a reformatted paragraph is not a protocol
+  // change; a deleted one is.
+  const skillTexts = Object.fromEntries(skillText);
+  for (const req of unmetRequirements(skillTexts)) {
+    failures.push(
+      `skills/${req.skill}/SKILL.md no longer states protocol requirement ` +
+        `${req.id} (${req.summary}). It is a forcing point of ` +
+        `docs/doctrine/agent-workflow-protocol.md, and the agent-suite scenario ` +
+        `bound to it fails with it. Restore the sentence — the table matches its ` +
+        `load-bearing phrases, not one exact string, so a rewording that keeps ` +
+        `the claim stays green.`,
+    );
+    lines.push(`FAIL ${req.skill} — protocol requirement ${req.id} not stated`);
+  }
+  // Cross-skill step numbers are the coupling the state names exist to break:
+  // `arch-change step 3` rots the moment the referenced skill renumbers, and
+  // nothing but a re-read would notice. Cite the step by its protocol state
+  // name or by the rule's own name. A skill's references to its own steps are
+  // fine — the name prefix is what makes the reference cross a file boundary.
+  const stepRef = /arch-[a-z]+`?,?\s+step\s+\d+/giu;
+  for (const [dir, text] of skillText) {
+    const cited = text.match(stepRef);
+    if (cited) {
+      failures.push(
+        `skills/${dir}/SKILL.md cites another skill by step number: ` +
+          `${JSON.stringify(cited)}. Step numbers renumber; the state the ` +
+          `sentence is about does not. Cite it by state name (CLASSIFY, ` +
+          `BASELINE, DECLARE, VERIFY, RECONCILE) or by the rule's own name.`,
+      );
+      lines.push(`FAIL ${dir} — cross-skill step-number citation`);
+    }
+  }
 
   // 7c. Root package.json version — the "." release-please component that
   // release-please writes directly — must match packages/archkeep/package.json.

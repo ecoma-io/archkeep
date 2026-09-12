@@ -85,11 +85,11 @@ artifact on record is not a skipped step with a said sentence — it is the revi
 INCOMPLETE refusal (When to use), never "no structural change".
 
 When a delta evidence baseline exists (captured at the base commit with
-`archkeep delta --capture --output delta-base.json`), it answers "what did
+`archkeep delta --capture --output .archkeep/base.json`), it answers "what did
 this change introduce" directly, as the review's evidence:
 
 ```
-archkeep delta delta-base.json --format json
+archkeep delta .archkeep/base.json --format json
 ```
 
 Every violation is classified introduced / resolved / unchanged / unknown,
@@ -138,7 +138,10 @@ workspace — including a profile that could not be resolved — and the review
 must say so instead of reporting "no findings". **Exit 1 or exit 3 blocks: the
 review must not approve the change, or call it mergeable, while either
 stands.** This is a hard rule, not a caveat satisfied by disclosure — naming a
-finding or a coverage gap in the review is not the same as clearing it.
+finding or a coverage gap in the review is not the same as clearing it. An
+exit 0 whose `coverage.coverageGaps` row is non-empty blocks the same way: the
+gate did not judge the whole universe, and `arch-check`'s VERIFY stop — stage
+the files or stop — applies here unchanged.
 
 **A scoped run must be disclosed as scoped, and disclosure alone does not earn
 approval.** Cycle and lazy-load rules judge the whole file graph, so a scoped
@@ -267,7 +270,7 @@ If the repository keeps snapshots, `archkeep history <dir>` names which of the
 recent transitions were architectural and which were policy or provider — useful
 when the change is the latest move in an evolution the review should connect.
 Snapshots do not appear on their own — they come from `--capture` runs the
-repository decided to make (`arch-context`, step 7). A review reports that no
+repository decided to make (`arch-context`, the history step). A review reports that no
 history exists rather than capturing one as a side effect of reviewing: the
 capture writes a file, and it would record the law as the change left it.
 
@@ -305,8 +308,10 @@ the repository is ungoverned, and the work of establishing a model is
 ### 11. Produce the review
 
 Report, each half with evidence. COMPLETE requires quoting the baseline identity
-(`.archkeep/base.json`), the `change` verdict (`reconciliation.verdict`), and the
-event artifact path (`--event-out`); quoting is the review's output, not a
+(`.archkeep/base.json`), the `change` verdict (`reconciliation.verdict`), the
+event artifact path (`--event-out`), and — when the VERIFY waivers step found
+any — the suppression delta (a permanent row's findings a green `check` is
+silent about); quoting is the review's output, not a
 suggestion, and missing any one is the INCOMPLETE refusal — no pass/fail verdict:
 
 - **Architecture state**: whether the change is architectural; the projects and
