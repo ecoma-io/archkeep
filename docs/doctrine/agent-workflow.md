@@ -2,9 +2,9 @@
 
 Measured status of the layer that makes a coding agent prove an architectural
 change, and the failure taxonomy that a redesign must close. This page records
-what was measured, not yet what was decided: the protocol design it points at is
-drafted against the taxonomy below and lands as reviewable pull requests linked
-to [ecoma-io/archkeep#921](https://github.com/ecoma-io/archkeep/issues/921).
+what was measured, not yet what was decided: the protocol design drafted
+against this taxonomy is [the protocol page](agent-workflow-protocol.md),
+pending review in [ecoma-io/archkeep#921](https://github.com/ecoma-io/archkeep/issues/921).
 
 Every measurement below was reproduced on a throwaway native-provider workspace
 (`archkeep.json` `projects.declared` plus a `module-boundaries.config.mjs`
