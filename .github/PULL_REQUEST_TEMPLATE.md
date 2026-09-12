@@ -23,6 +23,16 @@ explicitly rather than leaving it out. -->
 - [ ] No change to what is reported on an unchanged workspace
 - [ ] What is reported changes, and the change is described above
 
+## Architecture-bearing changes
+
+<!-- [CONTRIBUTING.md's bar](../CONTRIBUTING.md#architecture-bearing-changes):
+if the change moves the project graph or its laws, the pull request quotes
+its workflow evidence. If it does not, tick trivial — the floor keeps trivial
+work cheap. -->
+
+- [ ] Trivial — the change moves no project, no dependency edge, and no law; no workflow evidence applies
+- [ ] Architecture-bearing — the description quotes the baseline identity (`.archkeep/base.json` and its provenance commit), the `change` verdict, and the per-run event artifact
+
 ## Could this fail silently?
 
 <!-- The question this project is judged on. An empty result and a clean
