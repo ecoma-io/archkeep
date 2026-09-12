@@ -139,8 +139,9 @@ engine has done its half; what is missing is the forcing function.
 ## What the engine already provides
 
 The redesign hypothesis, and the reason it does not start with engine work:
-every escalation signal the taxonomy needs is already emitted — with one known
-hole, post-hoc declaration ordering, named where the suite is defined.
+every escalation signal the taxonomy needs is already emitted — with two
+known holes, class F's never-captured baseline and post-hoc declaration
+ordering, both named where the suite is defined.
 
 - `change --intent` — the contract: verdicts, base-pin proof, breadth guard,
   `--event-out` ([usage](../usage/change.md)); its envelope carries
@@ -244,7 +245,8 @@ unscorable hole (open decision 5), not an oversight.
 - No SKILL.md-length inflation; no new skill without retiring one.
 - Backward compatibility and migration are part of the change, not
   follow-ups; on the 0.x line a behavioral shift in what agents are told is a
-  minor bump named in the changelog, per the compatibility contract.
+  minor bump named in the changelog, per the [compatibility
+  contract](../development/release.md#release-stages-the-0x-line-and-the-parked-candidate).
 
 ## Open decisions for review
 
