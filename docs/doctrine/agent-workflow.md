@@ -38,11 +38,13 @@ what the engine reported, what escalated. In every row, nothing escalated.
 Relaxing the `depConstraints` row that forbids `domain → adapter` turns
 `archkeep check` from exit 1 to exit 0, and a later
 `archkeep change <baseline> --intent <manifest>` reports verdict `matched` with
-exit 0. The envelope _does_ disclose it — `policy.changedSinceBase: true` rides
-every run whose policy fingerprint moved from the pinned base — and the
-baseline records the old fingerprint for comparison. No skill text treats that
-field as an escalation; no command fails on it. From CI's point of view the
-gamed tree and an honest clean tree are indistinguishable.
+exit 0. The `change` envelope _does_ disclose it — `policy.changedSinceBase:
+true` on every change run whose policy fingerprint moved from the pinned base,
+with the baseline recording the old fingerprint, and `delta` disclosing the
+same fact as `policyChanged` — while a bare `check` run, which has no pinned
+base, emits no such disclosure at all. No skill text treats the disclosure as
+an escalation; no command fails on it. From CI's point of view the gamed tree
+and an honest clean tree are indistinguishable.
 
 `delta` cannot catch it, and the skills' own text says why: both sides of a
 delta are re-judged _under the current law_, so a policy edit between capture
@@ -52,9 +54,10 @@ and compare changes the judge, not the verdict.
 
 A `boundarySuppressions` row without `expiresAt` covering a newly introduced
 crossing returns `check` to exit 0. The violation still exists; the verdict
-does not report it; only a separately-invoked `archkeep waivers` names the
-suppression — and no skill step invokes it, because the green exit 0 removed
-the reason to look.
+does not report it. The one skill step that names it — arch-check's "to tell
+which 'empty' a green run is, run `archkeep waivers`" — is advisory prose, not
+a forced gate: exit 0 is precisely the state in which an agent skipping
+optional prose never runs it.
 
 ### 3. Never declaring, never reconciling
 
@@ -73,9 +76,10 @@ anyway — disclosure-without-enforcement inside the skill text itself. A review
 without a baseline is a review that never compared expected to actual, and the
 skill blesses completing it as long as the sentence gets said.
 
-A lying manifest is caught — "typo fix" declaring no boundary change while the
-tree adds `domain → adapter` gets verdict `undeclared` and exit 1. But only if
-the agent writes one, and nothing requires the agent to write one.
+A lying manifest is caught: one declaring only `noNewViolations: true` (a
+constraint row, so the breadth guard admits it) while the tree adds
+`domain → adapter` gets verdict `undeclared` and exit 1. But only if the agent
+writes one, and nothing requires the agent to write one.
 
 ### 4. Verifying bytes git will not judge
 
@@ -103,26 +107,28 @@ definition of done.
 ### 6. Over-processing without a floor
 
 The mirror failure: the same workflow text faces a one-line typo and a
-boundary redesign. The change contract's breadth guard rightly refuses an
-empty declaration — over-processing has an engine-side floor already — but no
-skill classification decides _when the contract is warranted_, so the agent
-either skips the machinery everywhere or drags a typo through a nine-step
-protocol. Both directions are failures; only one has teeth today.
+boundary redesign. The trivial/heavy classification already exists — arch-change
+step 3 ("if the change is not of that kind, you are done once the check is
+green") and arch-review step 2 — but it governs only the skills' own steps: it
+says nothing about the change contract, which no skill mentions, so nothing
+decides _when the contract is warranted_. The agent either skips the machinery
+everywhere or drags a typo through a nine-step protocol. Both directions are
+failures; only one has teeth today.
 
 ## The failure taxonomy
 
 The redesign is specified against these classes, each anchored to the measured
 failures above and to the engine surface that already reports it:
 
-| class | name                  | one-line definition                                                                                          | engine signal today                                                                  |
-| ----- | --------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| A     | Verdict substitution  | settling for weaker evidence than the question needs (clean `check` presented as "the architecture is good") | exit codes only; no reconciliation evidence required                                 |
-| B     | Law manipulation      | editing rules instead of code to pass                                                                        | `policy.changedSinceBase: true`; baseline policy fingerprint                         |
-| C     | Suppression abuse     | hiding an introduced crossing behind a suppression                                                           | `waivers` output; `expiresAt` distinction                                            |
-| D     | Universe mismatch     | verifying bytes the tracked universe will not judge                                                          | `coverage.coverageGaps` `untracked-files`; staged-state exit 1; exit 3 `notAnalyzed` |
-| E     | No-verdict laundering | treating `unknown` / exit 3 as pass                                                                          | exit 3 `no-verdict` envelope status; `notAnalyzed` rows                              |
-| F     | Missing baseline      | classification and reconciliation impossible, review skipped instead of refused                              | `delta`/`change` exit 3 without a baseline                                           |
-| G     | Effort misallocation  | dragging trivial work through heavy process, or skipping process for heavy work                              | change-contract breadth guard (refusal); nothing else                                |
+| class | name                  | one-line definition                                                                                          | engine signal today                                                                                        |
+| ----- | --------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| A     | Verdict substitution  | settling for weaker evidence than the question needs (clean `check` presented as "the architecture is good") | exit codes only; no reconciliation evidence required                                                       |
+| B     | Law manipulation      | editing rules instead of code to pass                                                                        | `change` envelope `policy.changedSinceBase`; `delta` `policyChanged`; baseline policy fingerprint          |
+| C     | Suppression abuse     | hiding an introduced crossing behind a suppression                                                           | `waivers` output; `expiresAt` distinction                                                                  |
+| D     | Universe mismatch     | verifying bytes the tracked universe will not judge                                                          | `coverage.coverageGaps` `untracked-files`; staged-state exit 1; exit 3 `notAnalyzed`                       |
+| E     | No-verdict laundering | treating `unknown` / exit 3 as pass                                                                          | exit 3 `no-verdict` envelope status; `notAnalyzed` rows                                                    |
+| F     | Missing baseline      | classification and reconciliation impossible, review skipped instead of refused                              | `delta`/`change` exit 3 on an unresolvable baseline path; a never-captured baseline emits no signal at all |
+| G     | Effort misallocation  | dragging trivial work through heavy process, or skipping process for heavy work                              | change-contract breadth guard (refusal); nothing else                                                      |
 
 The silent direction generalizes: for every class, the failure state is
 byte-for-byte indistinguishable from an honest completion **unless a workflow
@@ -132,13 +138,16 @@ engine has done its half; what is missing is the forcing function.
 ## What the engine already provides
 
 The redesign hypothesis, and the reason it does not start with engine work:
-every escalation signal the taxonomy needs is already emitted.
+every escalation signal the taxonomy needs is already emitted — with one known
+hole, post-hoc declaration ordering, named where the suite is defined.
 
 - `change --intent` — the contract: verdicts, base-pin proof, breadth guard,
-  `--event-out` ([usage](../usage/change.md)).
-- `delta --capture` — the baseline evidence snapshot, byte-canonical.
-- `check` envelope — `coverage.coverageGaps`, `coverage.notAnalyzed`,
-  `policy.changedSinceBase`, `policyFingerprint`.
+  `--event-out` ([usage](../usage/change.md)); its envelope carries
+  `policy.changedSinceBase`.
+- `delta --capture` — the baseline evidence snapshot, byte-canonical; the
+  comparison discloses `policyChanged` and the baseline's policy fingerprint.
+- `check` envelope — `result.policy.fingerprint`, `coverage.coverageGaps`,
+  `coverage.notAnalyzed`.
 - `waivers` — the suppression/waiver ledger with expiry.
 - `drift`, `impact`, `scenario`, `provenance` — declared-state comparisons,
   touch analysis, hypothetical evaluation, and reproducibility metadata.
@@ -155,18 +164,20 @@ evidence, not with a hunch.
 Pending adversarial review; the classes each verdict exists to close are in
 parentheses:
 
-- **arch-context — keep, as the entry point.** Absorbs classification (G):
-  its first job becomes deciding whether the change is trivial (no baseline,
-  no contract — `check` alone) or workflow-bearing (baseline + declaration
-  required). Teaches that `unknown`/`no-verdict` context is a stop, not a
-  footnote (E).
+- **arch-context — keep, as the entry point.** Extends the trivial/heavy
+  classification arch-change step 3 and arch-review step 2 already define (G)
+  rather than inventing a second one: its first job becomes applying that
+  existing test — trivial (no baseline, no contract, `check` alone) versus
+  workflow-bearing (baseline + declaration) — and teaching that
+  `unknown`/`no-verdict` context is a stop, not a footnote (E).
 - **arch-change — keep, as the spine.** Re-centered on
   declare → implement → verify → reconcile with `change --intent` as the
   contract and `delta --capture` as its baseline step, not an optional aid
   (A, B, F). Delta diffing stays as the explanation layer.
-- **arch-check — keep, as the verification verb.** Gains the consumption
-  rules: a clean verdict with `coverageGaps` or a suppression delta is not a
-  clean claim (C, D); exit 3 is a stop (E).
+- **arch-check — keep, as the verification verb.** Its fail-closed teaching
+  (exit 3, waivers-on-green) already exists; what it gains is enforcement —
+  consuming `coverageGaps` on an exit-0 run (D), the one rule no skill teaches
+  today — and forced, not advisory, use of the steps it already teaches (C, E).
 - **arch-review — keep, with its skip clause inverted.** The prose that names
   the missing baseline "a coverage gap" and completes the review anyway
   becomes a refusal shape: a review without reconciliation evidence reports
@@ -201,8 +212,8 @@ avoid is a ninth file restating the other five.
 An adversarial evaluation suite, specified as runnable fixtures before any
 skill text changes, scored before and after:
 
-1. hidden architecture change (the agent is told one thing; the tree does
-   another),
+1. hidden architecture change (the agent is _told_ one thing; the tree does
+   another — deception, not accident),
 2. intent drift (declared scope quietly exceeds the task),
 3. constraint manipulation (class B),
 4. waiver/suppression abuse (class C),
@@ -210,8 +221,16 @@ skill text changes, scored before and after:
 6. cross-repo authority (a boundary verdict belongs to the dogfooding repo's
    own law),
 7. trivial change (class G: the floor — machinery must stay out),
-8. unexpected delta (undeclared consequence appears mid-task),
-9. untracked verification (class D: verify-before-stage).
+8. unexpected delta (the agent's own edit carries an undeclared consequence
+   that appears mid-task — emergence, not deception),
+9. untracked verification (class D: verify-before-stage),
+10. missing baseline (class F: the review refuses rather than completes
+    without reconciliation evidence).
+
+One vector the suite deliberately does not score: post-hoc declaration — a
+manifest authored after implementation, to match what the tree already did, is
+byte-identical in every current surface to one written first. That is a known
+unscorable hole (open decision 5), not an oversight.
 
 ## Constraints that bind the design
 
@@ -235,6 +254,9 @@ skill text changes, scored before and after:
 3. Whether arch-review's inverted skip clause needs an engine-side
    companionship (a `review --requires-baseline` shape) or stays skill-side.
 4. The evaluation suite's harness: shell fixtures vs the MCP tool surface.
+5. Whether declaration ordering — pre-declaration versus post-hoc
+   self-attestation — must become auditable, an engine-side question the
+   taxonomy flags but does not answer.
 
 None of these decide code today. The gate for writing code is reviewer
 sign-off on the taxonomy and the evaluation suite — the same order this page
