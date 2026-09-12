@@ -158,7 +158,7 @@ A 0.x minor, named in the changelog as a behavior change: what agents are
 told differs on an unchanged workspace, which is the documented definition of
 a breaking-shaped change on this line — and exactly what a 0.x minor is for.
 No frozen surface moves — API, config schema, output contracts, and exit codes
-stay byte-stable — and the change is still classification 4 under the
+stay byte-stable — and the change is still a semantic change under the
 compatibility contract (what an unchanged workspace is told would differ),
 which on the 0.x line is exactly the minor-with-named-behavior-change above.
 Migration is: ship the skill text and this
