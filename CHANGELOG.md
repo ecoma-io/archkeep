@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.30.0](https://github.com/ecoma-io/archkeep/compare/v0.29.0...v0.30.0) (2026-09-12)
+
+
+### Features
+
+* **archkeep:** force the audited evidence consumptions in the arch-* skills ([#926](https://github.com/ecoma-io/archkeep/issues/926)) ([8efd818](https://github.com/ecoma-io/archkeep/commit/8efd818e51e5e5bbe2aae2fa9b1de3541494dcf0))
+* **workspace:** add the agent-workflow evaluation suite ([#925](https://github.com/ecoma-io/archkeep/issues/925)) ([9895caa](https://github.com/ecoma-io/archkeep/commit/9895caa3f3cc42b912fe56ab67ca510ab4aa9ff0))
+
+
+### Bug Fixes
+
+* **archkeep:** capture baseline before declaring change ([#932](https://github.com/ecoma-io/archkeep/issues/932)) ([f283531](https://github.com/ecoma-io/archkeep/commit/f283531c01dee6734e6d1825ac2471da47e6f7e6)), closes [#921](https://github.com/ecoma-io/archkeep/issues/921)
+* **workspace:** make the agent workflow suite measure the shipped skill text ([#936](https://github.com/ecoma-io/archkeep/issues/936)) ([5398add](https://github.com/ecoma-io/archkeep/commit/5398add12b4f6faae1cee5c10b98d247f4f21ee3))
+
+
+### Documentation
+
+* adopt the architecture-bearing change bar in CONTRIBUTING.md ([#931](https://github.com/ecoma-io/archkeep/issues/931)) ([6df95ee](https://github.com/ecoma-io/archkeep/commit/6df95ee2e55eeec205424e5136e6eb59abc998b7)), closes [#929](https://github.com/ecoma-io/archkeep/issues/929)
+* **archkeep:** add the agent-workflow audit, failure taxonomy, and protocol draft ([#922](https://github.com/ecoma-io/archkeep/issues/922)) ([e0d7d8c](https://github.com/ecoma-io/archkeep/commit/e0d7d8c2a7dd90fee15287965f7e9c97d25ffd6e))
+* simplify and synchronize multilingual readmes ([#919](https://github.com/ecoma-io/archkeep/issues/919)) ([3ec6dd5](https://github.com/ecoma-io/archkeep/commit/3ec6dd5b3da9079d039a35993c977b805f9594bc))
+
 ## [0.29.0](https://github.com/ecoma-io/archkeep/compare/v0.28.1...v0.29.0) (2026-09-11)
 
 
