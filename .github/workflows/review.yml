@@ -137,9 +137,29 @@ jobs:
       # gets. A pull request that changes Archkeep itself is judged by the
       # last release, never by its own bytes: the pin is the recipe's, not
       # a shortcut around it.
+      #
+      # This repository's one bridge: archkeep reads this workspace's
+      # project graph with the Moon CLI, looking for `moon` in the analyzed
+      # tree's node_modules/.bin and then on PATH. The base and head
+      # worktrees the recipe judges are committed trees — no node_modules —
+      # so the only source for this workspace's pinned `moon` (a
+      # devDependency) is the merge preview's own install. The skew is
+      # disclosed, not hidden: the merge preview's `moon` reads the graph of
+      # both sides, so a pull request that bumps Moon judges the baseline
+      # with the new version — acceptable for review evidence because the
+      # verdict is recorded and never enforced, and both commits and both
+      # policy fingerprints stay pinned. A pull request that breaks its own
+      # install breaks this step — recipe law 3 behaving exactly as stated.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
+
+      - name: Install the workspace dependencies (Moon bridge)
+        run: pnpm install --frozen-lockfile
+
+      - name: Put the workspace's pinned Moon on PATH
+        run: echo "$GITHUB_WORKSPACE/node_modules/.bin" >> "$GITHUB_PATH"
 
       # Consumer-pinned, exactly as the action-agents guide ships it. The
       # action never learns this happened: no dependency edge is created.
