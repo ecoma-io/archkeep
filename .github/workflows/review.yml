@@ -2,13 +2,14 @@ name: Review
 
 # Dogfood: the organisation's `review` action (ecoma-io/action-agents) reviews
 # this repository's own pull requests — the enrollment recorded in that
-# repository's docs/dogfood.md at v0.12.1, in the rollout's dry-run posture:
-# the run artifact is the whole output and no comment is written to any pull
-# request. The flip to live is one line, taken only after the first-run
-# checklist has passed twice.
+# repository's docs/dogfood.md, originally at v0.12.1 in the rollout's dry-run
+# posture, live since the checklist passed twice.
 #
-# The ref is digest-pinned to the commit the released tag v0.12.1 names — the
-# maintainer decision recorded on #804. The rollout's policy is the released
+# The ref is digest-pinned to the commit the released tag v0.14.0 names — the
+# deliberate re-pin this pull request takes, because v0.14.0 is the first
+# release whose review action declares the `architecture-report` input the
+# evidence recipe below wires (verified against the tag's action.yaml). The
+# rollout's policy is the released
 # exact version, never `@main` and never a floating tag: the operator must
 # know which bytes run before any of them do, and adopting a later fix is a
 # deliberate re-pin, never an accident of a moving tag (action-agents
@@ -227,7 +228,7 @@ jobs:
               head: {commit: $headCommit}}' > .archkeep/run.json
 
       - id: review
-        uses: ecoma-io/action-agents/review@46a6cc2e36fcb3d9d488c04b90507cf6a32b8244 # v0.13.2
+        uses: ecoma-io/action-agents/review@ae384f9f4808cd9ca871f642178b5c939a958f6e # v0.14.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           api-url: ${{ secrets.ECOMA_LLM_BASE_URL }}
