@@ -7,26 +7,28 @@
 // every agent-suite scenario. `check-skills.test.mjs` already pins the gate
 // half; these tests pin the suite half (#935):
 //
-//   - a clean skill-text map satisfies every bound requirement,
-//   - dropping ONE anchor phrase flips exactly that requirement to unmet —
-//     the score the bound scenario reports goes red naming the id,
-//   - an unknown binding id is a loud harness error, never a silent skip,
-//   - a missing skills root throws: the runner aborts on unreadable skill
-//     text instead of continuing with zero knowledge of the protocol,
+//   - clean skill texts exit 0, stating every bound requirement,
+//   - dropping ONE anchor phrase exits 1 naming exactly the unmet
+//     requirement id — the score the bound scenario reports goes red,
+//   - an unknown binding id exits 2 with a loud error, never a silent skip,
+//   - an unreadable skill text exits 3 naming ENOENT: the runner aborts
+//     instead of continuing with zero knowledge of the protocol,
 //   - the standalone debug CLI actually evaluates. It used to compare
 //     `process.argv[1]` against the module's `file://` URL — always false —
-//     and silently exit 0 no matter what the skill texts said (#944). Clean
-//     texts exit 0, a weakened text exits 1 naming the id, an unknown id
-//     exits 2.
+//     and silently exit 0 no matter what the skill texts said (#944).
+//
+// Every test drives the spawned CLI — exit code plus the exact
+// stderr/stdout fragment. The gate's surface is argv, never an import:
+// `agent-suite/` is intentionally unowned, so the module-boundary law
+// forbids a relative import into it, and these tests exercise the module
+// only through its own process.
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-
-import { readSkillTexts, unmetBoundRequirements } from "../agent-suite/protocol-gate.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const gateCli = resolve(here, "..", "agent-suite", "protocol-gate.mjs");
@@ -39,53 +41,6 @@ const BOUND_IDS = [
   "VERIFY-WAIVERS-MANDATORY", // arch-check
   "REVIEW-INCOMPLETE-REFUSAL", // arch-review
 ];
-
-/** Hand-written skill texts in the same fixture style `check-skills.test.mjs`
- * uses: prose parallel to the load-bearing phrases, never a re-pinned copy of
- * the production table. Each sentence states the anchors of exactly one bound
- * requirement. */
-function cleanTexts() {
-  return {
-    "arch-change": "Reconcile after implementing.",
-    "arch-check":
-      "VERIFY runs the `waivers` command on every green check — mandatory: it names what the green " +
-      "run hid.",
-    "arch-review": "With artifacts missing, report INCOMPLETE, naming the missing artifacts.",
-  };
-}
-
-describe("unmetBoundRequirements (#935)", () => {
-  it("returns [] when every bound requirement's anchors are stated (a)", () => {
-    assert.deepEqual(unmetBoundRequirements(BOUND_IDS, cleanTexts()), []);
-  });
-
-  it("returns exactly the requirement whose anchor phrase a skill text dropped (b)", () => {
-    const texts = cleanTexts();
-    texts["arch-change"] = texts["arch-change"].replace("Reconcile after implementing", "");
-    const unmet = unmetBoundRequirements(BOUND_IDS, texts);
-    assert.deepEqual(
-      unmet.map((req) => req.id),
-      ["RECONCILE-AFTER-IMPLEMENT"],
-    );
-  });
-
-  it("throws on an unknown requirement id — a typo must be a loud harness error (c)", () => {
-    assert.throws(
-      () => unmetBoundRequirements(["NO-SUCH-FORCING-POINT"], cleanTexts()),
-      /unknown protocol requirement id "NO-SUCH-FORCING-POINT"/u,
-    );
-  });
-});
-
-describe("readSkillTexts (#935)", () => {
-  it("throws on a missing skills root — the runner aborts, never zero texts (d)", () => {
-    const root = join(tmpdir(), `protocol-gate-no-root-${process.pid}-${Date.now()}`);
-    assert.throws(
-      () => readSkillTexts(root),
-      (err) => err.code === "ENOENT",
-    );
-  });
-});
 
 describe("standalone CLI (#944)", () => {
   const scratchRoots = [];
@@ -127,5 +82,18 @@ describe("standalone CLI (#944)", () => {
     const run = runCli(scratchSkills(), "NO-SUCH-FORCING-POINT");
     assert.equal(run.status, 2, `${run.stdout}${run.stderr}`);
     assert.match(run.stderr, /unknown protocol requirement id "NO-SUCH-FORCING-POINT"/u);
+  });
+
+  it("exits 3 naming ENOENT when a skill text is unreadable (h)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "protocol-gate-cli-"));
+    scratchRoots.push(dir);
+    // An existing root whose skill is present but unreadable (no SKILL.md):
+    // the CLI's isDirectory() disambiguation accepts the root, then the
+    // missing text aborts the run with ENOENT.
+    const skillsRoot = join(dir, "skills");
+    mkdirSync(join(skillsRoot, "arch-change"), { recursive: true });
+    const run = runCli(skillsRoot, "RECONCILE-AFTER-IMPLEMENT");
+    assert.equal(run.status, 3, `${run.stdout}${run.stderr}`);
+    assert.match(run.stderr, /cannot read the skill texts: .*ENOENT/u);
   });
 });
