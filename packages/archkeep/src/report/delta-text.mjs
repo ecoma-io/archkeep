@@ -154,7 +154,7 @@ export function formatDeltaReport({ delta, coverage }) {
   const { baseline, head, summary, violations, unresolvable } = delta;
 
   sections.push(
-    `baseline  ${baseline.path} — ${describeOrigin(baseline.provenance)}, ` +
+    `baseline  ${baseline.path}${baseline.digest ? ` (${baseline.digest})` : ""} — ${describeOrigin(baseline.provenance)}, ` +
       `${baseline.records} record${baseline.records === 1 ? "" : "s"}, ` +
       `${baseline.projects} project${baseline.projects === 1 ? "" : "s"}`,
   );

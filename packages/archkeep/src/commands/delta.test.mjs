@@ -8,7 +8,11 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { buildRuleModule } from "../custom-rules/wasm-fixture.mjs";
 import { captureDelta, deltaCommand, deltaFold, evidenceGraphToProjectGraph } from "./delta.mjs";
-import { parseEvidenceSnapshot, serializeEvidenceSnapshot } from "./delta-snapshot.mjs";
+import {
+  parseEvidenceSnapshot,
+  readEvidenceSnapshot,
+  serializeEvidenceSnapshot,
+} from "./delta-snapshot.mjs";
 import { computePolicyFingerprint } from "./graph.mjs";
 
 /**
@@ -428,6 +432,30 @@ describe("deltaCommand", () => {
     await expect(
       deltaCommand("/invented/base.json", contextOf(), { config: null, readBaseline, now: NOW }),
     ).rejects.toThrow(/boundary config/u);
+  });
+  it("carries the baseline FILE bytes' sha256 as result.baseline.digest", async () => {
+    const { snapshot } = baselineOf({ records: [] });
+    const text = serializeEvidenceSnapshot(snapshot);
+    // The loader is the real one — only its read is injected — so the digest
+    // is exactly what deltaCommand receives from disk bytes in a real run.
+    const result = await deltaCommand("/invented/base.json", contextOf({ records: [] }), {
+      config: config(),
+      readBaseline: (path) => readEvidenceSnapshot(path, { read: () => text }),
+      now: NOW,
+    });
+    expect(result.delta.baseline.digest).toBe(
+      `sha256:${createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex")}`,
+    );
+  });
+
+  it("omits baseline.digest when the baseline seam supplied no bytes to hash", async () => {
+    const { readBaseline } = baselineOf({ records: [] });
+    const result = await deltaCommand("/invented/base.json", contextOf({ records: [] }), {
+      config: config(),
+      readBaseline,
+      now: NOW,
+    });
+    expect(result.delta.baseline).not.toHaveProperty("digest");
   });
 
   it("notes a policy change loudly instead of refusing — both sides answer to the current law", async () => {

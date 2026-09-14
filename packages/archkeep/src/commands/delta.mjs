@@ -963,6 +963,7 @@ export async function deltaCommand(
       policyFingerprint: baseline.policyFingerprint,
       records: baseline.records.length,
       projects: baseline.graph.projects.length,
+      ...(typeof baseline.digest === "string" ? { digest: `sha256:${baseline.digest}` } : {}),
     },
     head: {
       provenance: headProvenance,

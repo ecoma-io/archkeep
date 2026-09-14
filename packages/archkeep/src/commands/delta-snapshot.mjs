@@ -45,6 +45,8 @@
  * `./history.mjs` draws between `readSnapshots` and `computeEvolution`
  * (`../../../../AGENTS.md`: gate logic takes its facts as arguments).
  */
+import { createHash } from "node:crypto";
+
 import { readFileSync } from "node:fs";
 
 import { canonicalJsonReplacer } from "../canonical.mjs";
@@ -290,24 +292,43 @@ export function serializeEvidenceSnapshot(snapshot) {
  * thin and injectable so tests and embedders drive validation without disk.
  *
  * @param {string} path Absolute path to the snapshot file.
- * @param {{read?: (path: string) => string}} [io] Injectable read; defaults to
- *   a UTF-8 `readFileSync`.
- * @returns {object} Whatever `parseEvidenceSnapshot` returns for the text.
+ * @param {{read?: (path: string) => string|Buffer}} [io] Injectable read — a
+ *   `string` (hashed as its UTF-8 bytes) or a `Buffer` (the exact bytes);
+ *   defaults to a raw `readFileSync`, so the disk path hashes the file's true
+ *   bytes.
+ * @returns {object} Whatever `parseEvidenceSnapshot` returns for the text,
+ *   with the SHA-256 of the bytes read attached as a non-enumerable `digest`
+ *   (hex) — `delta` copies it into the envelope, while every parse, serialize,
+ *   and validation surface keeps seeing the snapshot exactly as before.
  * @throws {Error} when the file cannot be read, naming the path and the cause,
  *   and whatever `parseEvidenceSnapshot` throws.
  */
 export function readEvidenceSnapshot(path, io = {}) {
-  const read = io.read ?? ((p) => readFileSync(p, "utf8"));
-  let text;
+  const read = io.read ?? ((p) => readFileSync(p));
+  let raw;
   try {
-    text = read(path);
+    raw = read(path);
   } catch (cause) {
     throw new Error(
       `archkeep: cannot read the evidence snapshot '${path}': ${cause?.message ?? cause}`,
       { cause },
     );
   }
-  return parseEvidenceSnapshot(text, path);
+  const text = typeof raw === "string" ? raw : raw.toString("utf8");
+  const snapshot = parseEvidenceSnapshot(text, path);
+  // The read's exact bytes, hashed to a hex sha256 and attached non-enumerably:
+  // the digest rides through to `delta` (which hands it to the envelope)
+  // without leaking into the snapshot's parse, serialize, or validation
+  // surface. It is a digest over the FILE's bytes — NOT over canonical.mjs's
+  // re-serialization — so two baselines that parse to the same object but
+  // differ in bytes carry different digests.
+  Object.defineProperty(snapshot, "digest", {
+    value: createHash("sha256")
+      .update(typeof raw === "string" ? Buffer.from(raw, "utf8") : raw)
+      .digest("hex"),
+    enumerable: false,
+  });
+  return snapshot;
 }
 
 /**
