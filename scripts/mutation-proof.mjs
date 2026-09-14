@@ -88,7 +88,7 @@ const MUTATIONS = [
     replace: "  const complete = coverageComplete({",
     with: "  const complete = true || coverageComplete({",
     testFiles: ["src/commands/delta.test.mjs"],
-    expectedFailures: ["refuses an incomplete head", "claiming coverage.complete"],
+    expectedFailures: ["refuses an incomplete head"],
     why: "the completeness predicate is short-circuited to true, so an incomplete run claims complete:true while notAnalyzed is non-empty",
   },
   {
@@ -316,12 +316,22 @@ for (const mutation of MUTATIONS) {
   writeFileSync(target, original.replace(mutation.replace, mutation.with), "utf8");
 
   const vitestBin = join(worktreePath, "node_modules", ".bin", "vitest");
-  const run = spawnSync(vitestBin, ["run", ...mutation.testFiles, "--coverage.enabled=false"], {
-    cwd: join(worktreePath, "packages", "archkeep"),
-    encoding: "utf8",
-    timeout: 300_000,
-  });
-  const output = `${run.stdout ?? ""}\n${run.stderr ?? ""}`;
+  const reportFile = join(worktreePath, `mutation-report-${mutation.name}.json`);
+  const run = spawnSync(
+    vitestBin,
+    [
+      "run",
+      ...mutation.testFiles,
+      "--coverage.enabled=false",
+      "--reporter=json",
+      `--outputFile=${reportFile}`,
+    ],
+    {
+      cwd: join(worktreePath, "packages", "archkeep"),
+      encoding: "utf8",
+      timeout: 300_000,
+    },
+  );
 
   if (run.error ?? run.status === null) {
     console.error(
@@ -338,11 +348,48 @@ for (const mutation of MUTATIONS) {
     results.push({ ...mutation, outcome: "unexpected-pass", restored: false });
     overallOk = false;
   } else {
-    const matched = mutation.expectedFailures.find((needle) => output.includes(needle));
-    if (matched === undefined) {
+    // A red is only a red when a FAILED assertion names the mutated behavior.
+    // The default reporter prints every test's title verbatim, so a needle
+    // matched anywhere in the combined output could come from a PASSING test
+    // whose title happens to equal it — an unmutated verdict credited as a
+    // kill. The JSON reporter (jest shape: `testResults` →
+    // `assertionResults`) tags each assertion with its `status`, so the
+    // needle must sit inside one whose status is `failed`. Vitest writes the
+    // report to `--outputFile` rather than printing it, and an unreadable or
+    // unparseable report — a crash before the reporter flushed, or output
+    // that never was JSON — is a loud failure, not a silent pass.
+    let report = null;
+    try {
+      report = JSON.parse(readFileSync(reportFile, "utf8"));
+    } catch {
+      // `report` stays null; the loud branch below refuses to credit a red
+      // without a FAILED assertion naming the mutated behavior.
+    }
+    const failedResults =
+      report === null
+        ? []
+        : (report.testResults ?? []).flatMap((file) =>
+            (file.assertionResults ?? []).filter((result) => result.status === "failed"),
+          );
+    const matched = mutation.expectedFailures.find((needle) =>
+      failedResults.some((result) =>
+        [result.fullName ?? "", result.title ?? "", ...(result.failureMessages ?? [])]
+          .join("\n")
+          .includes(needle),
+      ),
+    );
+    if (report === null) {
       console.error(
-        `mutation-proof: "${mutation.name}" — the targeted test exited ${run.status} but its failure does not ` +
-          `name the mutated behavior (expected one of: ${mutation.expectedFailures.join(", ")}); ` +
+        `mutation-proof: "${mutation.name}" — the targeted test exited ${run.status} but its JSON ` +
+          "report (--reporter=json --outputFile) could not be read or parsed; refusing to credit a " +
+          `red without a FAILED assertion naming the mutated behavior (expected one of: ${mutation.expectedFailures.join(", ")})`,
+      );
+      results.push({ ...mutation, outcome: "red-unparseable", restored: false });
+      overallOk = false;
+    } else if (matched === undefined) {
+      console.error(
+        `mutation-proof: "${mutation.name}" — the targeted test exited ${run.status} but no FAILED ` +
+          `assertion names the mutated behavior (expected one of: ${mutation.expectedFailures.join(", ")}); ` +
           "the pinning assertion may not have caught it",
       );
       results.push({ ...mutation, outcome: "red-unpinned", restored: false });
