@@ -214,7 +214,7 @@ export function buildNodes(projects) {
   const skipped = [];
 
   for (const { name, root, config } of projects) {
-    const tags = config.tags ?? [];
+    const tags = config.tags === undefined ? [] : config.tags;
     if (!Array.isArray(tags) || tags.some((tag) => typeof tag !== "string" || tag === "")) {
       const file = root === "" ? PROJECT_CONFIG_FILE : `${root}/${PROJECT_CONFIG_FILE}`;
       skipped.push({ file, reason: unusableTagsReason(name, file, tags) });

@@ -278,6 +278,35 @@ describe("building the index over a whole tree", () => {
       type: "static",
     });
   });
+
+  it("publishes the static tags refusal as an index gap, so the tree reads incomplete", () => {
+    // The composed acquisition's `skippedProjects` fold is what `indexGaps`
+    // consumes: a project whose `project.json` declares unusable tags must
+    // surface as a named gap here — otherwise an index built over this tree
+    // would publish a clean verdict with the project silently missing (#943).
+    const withScalarTags = {
+      [`libs/outer/${PROJECT_CONFIG_FILE}`]: '{"name":"outer","tags":"layer:domain"}',
+      "libs/outer/main.go": "package outer\n",
+      "README.md": "# not a source file\n",
+    };
+    const index = buildWorkspaceIndex({
+      root: "/fixture",
+      listFiles: () => Object.keys(withScalarTags),
+      readFileAt: (_root, path) => withScalarTags[path] ?? null,
+    });
+
+    expect(index.skippedProjects).toEqual([
+      {
+        file: `libs/outer/${PROJECT_CONFIG_FILE}`,
+        reason: expect.stringContaining("layer:domain"),
+      },
+    ]);
+    const gaps = indexGaps(index);
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]).toContain(`libs/outer/${PROJECT_CONFIG_FILE}`);
+    expect(gaps[0]).toContain("layer:domain");
+    expect(gaps[0]).toContain("missing from the graph entirely");
+  });
 });
 
 describe("nx.json's workspaceLayout reaching the rule engine (Nx-shaped branch)", () => {
