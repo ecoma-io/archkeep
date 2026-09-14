@@ -107,6 +107,7 @@ import {
   serializeEvidenceSnapshot,
 } from "./delta-snapshot.mjs";
 import { computeDiff } from "./diff.mjs";
+import { FULL_SHA } from "./evolution.mjs";
 import { isAbsolute, resolve } from "node:path";
 import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
 import { eventSnapshotSide } from "./history.mjs";
@@ -123,14 +124,13 @@ const { name: TOOL_NAME, version: TOOL_VERSION } = require("../../package.json")
 
 /**
  * The only spelling a `--expect-*-sha` pin accepts: a full 40-hex commit
- * SHA, the same shape `evolution`'s `FULL_SHA` requires of the revisions it
- * compares (`./evolution.mjs`). A short or ambiguous spelling is refused at
- * the CLI (exit 2), never folded into "no pin" — a pin is a declaration
- * that THIS exact commit be judged, and a value the run could not compare
- * against the envelope's provenance is a malformed declaration, not an
- * absent one.
+ * SHA — the same spelling evolution's `FULL_SHA` owns (`./evolution.mjs`).
+ * A short or ambiguous spelling is refused at the CLI (exit 2), never
+ * folded into "no pin" — a pin is a declaration that THIS exact commit be
+ * judged, and a value the run could not compare against the envelope's
+ * provenance is a malformed declaration, not an absent one.
  */
-export const FULL_SHA = /^[0-9a-f]{40}$/;
+export { FULL_SHA };
 
 /**
  * The one no-verdict return shape every delta refusal shares (#608's

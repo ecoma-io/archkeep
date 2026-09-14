@@ -104,7 +104,7 @@ const require = createRequire(import.meta.url);
 const { version: TOOL_VERSION } = require("../../package.json");
 
 /** A full SHA-1 object name, as `git rev-parse` answers it. */
-const FULL_SHA = /^[0-9a-f]{40}$/;
+export const FULL_SHA = /^[0-9a-f]{40}$/;
 
 /**
  * The short form used inside error messages — long enough to stay unambiguous
