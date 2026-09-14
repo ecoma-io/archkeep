@@ -37,32 +37,95 @@
  * analysis in a workspace that has no `.vue` file to analyze. And the contract
  * says an analyzer never throws: a missing parser becomes a failure record
  * naming what is absent, like any other thing this layer could not do.
+
+ * ## Which Vue answers — the analyzed workspace's, not archkeep's
+ *
+ * The parser is resolved per workspace, not once for the process: the
+ * analyzed workspace's own `vue/compiler-sfc` wins, because the Vue a `.vue`
+ * file is compiled and type-checked against is the Vue that workspace
+ * depends on — asking archkeep's tree for the parser would silently use a
+ * different copy, or refuse in a workspace that does have Vue. `createRequire`
+ * is anchored at the workspace's own `package.json` (the
+ * `resolveEslintPluginDefaults` shape in `eslint-config.mjs`), and accepts a
+ * base path that need not exist, so the workspace hop is one require with no
+ * existence check. archkeep's own install is the fallback for a workspace
+ * that does not depend on Vue; when neither has it, the refusal below names
+ * what is absent. Resolution is remembered per workspace — a `WeakMap` keyed
+ * on the workspace object, the `perWorkspace` pattern in `source-util.mjs` —
+ * so a whole-tree run pays the two requires once, not once per `.vue` file.
  */
 import { createRequire } from "node:module";
+import { join } from "node:path";
 
-import { emptyResult, fileFailure } from "./source-util.mjs";
+import { emptyResult, fileFailure, perWorkspace } from "./source-util.mjs";
 import { analyzeTypeScript } from "./typescript.mjs";
 
 /** The SFC parser's specifier, named once — the failure message quotes it. */
 const COMPILER_SFC = "vue/compiler-sfc";
 
-/** Resolved once, success or failure, and remembered either way. */
-let parserLoad = null;
+/**
+ * The archkeep-side requirer, created once. Building one loads nothing; it is
+ * the fallback for a workspace that does not install Vue itself.
+ */
+const localRequire = createRequire(import.meta.url);
 
-function sfcParse() {
-  if (parserLoad === null) {
-    try {
-      parserLoad = { parse: createRequire(import.meta.url)(COMPILER_SFC).parse, error: null };
-    } catch (cause) {
-      parserLoad = { parse: null, error: cause?.message ?? String(cause) };
-    }
+/**
+ * Resolves `vue/compiler-sfc` for one workspace: the analyzed workspace's own
+ * install first, archkeep's second, and `{ parse: null, error }` naming the
+ * cause when neither has it.
+ *
+ * `seam` is the tests' door: `createRequireForWorkspace` replaces the
+ * workspace hop's requirer constructor, `localRequire` replaces the archkeep
+ * hop's requirer, so each branch can be driven from in-memory fakes without
+ * touching a real filesystem. Production passes no seam; `createRequire` and
+ * the once-made requirer above stay the defaults.
+ *
+ * @param {string} workspaceRoot absolute workspace root, from `workspace.root`
+ * @param {object} [seam]
+ * @param {(base: string) => (specifier: string) => object} [seam.createRequireForWorkspace]
+ * @param {(specifier: string) => object} [seam.localRequire]
+ * @returns {{ parse: (text: string, options: object) => object, error: null } |
+ *           { parse: null, error: string }}
+ */
+export function resolveSfcParser(workspaceRoot, seam = {}) {
+  const {
+    createRequireForWorkspace = createRequire,
+    localRequire: archkeepRequire = localRequire,
+  } = seam;
+  try {
+    const fromWorkspace = createRequireForWorkspace(join(workspaceRoot, "package.json"));
+    return { parse: fromWorkspace(COMPILER_SFC).parse, error: null };
+  } catch {
+    return archkeepFallback(archkeepRequire);
   }
-  if (parserLoad.parse === null) {
-    throw new Error(
-      `'${COMPILER_SFC}' is not installed, so no .vue file can be analyzed: ${parserLoad.error}`,
-    );
+}
+
+/**
+ * The archkeep-side hop, so named because the requirer it uses is a parameter
+ * (`localRequire`): tests fail this hop in isolation, and production hands it
+ * the module-level requirer. Its failure is the loud refusal — a missing
+ * parser is a named failure, never a silent pass.
+ */
+function archkeepFallback(localRequire) {
+  try {
+    return { parse: localRequire(COMPILER_SFC).parse, error: null };
+  } catch (fallbackCause) {
+    return {
+      parse: null,
+      error: `'${COMPILER_SFC}' is not installed, so no .vue file can be analyzed: ${fallbackCause?.message ?? String(fallbackCause)}`,
+    };
   }
-  return parserLoad.parse;
+}
+
+/** Resolved once per workspace object, success or failure, and remembered either way. */
+const sfcParserFor = perWorkspace((workspace) => resolveSfcParser(workspace.root));
+
+function sfcParse(workspace, seam) {
+  const { parse, error } = seam ? resolveSfcParser(workspace.root, seam) : sfcParserFor(workspace);
+  if (parse === null) {
+    throw new Error(error);
+  }
+  return parse;
 }
 
 /** `text` with everything outside `[start, end)` replaced by spaces. */
@@ -92,18 +155,18 @@ function sfcFailure(sourceFile, error) {
  * Both script blocks are analyzed when both exist — `<script>` and
  * `<script setup>` legitimately coexist, and an import in either is an import
  * of the component. A file with no script block yields the empty envelope and
- * no failure: a template-only SFC imports nothing, which is not an error. A
  * `<script>`/`<script setup>` tag the SFC parser could not recover to EOF is
  * different — its content is unknown, not empty — and yields a whole-file
- * failure rather than a silently clean result.
  *
  * @param {{ sourceFile: string, text: string, workspace: object }} request
+ * @param {object} [seam] Resolution seam for tests — see `resolveSfcParser`;
+ * production callers pass none.
  * @returns {{ imports: object[], failures: object[] }}
  */
-export function analyzeVue({ sourceFile, text, workspace }) {
+export function analyzeVue({ sourceFile, text, workspace }, seam) {
   const result = emptyResult();
   try {
-    const parse = sfcParse();
+    const parse = sfcParse(workspace, seam);
     const { descriptor, errors } = parse(text, { filename: sourceFile });
     for (const error of errors) result.failures.push(sfcFailure(sourceFile, error));
 
