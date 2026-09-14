@@ -240,4 +240,67 @@ describe("the nodes a project list becomes", () => {
 
     expect(duplicateProjects).toEqual([]);
   });
+  it("refuses a scalar tags instead of letting a string into data.tags", () => {
+    // #943: a `tags` that is not an array slides verbatim into `data.tags`,
+    // and `../rules/tags.mjs` reads that list unguarded — a scalar then
+    // silently matches or misses every tag row. The static provider's policy
+    // for a judgment-shape defect is skip + record (the #846 identity case is
+    // the one throw), so the project leaves the graph and the skip names it.
+    const { nodes, skipped } = buildNodes([
+      { name: "web", root: "apps/web", config: { tags: "layer:domain" } },
+    ]);
+
+    expect(nodes.web).toBeUndefined();
+    expect(skipped).toEqual([
+      {
+        file: `apps/web/${PROJECT_CONFIG_FILE}`,
+        reason: expect.stringContaining("layer:domain"),
+      },
+    ]);
+    expect(skipped[0].reason).toContain(`apps/web/${PROJECT_CONFIG_FILE}`);
+    expect(skipped[0].reason).toContain('"web"');
+  });
+
+  it("refuses a tags array that holds a non-string entry, naming the index", () => {
+    // The array-shaped counterpart of the scalar: `["ok", 7]` IS an array, so
+    // the old `config.tags ?? []` line let it reach `data.tags` whole, where
+    // the 7 would silently match or miss every tag row it was compared with.
+    // The refusal names the offending index so the fix is one look away.
+    const { nodes, skipped } = buildNodes([
+      { name: "billing", root: "libs/billing", config: { tags: ["ok", 7] } },
+    ]);
+
+    expect(nodes.billing).toBeUndefined();
+    expect(skipped).toEqual([
+      {
+        file: `libs/billing/${PROJECT_CONFIG_FILE}`,
+        reason: expect.stringContaining("tags[1]"),
+      },
+    ]);
+    expect(skipped[0].reason).toContain("7");
+    expect(skipped[0].reason).toContain('"billing"');
+  });
+
+  it("keeps the tags array invariant on every node and names the broken project", () => {
+    // The silent direction #943 closes: a malformed-tags project must not sit
+    // in the graph beside a clean one, because its tags would match or miss
+    // every boundary the tree constrains without a sound. Every emitted node
+    // keeps the array shape the tag rules read unguarded, and the broken
+    // project is absent from the node list while named in skipped.
+    const { nodes, skipped } = buildNodes([
+      { name: "content", root: "libs/content", config: { tags: ["scope:content"] } },
+      { name: "web", root: "apps/web", config: { tags: "layer:domain" } },
+    ]);
+
+    expect(Object.keys(nodes)).toEqual(["content"]);
+    for (const node of Object.values(nodes)) {
+      expect(Array.isArray(node.data.tags)).toBe(true);
+    }
+    expect(skipped).toEqual([
+      {
+        file: `apps/web/${PROJECT_CONFIG_FILE}`,
+        reason: expect.stringContaining("layer:domain"),
+      },
+    ]);
+  });
 });

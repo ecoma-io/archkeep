@@ -37,6 +37,11 @@
  * not blank the index — where `readProjectGraph` throws the identical refusal;
  * the two policies are the recorded difference between an acquisition that
  * still has a tree to index and one that does not.
+ * A `tags` field that is not an array of non-empty strings is the same
+ * judgment-shape defect and gets the same record, never a throw: `buildNodes`
+ * refuses it, naming the project, the file, and the offending value (#943),
+ * because `../rules/tags.mjs` reads the list unguarded and a scalar or a
+ * non-string entry would silently match or miss every tag row.
  *
  * One refusal THROWS rather than skipping: a `package.json` beside a
  * `project.json` that exists but cannot be read or parsed (#846). Falling
@@ -147,12 +152,34 @@ export function discoverProjects({ files, readFile }) {
 }
 
 /**
+ * The skip reason for a `tags` value no tag rule can read — names the project,
+ * the `project.json` it came from, and the offending value (#943). The static
+ * provider's policy for a judgment-shape defect is record, not throw: this is
+ * the record-half of what `./nx.mjs`'s `validateProjectNodes` throws for.
+ *
+ * @param {string} name
+ * @param {string} file
+ * @param {unknown} tags
+ * @returns {string}
+ */
+function unusableTagsReason(name, file, tags) {
+  if (!Array.isArray(tags)) {
+    return `declares unusable tags ${JSON.stringify(tags)} (a ${typeof tags}) for project "${name}" in ${file} — expected an array of non-empty strings`;
+  }
+  const bad = tags.findIndex((tag) => typeof tag !== "string" || tag === "");
+  const entry = tags[bad];
+  const got = entry === "" ? "an empty string" : `a ${typeof entry}`;
+  return `declares unusable tags: tags[${bad}] is ${JSON.stringify(entry)} (${got}) for project "${name}" in ${file} — expected an array of non-empty strings`;
+}
+
+/**
  * The graph nodes for a project list, in Nx's shape: `data` is the project's
  * own configuration with `tags` guaranteed present, because `../rules/tags.mjs`
  * reads it unguarded and an absent list is not the same fact as an empty one.
  *
  * @param {{name: string, root: string, config: object}[]} projects
- * @returns {{nodes: Record<string, object>, duplicateProjects: {name: string, roots: string[]}[]}}
+ * @returns {{nodes: Record<string, object>, duplicateProjects: {name: string, roots: string[]}[],
+ *   skipped: {file: string, reason: string}[]}}
  *   `duplicateProjects` names every name two or more projects resolved to and
  *   every root that claimed it (#375): a silent `nodes[name] = …` overwrite
  *   drops the shadowed project from the graph, its files match no root, and
@@ -160,6 +187,12 @@ export function discoverProjects({ files, readFile }) {
  *   exact silent direction `../../../../AGENTS.md`'s invariant refuses. The
  *   first project still wins in `nodes` (the index stays usable); the caller
  *   publishes the collision through `indexGaps`.
+ * A `tags` value that is not an array of non-empty strings is refused the same
+ * way — skip + record, never a throw (the #846 identity case is the module's
+ * one throw): `skipped` names the project, the `project.json`, and the
+ * offending value (#943), because `../rules/tags.mjs` reads `data.tags`
+ * unguarded and a scalar or a non-string entry would silently match or miss
+ * every tag row the tree constrains.
  */
 export function buildNodes(projects) {
   // Null-prototype for the same reason `./native/graph.mjs` and `./moon.mjs`
@@ -178,8 +211,15 @@ export function buildNodes(projects) {
   const seenNames = new Map();
   /** @type {Map<string, string[]>} name → every root that resolved to it, for names claimed twice or more. */
   const duplicateMap = new Map();
+  const skipped = [];
 
   for (const { name, root, config } of projects) {
+    const tags = config.tags ?? [];
+    if (!Array.isArray(tags) || tags.some((tag) => typeof tag !== "string" || tag === "")) {
+      const file = root === "" ? PROJECT_CONFIG_FILE : `${root}/${PROJECT_CONFIG_FILE}`;
+      skipped.push({ file, reason: unusableTagsReason(name, file, tags) });
+      continue;
+    }
     if (seenNames.has(name)) {
       // Duplicate name detected — record it for loud reporting
       if (!duplicateMap.has(name)) {
@@ -193,7 +233,7 @@ export function buildNodes(projects) {
     nodes[name] = {
       name,
       type: nodeTypeOf(name, config.projectType),
-      data: { ...config, root, tags: config.tags ?? [] },
+      data: { ...config, root, tags },
     };
   }
 
@@ -203,7 +243,7 @@ export function buildNodes(projects) {
     duplicateProjects.push({ name, roots });
   }
 
-  return { nodes, duplicateProjects };
+  return { nodes, duplicateProjects, skipped };
 }
 
 /**
@@ -223,6 +263,9 @@ export function buildNodes(projects) {
  *   `workspaceLayout` is `undefined` when `nx.json` declares nothing, so the
  *   caller can keep the key absent — the graph shape `evaluate()` reads is
  *   "declared or absent", never defaulted.
+ *   `skippedProjects` folds both skip channels — discovery's and `buildNodes`'
+ *   #943 tags refusal — so the caller's `indexGaps` names every skipped
+ *   project the same way.
  */
 export function readStaticProjectGraph({
   root,
@@ -231,7 +274,7 @@ export function readStaticProjectGraph({
   readLayout = readWorkspaceLayout,
 }) {
   const { projects, skipped } = discoverProjects({ files, readFile });
-  const { nodes, duplicateProjects } = buildNodes(projects);
+  const { nodes, duplicateProjects, skipped: skippedTags } = buildNodes(projects);
 
   let workspaceLayout;
   let workspaceLayoutFailure = null;
@@ -244,7 +287,7 @@ export function readStaticProjectGraph({
 
   return {
     nodes,
-    skippedProjects: skipped,
+    skippedProjects: [...skipped, ...skippedTags],
     duplicateProjects,
     workspaceLayout,
     workspaceLayoutFailure,
