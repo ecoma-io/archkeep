@@ -16,7 +16,11 @@
 // Usable standalone for debugging a binding:
 //
 //   node agent-suite/protocol-gate.mjs VERIFY-WAIVERS-MANDATORY REVIEW-BLOCKING-RULE
-import { readFileSync } from "node:fs";
+//
+// An optional first SKILLS_ROOT argument (an existing directory) points the
+// CLI at scratch skill texts — the spawn tests use it to exercise weakened
+// skills without touching the shipped files.
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EXPECTED_SKILLS } from "../scripts/check-skills.mjs";
@@ -42,16 +46,21 @@ export function unmetBoundRequirements(ids, skillTexts) {
 }
 
 if (isProgramEntry(import.meta.url)) {
-  const ids = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  let skillsRoot;
+  if (argv.length > 0 && isDirectory(argv[0])) skillsRoot = argv.shift();
+  const ids = argv;
   if (ids.length === 0) {
-    process.stderr.write("usage: protocol-gate.mjs REQUIREMENT_ID [REQUIREMENT_ID ...]\n");
+    process.stderr.write(
+      "usage: protocol-gate.mjs [SKILLS_ROOT] REQUIREMENT_ID [REQUIREMENT_ID ...]\n",
+    );
     process.exit(2);
   }
   let texts;
   try {
-    texts = readSkillTexts();
+    texts = readSkillTexts(skillsRoot);
   } catch (err) {
-    process.stderr.write(`cannot read the shipped skills: ${err.message}\n`);
+    process.stderr.write(`cannot read the skill texts: ${err.message}\n`);
     process.exit(3);
   }
   let unmet;
@@ -67,9 +76,31 @@ if (isProgramEntry(import.meta.url)) {
     );
   }
   if (unmet.length > 0) process.exit(1);
-  process.stdout.write(`ok ${ids.length} requirement(s) stated in the shipped skills\n`);
+  process.stdout.write(`ok ${ids.length} requirement(s) stated in the skill texts\n`);
 }
 
+/** True when the path names an existing directory — the CLI's optional
+ * SKILLS_ROOT/requirement-id disambiguation. */
+function isDirectory(candidate) {
+  try {
+    return statSync(candidate).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether this file was RUN rather than imported, compared on real paths.
+ * See `check-packages.mjs` for the reason this exists and why it is not shared.
+ */
 function isProgramEntry(moduleUrl, argv1 = process.argv[1]) {
-  return argv1 !== undefined && resolve(argv1) === moduleUrl;
+  if (!argv1) return false;
+  const real = (candidate) => {
+    try {
+      return realpathSync(candidate);
+    } catch {
+      return candidate;
+    }
+  };
+  return real(argv1) === real(fileURLToPath(moduleUrl));
 }
