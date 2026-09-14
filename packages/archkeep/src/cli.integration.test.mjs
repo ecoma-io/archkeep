@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { check, EXIT, parseCheckArgs, runCli } from "../cli.mjs";
 import { computePolicyFingerprint } from "./commands/graph.mjs";
@@ -9441,6 +9441,203 @@ export const moduleBoundaryOptions = {
     const typo = spawnDelta(["--fromat", "json", "base.json"]);
     expect(typo.status).toBe(EXIT.usage);
     expect(typo.stderr).toContain("unknown option '--fromat'");
+
+    const shortPin = spawnDelta(["--expect-head-sha", "abc", "base.json"]);
+    expect(shortPin.status).toBe(EXIT.usage);
+    expect(shortPin.stderr).toContain(
+      "--expect-head-sha needs a full 40-hex commit SHA; got 'abc'",
+    );
+
+    const nonHexPin = spawnDelta(["--expect-base-sha", "z".repeat(40), "base.json"]);
+    expect(nonHexPin.status).toBe(EXIT.usage);
+    expect(nonHexPin.stderr).toContain("--expect-base-sha needs a full 40-hex commit SHA");
+
+    const capturePin = spawnDelta(["--capture", "--expect-head-sha", "0".repeat(40)]);
+    expect(capturePin.status).toBe(EXIT.usage);
+    expect(capturePin.stderr).toContain(
+      "--capture does not take --expect-head-sha / --expect-base-sha",
+    );
+  });
+});
+
+describe("delta commit pins end to end over a real committed repo (#924)", () => {
+  // A REAL git repository: the pin compares the DECLARED commit against the
+  // provenance the run actually resolves — a git-less fixture could not
+  // exercise the head lane at all, and a fresh read would be a different
+  // fact than the one the envelope reports. Nx and the import walk stay
+  // injected (as every delta block here does); only provenance is real.
+  const pinRoot = mkdtempSync(join(tmpdir(), "polyglot-cli-delta-pin-"));
+  afterAll(() => rmSync(pinRoot, { recursive: true, force: true }));
+
+  const git = (...args) =>
+    spawnSync("git", args, {
+      cwd: pinRoot,
+      encoding: "utf8",
+      timeout: SPAWN_BUDGET_MS,
+      killSignal: "SIGKILL",
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: "t",
+        GIT_AUTHOR_EMAIL: "t@t",
+        GIT_COMMITTER_NAME: "t",
+        GIT_COMMITTER_EMAIL: "t@t",
+        HOME: process.env.HOME,
+      },
+    });
+  const writePin = (relativePath, text) => {
+    mkdirSync(join(pinRoot, relativePath, ".."), { recursive: true });
+    writeFileSync(join(pinRoot, relativePath), text);
+  };
+
+  const pinnedGraph = {
+    nodes: {
+      kernel: {
+        name: "kernel",
+        type: "lib",
+        data: { root: "libs/kernel", tags: ["layer-kernel"] },
+      },
+      outer: {
+        name: "outer",
+        type: "lib",
+        data: { root: "libs/outer", tags: ["layer-outer"] },
+      },
+    },
+    dependencies: { kernel: [], outer: [] },
+  };
+  const pinnedFiles = [
+    "nx.json",
+    "module-boundaries.config.mjs",
+    "libs/kernel/go.mod",
+    "libs/kernel/kernel.go",
+    "libs/outer/go.mod",
+    "libs/outer/outer.go",
+  ];
+  const pinEnv = () => {
+    const out = [];
+    const err = [];
+    return {
+      out: (text) => out.push(text),
+      err: (text) => err.push(text),
+      lines: { out, err },
+      cwd: pinRoot,
+      readGraph: () => pinnedGraph,
+      listFiles: () => pinnedFiles,
+    };
+  };
+
+  let head;
+  const baselinePath = join(pinRoot, "delta-base.json");
+  beforeAll(async () => {
+    writePin(
+      "nx.json",
+      `${JSON.stringify({
+        plugins: [
+          {
+            plugin: "@ecoma-io/archkeep/nx",
+            options: { boundaryConfig: "module-boundaries.config.mjs" },
+          },
+        ],
+      })}\n`,
+    );
+    writePin(
+      "module-boundaries.config.mjs",
+      `export const depConstraints = [
+  { sourceTag: "layer-kernel", onlyDependOnLibsWithTags: ["layer-kernel"] },
+  { sourceTag: "layer-outer", onlyDependOnLibsWithTags: ["layer-outer", "layer-kernel"] },
+];
+export const moduleBoundaryOptions = {
+  allow: [],
+  buildTargets: [],
+  enforceBuildableLibDependency: false,
+  allowCircularSelfDependency: false,
+  checkDynamicDependenciesExceptions: [],
+  ignoredCircularDependencies: [],
+  banTransitiveDependencies: false,
+  checkNestedExternalImports: false,
+};
+`,
+    );
+    writePin("libs/kernel/go.mod", "module example.invalid/kernel\n\ngo 1.24\n");
+    writePin("libs/kernel/kernel.go", 'package kernel\n\nconst Name = "kernel"\n');
+    writePin("libs/outer/go.mod", "module example.invalid/outer\n\ngo 1.24\n");
+    writePin("libs/outer/outer.go", 'package outer\n\nconst Name = "outer"\n');
+    expect(git("init", "-q", "-b", "main").status).toBe(0);
+    expect(git("add", "-A").status).toBe(0);
+    expect(git("commit", "-q", "-m", "fixture").status).toBe(0);
+    head = git("rev-parse", "HEAD").stdout.trim();
+    const capture = pinEnv();
+    expect(await runCli(["delta", "--capture", "--output", baselinePath], capture)).toBe(EXIT.ok);
+  }, SPAWN_TEST_BUDGET_MS);
+
+  const baseSha = () => {
+    // The baseline FILE is the evidence snapshot, whose own captured-at
+    // provenance is the top-level `provenance` — the same value the compare
+    // envelope later reports as `result.baseline.provenance`.
+    const { provenance } = JSON.parse(readFileSync(baselinePath, "utf8"));
+    return provenance.commit;
+  };
+
+  it("judges the run with a matching head pin, exit 0", async () => {
+    const compare = pinEnv();
+    expect(await runCli(["delta", baselinePath, "--expect-head-sha", head], compare)).toBe(EXIT.ok);
+    expect(compare.lines.out.join("\n")).toContain("no introduced violations");
+  });
+
+  it("judges the run with a matching base pin, exit 0", async () => {
+    const compare = pinEnv();
+    expect(await runCli(["delta", baselinePath, "--expect-base-sha", baseSha()], compare)).toBe(
+      EXIT.ok,
+    );
+    expect(compare.lines.out.join("\n")).toContain("no introduced violations");
+  });
+
+  it("judges the run with both pins matching, exit 0", async () => {
+    const compare = pinEnv();
+    expect(
+      await runCli(
+        ["delta", baselinePath, "--expect-head-sha", head, "--expect-base-sha", baseSha()],
+        compare,
+      ),
+    ).toBe(EXIT.ok);
+  });
+
+  it("refuses a wrong head pin with no verdict, exit 3, naming expected and actual in the reason", async () => {
+    const wrong = "f".repeat(40);
+    // A refused compare (#608) answers EVERY `--format` with the envelope —
+    // the withholder has no table to render — so the reason rides the JSON
+    // face: `decision.reason` and the coverage note, verbatim.
+    const compare = pinEnv();
+    expect(await runCli(["delta", baselinePath, "--expect-head-sha", wrong], compare)).toBe(
+      EXIT.error,
+    );
+    const envelope = JSON.parse(compare.lines.out.join("\n"));
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    // The silent direction: no verdict, no `result`, no event — a pinned run
+    // over a differing state was refused, not judged.
+    expect(envelope.result).toBeUndefined();
+    expect(envelope.decision.verdict).toBe("unknown");
+    expect(envelope.decision.reason).toBe(
+      `--expect-head-sha pins the head commit to ${wrong}, but the run's head is ${head}`,
+    );
+    expect(envelope.coverage.notes).toEqual([envelope.decision.reason]);
+  });
+
+  it("refuses a wrong base pin with no verdict, exit 3, naming expected and the captured commit", async () => {
+    const wrong = "e".repeat(40);
+    const compare = pinEnv();
+    expect(await runCli(["delta", baselinePath, "--expect-base-sha", wrong], compare)).toBe(
+      EXIT.error,
+    );
+    const envelope = JSON.parse(compare.lines.out.join("\n"));
+    expect(envelope.status).toBe("no-verdict");
+    expect(envelope.exitCode).toBe(3);
+    expect(envelope.result).toBeUndefined();
+    expect(envelope.decision.verdict).toBe("unknown");
+    expect(envelope.decision.reason).toBe(
+      `--expect-base-sha pins the baseline commit to ${wrong}, but the baseline was captured at ${baseSha()}`,
+    );
+    expect(envelope.coverage.notes).toEqual([envelope.decision.reason]);
   });
 });
 

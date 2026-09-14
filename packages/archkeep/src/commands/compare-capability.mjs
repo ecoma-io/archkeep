@@ -11,7 +11,7 @@
  * ../../../../docs/concepts/architecture.md's "The 24 commands".
  */
 export { diff } from "./diff.mjs";
-export { captureBaseline, delta } from "./delta.mjs";
+export { captureBaseline, delta, FULL_SHA } from "./delta.mjs";
 export { change, changeOutputRefusal } from "./change.mjs";
 export { drift } from "./drift.mjs";
 export { reconcileCommand } from "./reconcile.mjs";
