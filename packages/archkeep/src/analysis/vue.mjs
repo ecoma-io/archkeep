@@ -48,10 +48,16 @@
  * is anchored at the workspace's own `package.json` (the
  * `resolveEslintPluginDefaults` shape in `eslint-config.mjs`), and accepts a
  * base path that need not exist, so the workspace hop is one require with no
- * existence check. archkeep's own install is the fallback for a workspace
- * that does not depend on Vue; when neither has it, the refusal below names
- * what is absent. Resolution is remembered per workspace — a `WeakMap` keyed
- * on the workspace object, the `perWorkspace` pattern in `source-util.mjs` —
+ * existence check. archkeep's own install is the fallback only for a
+ * workspace that does not install Vue at all — a real require miss is told
+ * apart from a broken copy by its `MODULE_NOT_FOUND` /
+ * `ERR_MODULE_NOT_FOUND` code. A workspace whose own copy exists but fails
+ * to load (permission, ESM-only entry, corrupt install) is refused loudly,
+ * naming that copy's error: substituting archkeep's Vue there would silently
+ * analyze against a different version, the very silence this resolution
+ * exists to prevent. When neither has it, the refusal below names what is
+ * absent. Resolution is remembered per workspace — a `WeakMap` keyed on
+ * the workspace object, the `perWorkspace` pattern in `source-util.mjs` —
  * so a whole-tree run pays the two requires once, not once per `.vue` file.
  */
 import { createRequire } from "node:module";
@@ -72,7 +78,8 @@ const localRequire = createRequire(import.meta.url);
 /**
  * Resolves `vue/compiler-sfc` for one workspace: the analyzed workspace's own
  * install first, archkeep's second, and `{ parse: null, error }` naming the
- * cause when neither has it.
+ * cause when neither has it — or when the workspace's own copy exists but
+ * fails to load, a broken install never silently replaced by archkeep's Vue.
  *
  * `seam` is the tests' door: `createRequireForWorkspace` replaces the
  * workspace hop's requirer constructor, `localRequire` replaces the archkeep
@@ -95,8 +102,23 @@ export function resolveSfcParser(workspaceRoot, seam = {}) {
   try {
     const fromWorkspace = createRequireForWorkspace(join(workspaceRoot, "package.json"));
     return { parse: fromWorkspace(COMPILER_SFC).parse, error: null };
-  } catch {
-    return archkeepFallback(archkeepRequire);
+  } catch (workspaceCause) {
+    // The fallback exists for a workspace that does not install Vue at all;
+    // a real require miss is told apart by its code. Anything else — a
+    // permission error, an ESM-only entry, a corrupt install — is the
+    // workspace's OWN copy breaking, and swapping in archkeep's Vue would
+    // silently analyze the file against a different version than the
+    // workspace compiles with. Name the copy's failure instead.
+    if (
+      workspaceCause?.code === "MODULE_NOT_FOUND" ||
+      workspaceCause?.code === "ERR_MODULE_NOT_FOUND"
+    ) {
+      return archkeepFallback(archkeepRequire);
+    }
+    return {
+      parse: null,
+      error: `the workspace's '${COMPILER_SFC}' copy failed to load, so no .vue file can be analyzed: ${workspaceCause?.message ?? String(workspaceCause)}`,
+    };
   }
 }
 

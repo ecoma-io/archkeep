@@ -24,7 +24,11 @@ const SFC = "<template><div /></template>\n<script>\nimport a from 'x';\n</scr" 
 /** A seam whose workspace hop and archkeep hop both refuse with `cause`. */
 const missingParser = (cause) => ({
   createRequireForWorkspace: () => () => {
-    throw cause;
+    // A real require miss carries the module-absent code; the fake must too,
+    // so the hop classifies as absence and the both-absent refusal below is
+    // the one `archkeepFallback` produces — not the broken-copy refusal.
+    const absent = cause instanceof Error ? new Error(cause.message) : new Error(String(cause));
+    throw Object.assign(absent, { code: "MODULE_NOT_FOUND" });
   },
   localRequire: () => {
     throw cause;
@@ -34,7 +38,7 @@ const missingParser = (cause) => ({
 describe("analyzeVue with the SFC parser unreachable", () => {
   it("turns a missing parser into a failure naming it, not an empty verdict", () => {
     const { imports, failures } = analyzeVue(
-      { sourceFile: "a.vue", text: SFC, workspace: {} },
+      { sourceFile: "a.vue", text: SFC, workspace: { root: "/w" } },
       missingParser(new Error("Cannot find module 'vue/compiler-sfc'")),
     );
     expect(imports).toEqual([]);
@@ -47,7 +51,7 @@ describe("analyzeVue with the SFC parser unreachable", () => {
     // A thrown string carries no `message`; the `String(cause)` fallback must
     // land in the raise rather than in a silent empty result.
     const { failures } = analyzeVue(
-      { sourceFile: "a.vue", text: SFC, workspace: {} },
+      { sourceFile: "a.vue", text: SFC, workspace: { root: "/w" } },
       missingParser("no vue here"),
     );
     expect(failures[0].reason).toMatch(/'vue\/compiler-sfc' is not installed/);
@@ -68,7 +72,7 @@ describe("analyzeVue with a message-less parse error", () => {
       }),
     };
     const { failures } = analyzeVue(
-      { sourceFile: "a.vue", text: SFC, workspace: {} },
+      { sourceFile: "a.vue", text: SFC, workspace: { root: "/w" } },
       { createRequireForWorkspace: () => () => parser, localRequire: () => parser },
     );
     expect(failures).toEqual([
