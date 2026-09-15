@@ -24,15 +24,11 @@
   "license": "Apache-2.0",
   "homepage": "https://github.com/ecoma-io/archkeep#readme",
   "repository": "https://github.com/ecoma-io/archkeep",
-  "skills": [
-    "./skills"
-  ],
+  "skills": ["./skills"],
   "lspServers": {
     "archkeep": {
       "command": "node",
-      "args": [
-        "${CLAUDE_PLUGIN_ROOT}/packages/archkeep/lsp.mjs"
-      ],
+      "args": ["${CLAUDE_PLUGIN_ROOT}/packages/archkeep/lsp.mjs"],
       "extensionToLanguage": {
         ".go": "go",
         ".rs": "rust",
