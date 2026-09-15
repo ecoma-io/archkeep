@@ -196,6 +196,32 @@ describe("an empty diagnostic list means no violation, and nothing else", () => 
     expect(diagnostics[0].message).toContain("INCOMPLETE");
   });
 
+  it("refuses to call a document analyzed when the skip is the static tags refusal (#943)", () => {
+    // The same refusal record the static provider emits for a scalar-tags
+    // `project.json` — the row `indexGaps` turns into a sentence. `analyzed:
+    // true` over an index carrying this row would publish `[]` across the
+    // boundary the missing project's tags would have constrained.
+    const { analyzed, diagnostics } = diagnoseDocument({
+      ...REQUEST,
+      index: {
+        ...REQUEST.index,
+        skippedProjects: [
+          {
+            file: "apps/web/project.json",
+            reason:
+              'declares unusable tags "layer:domain" (a string) for project "web" in ' +
+              "apps/web/project.json — expected an array of non-empty strings",
+          },
+        ],
+      },
+    });
+
+    expect(analyzed).toBe(false);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0].message).toContain("apps/web/project.json");
+    expect(diagnostics[0].message).toContain("INCOMPLETE");
+  });
+
   it("puts what the tree was missing ahead of the verdict computed against it", () => {
     // Order is the argument: the qualification has to be read before the thing
     // it qualifies, or a reader takes the violation list for the whole answer.

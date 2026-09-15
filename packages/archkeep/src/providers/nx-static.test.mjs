@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import { PROJECT_CONFIG_FILE } from "./native/discover.mjs";
-import { buildNodes, discoverProjects } from "./nx-static.mjs";
+import { buildNodes, discoverProjects, readStaticProjectGraph } from "./nx-static.mjs";
 
 /** A tree as discovery reads one: a file list and a reader. */
 function tree(files) {
@@ -239,5 +239,155 @@ describe("the nodes a project list becomes", () => {
     ]);
 
     expect(duplicateProjects).toEqual([]);
+  });
+  it("refuses a scalar tags instead of letting a string into data.tags", () => {
+    // #943: a `tags` that is not an array slides verbatim into `data.tags`,
+    // and `../rules/tags.mjs` reads that list unguarded — a scalar then
+    // silently matches or misses every tag row. The static provider's policy
+    // for a judgment-shape defect is skip + record (the #846 identity case is
+    // the one throw), so the project leaves the graph and the skip names it.
+    const { nodes, skipped } = buildNodes([
+      { name: "web", root: "apps/web", config: { tags: "layer:domain" } },
+    ]);
+
+    expect(nodes.web).toBeUndefined();
+    expect(skipped).toEqual([
+      {
+        file: `apps/web/${PROJECT_CONFIG_FILE}`,
+        reason: expect.stringContaining("layer:domain"),
+      },
+    ]);
+    expect(skipped[0].reason).toContain(`apps/web/${PROJECT_CONFIG_FILE}`);
+    expect(skipped[0].reason).toContain('"web"');
+  });
+
+  it("refuses a tags array that holds a non-string entry, naming the index", () => {
+    // The array-shaped counterpart of the scalar: `["ok", 7]` IS an array, so
+    // the old `config.tags ?? []` line let it reach `data.tags` whole, where
+    // the 7 would silently match or miss every tag row it was compared with.
+    // The refusal names the offending index so the fix is one look away.
+    const { nodes, skipped } = buildNodes([
+      { name: "billing", root: "libs/billing", config: { tags: ["ok", 7] } },
+    ]);
+
+    expect(nodes.billing).toBeUndefined();
+    expect(skipped).toEqual([
+      {
+        file: `libs/billing/${PROJECT_CONFIG_FILE}`,
+        reason: expect.stringContaining("tags[1]"),
+      },
+    ]);
+    expect(skipped[0].reason).toContain("7");
+    expect(skipped[0].reason).toContain('"billing"');
+  });
+
+  it("keeps the tags array invariant on every node and names the broken project", () => {
+    // The silent direction #943 closes: a malformed-tags project must not sit
+    // in the graph beside a clean one, because its tags would match or miss
+    // every boundary the tree constrains without a sound. Every emitted node
+    // keeps the array shape the tag rules read unguarded, and the broken
+    // project is absent from the node list while named in skipped.
+    const { nodes, skipped } = buildNodes([
+      { name: "content", root: "libs/content", config: { tags: ["scope:content"] } },
+      { name: "web", root: "apps/web", config: { tags: "layer:domain" } },
+    ]);
+
+    expect(Object.keys(nodes)).toEqual(["content"]);
+    for (const node of Object.values(nodes)) {
+      expect(Array.isArray(node.data.tags)).toBe(true);
+    }
+    expect(skipped).toEqual([
+      {
+        file: `apps/web/${PROJECT_CONFIG_FILE}`,
+        reason: expect.stringContaining("layer:domain"),
+      },
+    ]);
+  });
+});
+
+describe("the composed static acquisition's skip record", () => {
+  it("publishes a scalar-tags refusal through skippedProjects, not just buildNodes' internal list", () => {
+    // The fold at the acquisition boundary is the untested half of #943:
+    // `../lsp/workspace-index.mjs` consumes `readStaticProjectGraph`, and the
+    // refusal `buildNodes` recorded must ride its `skippedProjects` — or the
+    // gap never reaches `indexGaps` and a tree with a broken-tags project
+    // reads clean.
+    const { nodes, skippedProjects } = readStaticProjectGraph({
+      root: "",
+      ...tree({
+        [`apps/web/${PROJECT_CONFIG_FILE}`]: '{"name":"web","tags":"layer:domain"}',
+      }),
+      readLayout: () => null,
+    });
+
+    expect(nodes.web).toBeUndefined();
+    expect(skippedProjects).toEqual([
+      {
+        file: `apps/web/${PROJECT_CONFIG_FILE}`,
+        reason: expect.stringContaining("layer:domain"),
+      },
+    ]);
+    expect(skippedProjects[0].reason).toContain(`apps/web/${PROJECT_CONFIG_FILE}`);
+    expect(skippedProjects[0].reason).toContain('"web"');
+  });
+
+  it("publishes a non-string-array-entry tags refusal with the offending index and value", () => {
+    const { skippedProjects } = readStaticProjectGraph({
+      root: "",
+      ...tree({
+        [`libs/billing/${PROJECT_CONFIG_FILE}`]: '{"name":"billing","tags":["ok",7]}',
+      }),
+      readLayout: () => null,
+    });
+
+    expect(skippedProjects).toEqual([
+      {
+        file: `libs/billing/${PROJECT_CONFIG_FILE}`,
+        reason: expect.stringContaining("tags[1]"),
+      },
+    ]);
+    expect(skippedProjects[0].reason).toContain("7");
+    expect(skippedProjects[0].reason).toContain('"billing"');
+  });
+
+  it("refuses an explicit null tags the same way it refuses any non-array value (#943)", () => {
+    // `config.tags ?? []` folded an EXPLICIT null into "untagged", so a
+    // project declaring `"tags": null` slid into the graph with `data.tags:
+    // []` and matched or missed every tag row unguarded. Only an ABSENT
+    // `tags` (undefined) means untagged; null is a declared non-array value
+    // and earns the same refusal record as a scalar.
+    const { nodes, skippedProjects } = readStaticProjectGraph({
+      root: "",
+      ...tree({
+        [`apps/webshop/${PROJECT_CONFIG_FILE}`]: '{"name":"webshop","tags":null}',
+      }),
+      readLayout: () => null,
+    });
+
+    expect(nodes.webshop).toBeUndefined();
+    expect(skippedProjects).toEqual([
+      {
+        file: `apps/webshop/${PROJECT_CONFIG_FILE}`,
+        reason: expect.stringContaining("null"),
+      },
+    ]);
+    expect(skippedProjects[0].reason).toContain('"webshop"');
+  });
+
+  it("keeps a clean project in the graph when a sibling's tags are refused", () => {
+    // The refusal must skip the broken project and nothing else: the good
+    // project still indexes while the broken one names the gap.
+    const { nodes, skippedProjects } = readStaticProjectGraph({
+      root: "",
+      ...tree({
+        [`apps/web/${PROJECT_CONFIG_FILE}`]: '{"name":"web","tags":"layer:domain"}',
+        [`libs/ok/${PROJECT_CONFIG_FILE}`]: '{"name":"ok","tags":["scope:ok"]}',
+      }),
+      readLayout: () => null,
+    });
+
+    expect(Object.keys(nodes)).toEqual(["ok"]);
+    expect(skippedProjects).toHaveLength(1);
+    expect(skippedProjects[0].file).toBe(`apps/web/${PROJECT_CONFIG_FILE}`);
   });
 });
