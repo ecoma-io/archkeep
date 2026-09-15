@@ -1,31 +1,68 @@
 /**
  * `analyzeVue` with the SFC parser unreachable or misbehaving.
  *
- * The parser is loaded lazily through `createRequire` (`./vue.mjs`'s header),
- * so in a tree with `vue` installed — this one — the "parser cannot be
- * reached" state can only be built by mocking `node:module`. The same mock
- * supplies a stand-in parser for the one error shape the real one cannot
- * produce: a parse error carrying no `message` at all.
+ * The parser is resolved per workspace (`./vue.mjs`, "Which Vue answers"): the
+ * analyzed workspace's own install first, archkeep's second. In a tree with
+ * `vue` installed — this one — "cannot be reached" is built through the
+ * resolution seam (`analyzeVue`'s second argument, passed to
+ * `resolveSfcParser`): each hop's requirer is replaced by an in-memory fake,
+ * and the same fake serves the one parse-error shape the real parser cannot
+ * produce — an error carrying no `message` at all. No node:module mock, no
+ * module reload.
  *
  * The contract pinned: a `.vue` file that cannot be parsed is a failure
  * record naming exactly what is absent, never an empty diagnostic list. An
  * editor draws nothing for `[]`, and a developer reads that as "checked,
  * clean".
  */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-const { mode } = vi.hoisted(() => ({ mode: { value: "missing-message" } }));
+import { analyzeVue } from "./vue.mjs";
 
-vi.mock("node:module", () => ({
-  createRequire: () => (_specifier) => {
-    if (mode.value === "missing-message") {
-      throw new Error("Cannot find module 'vue/compiler-sfc'");
-    }
-    if (mode.value === "missing-string") {
-      throw "no vue here";
-    }
-    return {
-      parse: (_text, _options) => ({
+const SFC = "<template><div /></template>\n<script>\nimport a from 'x';\n</scr" + "ipt>\n";
+
+/** A seam whose workspace hop and archkeep hop both refuse with `cause`. */
+const missingParser = (cause) => ({
+  createRequireForWorkspace: () => () => {
+    // A real require miss carries the module-absent code; the fake must too,
+    // so the hop classifies as absence and the both-absent refusal below is
+    // the one `archkeepFallback` produces — not the broken-copy refusal.
+    const absent = cause instanceof Error ? new Error(cause.message) : new Error(String(cause));
+    throw Object.assign(absent, { code: "MODULE_NOT_FOUND" });
+  },
+  localRequire: () => {
+    throw cause;
+  },
+});
+
+describe("analyzeVue with the SFC parser unreachable", () => {
+  it("turns a missing parser into a failure naming it, not an empty verdict", () => {
+    const { imports, failures } = analyzeVue(
+      { sourceFile: "a.vue", text: SFC, workspace: { root: "/w" } },
+      missingParser(new Error("Cannot find module 'vue/compiler-sfc'")),
+    );
+    expect(imports).toEqual([]);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].reason).toMatch(/'vue\/compiler-sfc' is not installed/);
+    expect(failures[0].reason).toMatch(/Cannot find module/);
+  });
+
+  it("still names the parser when the load failure is not an Error at all", () => {
+    // A thrown string carries no `message`; the `String(cause)` fallback must
+    // land in the raise rather than in a silent empty result.
+    const { failures } = analyzeVue(
+      { sourceFile: "a.vue", text: SFC, workspace: { root: "/w" } },
+      missingParser("no vue here"),
+    );
+    expect(failures[0].reason).toMatch(/'vue\/compiler-sfc' is not installed/);
+    expect(failures[0].reason).toMatch(/no vue here/);
+  });
+});
+
+describe("analyzeVue with a message-less parse error", () => {
+  it("builds the failure from the error's loc, whatever the error itself lacks", () => {
+    const parser = {
+      parse: () => ({
         descriptor: { script: null, scriptSetup: null },
         errors: [
           // The shape compiler-sfc never produces: a message-less error with a
@@ -34,43 +71,10 @@ vi.mock("node:module", () => ({
         ],
       }),
     };
-  },
-}));
-
-const load = async () => (await import("./vue.mjs")).analyzeVue;
-
-const SFC = "<template><div /></template>\n<script>\nimport a from 'x';\n</scr" + "ipt>\n";
-
-describe("analyzeVue with the SFC parser unreachable", () => {
-  it("turns a missing parser into a failure naming it, not an empty verdict", async () => {
-    mode.value = "missing-message";
-    vi.resetModules();
-    const analyzeVue = await load();
-    const { imports, failures } = analyzeVue({ sourceFile: "a.vue", text: SFC, workspace: {} });
-    expect(imports).toEqual([]);
-    expect(failures).toHaveLength(1);
-    expect(failures[0].reason).toMatch(/'vue\/compiler-sfc' is not installed/);
-    expect(failures[0].reason).toMatch(/Cannot find module/);
-  });
-
-  it("still names the parser when the load failure is not an Error at all", async () => {
-    // A thrown string carries no `message`; the `String(cause)` fallback must
-    // land in the raise rather than in a silent empty result.
-    mode.value = "missing-string";
-    vi.resetModules();
-    const analyzeVue = await load();
-    const { failures } = analyzeVue({ sourceFile: "a.vue", text: SFC, workspace: {} });
-    expect(failures[0].reason).toMatch(/'vue\/compiler-sfc' is not installed/);
-    expect(failures[0].reason).toMatch(/no vue here/);
-  });
-});
-
-describe("analyzeVue with a message-less parse error", () => {
-  it("builds the failure from the error's loc, whatever the error itself lacks", async () => {
-    mode.value = "message-less";
-    vi.resetModules();
-    const analyzeVue = await load();
-    const { failures } = analyzeVue({ sourceFile: "a.vue", text: SFC, workspace: {} });
+    const { failures } = analyzeVue(
+      { sourceFile: "a.vue", text: SFC, workspace: { root: "/w" } },
+      { createRequireForWorkspace: () => () => parser, localRequire: () => parser },
+    );
     expect(failures).toEqual([
       {
         sourceFile: "a.vue",
