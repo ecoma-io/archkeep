@@ -40,11 +40,12 @@ afterEach(() => {
 });
 
 /**
- * The workspace stub's parse-throw message. A module-level constant on
- * purpose: the stub is executable JS written into the fixture workspace,
- * and CodeQL's `js/bad-code-sanitization` flags parameter-driven code
- * construction here. A constant carries no taint; the assertion below
- * reads the same constant, so the two cannot drift.
+ * The workspace stub's parse-throw message, asserted by the tests below.
+ * It must match the message inside `fixtureWithParser`'s stub — the two
+ * are adjacent by design, because CodeQL's `js/bad-code-sanitization`
+ * flags ANY interpolation into code construction (`JSON.stringify` of
+ * this constant included — alert 20), so the stub is a fully static
+ * literal and the message lives in one copy: here and in the stub.
  */
 const WORKSPACE_MARKER = "the workspace's vue";
 
@@ -61,7 +62,7 @@ function fixtureWithParser() {
   mkdirSync(vueDir, { recursive: true });
   writeFileSync(
     join(vueDir, "compiler-sfc.js"),
-    `module.exports = { parse: () => { throw new Error(${JSON.stringify(WORKSPACE_MARKER)}); } };\n`,
+    'module.exports = { parse: () => { throw new Error("the workspace\'s vue"); } };\n',
   );
   return root;
 }
