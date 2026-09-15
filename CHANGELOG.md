@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.31.0](https://github.com/ecoma-io/archkeep/compare/v0.30.0...v0.31.0) (2026-09-15)
+
+
+### Features
+
+* **archkeep:** bind delta verdict to baseline bytes and pinned commits ([#923](https://github.com/ecoma-io/archkeep/issues/923), [#924](https://github.com/ecoma-io/archkeep/issues/924)) ([#947](https://github.com/ecoma-io/archkeep/issues/947)) ([dddd6a1](https://github.com/ecoma-io/archkeep/commit/dddd6a1bcda3190e0f3ed6a452c371160882df1d))
+
+
+### Bug Fixes
+
+* **archkeep:** [#844](https://github.com/ecoma-io/archkeep/issues/844) hardening verification, named-class gaps, mutation proof-of-value ([#945](https://github.com/ecoma-io/archkeep/issues/945)) ([92c7792](https://github.com/ecoma-io/archkeep/commit/92c779219f7057112d9fae299eeeb37fa08d9fbd))
+* **archkeep:** resolve vue/compiler-sfc from the analyzed workspace ([#939](https://github.com/ecoma-io/archkeep/issues/939)) ([#948](https://github.com/ecoma-io/archkeep/issues/948)) ([71aa96a](https://github.com/ecoma-io/archkeep/commit/71aa96ac3de7f88551c06ae4e72ed45bee005ebe))
+* **workspace:** agent-suite marker gates measure the shipped skill layer ([#935](https://github.com/ecoma-io/archkeep/issues/935)) ([#946](https://github.com/ecoma-io/archkeep/issues/946)) ([06fcd5a](https://github.com/ecoma-io/archkeep/commit/06fcd5a65ed46763d9ae4b37a2385a3d9babc9fe))
+
 ## [0.30.0](https://github.com/ecoma-io/archkeep/compare/v0.29.0...v0.30.0) (2026-09-12)
 
 
