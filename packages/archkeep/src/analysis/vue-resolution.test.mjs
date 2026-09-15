@@ -40,18 +40,28 @@ afterEach(() => {
 });
 
 /**
- * A real workspace whose `node_modules/vue/compiler-sfc` is a stub whose
- * `parse` throws `marker` — a behaviour archkeep's installed Vue does not
- * have, so an analysis failing with `marker` proves the WORKSPACE copy won.
+ * The workspace stub's parse-throw message. A module-level constant on
+ * purpose: the stub is executable JS written into the fixture workspace,
+ * and CodeQL's `js/bad-code-sanitization` flags parameter-driven code
+ * construction here. A constant carries no taint; the assertion below
+ * reads the same constant, so the two cannot drift.
  */
-function fixtureWithParser(marker) {
+const WORKSPACE_MARKER = "the workspace's vue";
+
+/**
+ * A real workspace whose `node_modules/vue/compiler-sfc` is a stub whose
+ * `parse` throws `WORKSPACE_MARKER` — a behaviour the archkeep-side Vue
+ * does not have, so an analysis failing with that message proves the
+ * WORKSPACE copy won.
+ */
+function fixtureWithParser() {
   const root = mkdtempSync(join(tmpdir(), "archkeep-vue-resolution-"));
   fixtureRoots.push(root);
   const vueDir = join(root, "node_modules", "vue");
   mkdirSync(vueDir, { recursive: true });
   writeFileSync(
     join(vueDir, "compiler-sfc.js"),
-    `module.exports = { parse: () => { throw new Error(${JSON.stringify(marker)}); } };\n`,
+    `module.exports = { parse: () => { throw new Error(${JSON.stringify(WORKSPACE_MARKER)}); } };\n`,
   );
   return root;
 }
@@ -82,10 +92,10 @@ const CLEAN_PARSER = {
 
 describe("resolveSfcParser — which install wins", () => {
   it("uses the analyzed workspace's own install when the workspace has one", () => {
-    const root = fixtureWithParser("the workspace's vue");
+    const root = fixtureWithParser();
     const { parse, error } = resolveSfcParser(root);
     expect(error).toBeNull();
-    expect(() => parse("<template/>", {})).toThrow("the workspace's vue");
+    expect(() => parse("<template/>", {})).toThrow(WORKSPACE_MARKER);
   });
 
   it("falls back to archkeep's install when the workspace has none", () => {
@@ -171,21 +181,27 @@ describe("resolveSfcParser — a broken workspace copy is a loud refusal, never 
 });
 
 describe("analyzeVue — resolution is per workspace object", () => {
-  it("parses with each workspace's own copy, remembered per workspace", () => {
-    const workspaceA = { root: fixtureWithParser("from workspace A") };
-    const workspaceB = { root: fixtureWithParser("from workspace B") };
+  it("resolves each workspace's own copy: parse-throwing vs broken-load, remembered per workspace", () => {
+    // A's own copy parses (and throws WORKSPACE_MARKER on use); B's own copy
+    // exists but cannot load. Two different failure modes, so the assertion
+    // names which workspace's copy acted — without ever generating code
+    // from a runtime value.
+    const workspaceA = { root: fixtureWithParser() };
+    const workspaceB = { root: fixtureWithBrokenCompilerSfc() };
 
     const first = analyzeVue({ sourceFile: "a.vue", text: SFC, workspace: workspaceA });
-    expect(first.failures[0].reason).toBe("Vue analysis failed: from workspace A");
+    expect(first.failures[0].reason).toBe(`Vue analysis failed: ${WORKSPACE_MARKER}`);
 
     // The same workspace object is remembered — still A's copy, no re-resolve.
     const again = analyzeVue({ sourceFile: "a.vue", text: SFC, workspace: workspaceA });
-    expect(again.failures[0].reason).toBe("Vue analysis failed: from workspace A");
+    expect(again.failures[0].reason).toBe(`Vue analysis failed: ${WORKSPACE_MARKER}`);
 
     // A different workspace object resolves ITS OWN root — the cache is keyed
-    // on workspace identity, never process-global (the old singleton would
-    // hand B A's parser here).
+    // on workspace identity, never process-global (a global singleton would
+    // hand B A's parse-throwing copy here; B's broken-load message names it
+    // instead).
     const other = analyzeVue({ sourceFile: "a.vue", text: SFC, workspace: workspaceB });
-    expect(other.failures[0].reason).toBe("Vue analysis failed: from workspace B");
+    expect(other.failures[0].reason).toContain("the workspace copy is broken");
+    expect(other.failures[0].reason).not.toContain(WORKSPACE_MARKER);
   });
 });
