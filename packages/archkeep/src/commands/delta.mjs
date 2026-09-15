@@ -143,7 +143,7 @@ export { FULL_SHA };
  *
  * @param {string} reason The refused run's answer, verbatim in the
  *   decision and as the coverage note.
- * @param {{root: string, provider: string, marker: string, graph: object,
+ * @param {{root: string, provider: "nx"|"native"|"moon", marker: string, graph: object,
  *   analysis: object, headProvenance: object|null}} ctx The facts the
  *   refusal reports: the workspace context for the envelope and the head
  *   provenance this run resolved (the same value a successful run would
