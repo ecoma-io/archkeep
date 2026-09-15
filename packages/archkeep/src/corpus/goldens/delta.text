@@ -1,4 +1,4 @@
-baseline  <fixture-root>/.archkeep-delta.json — 1fd51709, 2 records, 3 projects
+baseline  <fixture-root>/.archkeep-delta.json (sha256:d716142561830763b7b0172afbb3fd511f19810b37868e214ec1afd5f333bef9) — 1fd51709, 2 records, 3 projects
 head      1fd51709, 2 records, 3 projects
 ✔ no introduced violations — compared baseline 1fd51709 (2 records) against head 1fd51709 (2 records, 3 analyzed files, 3 projects)
 classifications  none

@@ -41,7 +41,8 @@
       },
       "policyFingerprint": "e18ba4307f6baaaa0d558822327788e8925cb3c52dfac6b170ce4d89b5a728ca",
       "records": 2,
-      "projects": 3
+      "projects": 3,
+      "digest": "sha256:d716142561830763b7b0172afbb3fd511f19810b37868e214ec1afd5f333bef9"
     },
     "head": {
       "provenance": {

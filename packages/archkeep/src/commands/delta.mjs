@@ -107,6 +107,7 @@ import {
   serializeEvidenceSnapshot,
 } from "./delta-snapshot.mjs";
 import { computeDiff } from "./diff.mjs";
+import { FULL_SHA } from "./evolution.mjs";
 import { isAbsolute, resolve } from "node:path";
 import { buildDependencies, buildProjects, computePolicyFingerprint } from "./graph.mjs";
 import { eventSnapshotSide } from "./history.mjs";
@@ -120,6 +121,74 @@ import { resolvePolicy } from "./policy.mjs";
 const require = createRequire(import.meta.url);
 /** @type {{name: string, version: string}} */
 const { name: TOOL_NAME, version: TOOL_VERSION } = require("../../package.json");
+
+/**
+ * The only spelling a `--expect-*-sha` pin accepts: a full 40-hex commit
+ * SHA — the same spelling evolution's `FULL_SHA` owns (`./evolution.mjs`).
+ * A short or ambiguous spelling is refused at the CLI (exit 2), never
+ * folded into "no pin" — a pin is a declaration that THIS exact commit be
+ * judged, and a value the run could not compare against the envelope's
+ * provenance is a malformed declaration, not an absent one.
+ */
+export { FULL_SHA };
+
+/**
+ * The one no-verdict return shape every delta refusal shares (#608's
+ * coverage contract, reused by the exit fold and by the #924 pin gates):
+ * status "no-verdict", exit 3, `coverage` complete with the refusal as its
+ * single note, no `result` (the key `jsonEnvelope` drops when undefined),
+ * no `eventWrite`, and no SARIF face — a comparison that could not be
+ * judged has nothing to render, and the envelope's `coverage` plus its
+ * `decision.reason` are the whole answer.
+ *
+ * @param {string} reason The refused run's answer, verbatim in the
+ *   decision and as the coverage note.
+ * @param {{root: string, provider: "nx"|"native"|"moon", marker: string, graph: object,
+ *   analysis: object, headProvenance: object|null}} ctx The facts the
+ *   refusal reports: the workspace context for the envelope and the head
+ *   provenance this run resolved (the same value a successful run would
+ *   report).
+ * @returns {{status: "no-verdict", exitCode: 3, coverage: object,
+ *   report: {text: string, json: string}}}
+ */
+export function deltaRefusal(reason, { root, provider, marker, graph, analysis, headProvenance }) {
+  const coverage = {
+    complete: true,
+    projects: Object.keys(graph.nodes).length,
+    analyzedFiles: analysis.analyzed,
+    imports: analysis.imports.length,
+    notAnalyzed: [],
+    blindSpots: blindSpotRows(analysis.failures),
+    notes: [reason],
+  };
+  return {
+    status: "no-verdict",
+    exitCode: 3,
+    coverage,
+    report: {
+      text: `delta: no verdict — ${reason}\n`,
+      json: renderJson(
+        jsonEnvelope({
+          command: "delta",
+          context: { root, provider, marker, provenance: headProvenance },
+          status: "no-verdict",
+          exitCode: 3,
+          coverage,
+          // The refusal-withheld payload, stated the way `coverageRefusal`
+          // states it: `jsonEnvelope` requires the key, the refusal has no
+          // result to report.
+          result: undefined,
+          decision: buildDecision({
+            status: "no-verdict",
+            coverageComplete: true,
+            findings: 0,
+            reason,
+          }),
+        }),
+      ),
+    },
+  };
+}
 
 /**
  * Refuses the unregistered-plugin head state no delta side may be built over:
@@ -597,6 +666,7 @@ const short = (fingerprint) =>
  * @param {object} commandContext From `resolveCommandContext`.
  * @param {{config: object|null, readBaseline?: (path: string) => object,
  *   now?: string, eventOut?: string|null,
+ *   expectHeadSha?: string|null, expectBaseSha?: string|null,
  *   loadIntentOverride?: (root: string, opts?: object) => Promise<object|undefined>,
  *   readArtifact?: (artifact: string) => Uint8Array|null,
  *   timeoutMs?: number}} io The resolved boundary config (required
@@ -633,6 +703,8 @@ export async function deltaCommand(
     readBaseline = readEvidenceSnapshot,
     now = referenceTime(),
     eventOut = null,
+    expectHeadSha,
+    expectBaseSha,
     loadIntentOverride,
     ...customRuleIo
   },
@@ -677,6 +749,55 @@ export async function deltaCommand(
     );
   }
 
+  // The #924 pin gates, placed AFTER the provider-mismatch refusal and
+  // BEFORE either side is judged: when `--expect-head-sha` / `--expect-base-sha`
+  // declared the exact commits this run may judge, a run whose provenances
+  // disagree is refused with the same no-verdict envelope the coverage and
+  // fold refusals return (status "no-verdict", exit 3, no result, the
+  // decision naming the flag, the pinned SHA and the observed SHA). The
+  // head "actual" is the SAME provenance this run reports — resolved here,
+  // once, hoisted from below so the check and the envelope can never
+  // disagree about what the head is; the base "actual" is the baseline
+  // snapshot's own captured-at provenance, never a fresh read of the tree.
+  // A pin whose state carries no provenance refuses too: the declaration
+  // pins THIS exact commit, and a run that cannot show it must not judge
+  // the unpinned state — the silent direction is a pinned run over an
+  // unverifiable one.
+  const headProvenance = resolveProvenance(root);
+  if (expectHeadSha != null) {
+    const actual = headProvenance?.commit;
+    if (actual === undefined) {
+      return deltaRefusal(
+        `--expect-head-sha pins the head commit to ${expectHeadSha}, but this run's head carries ` +
+          `no provenance to compare it against`,
+        { root, provider, marker, graph, analysis, headProvenance },
+      );
+    }
+    if (actual !== expectHeadSha) {
+      return deltaRefusal(
+        `--expect-head-sha pins the head commit to ${expectHeadSha}, but the run's head is ${actual}`,
+        { root, provider, marker, graph, analysis, headProvenance },
+      );
+    }
+  }
+  if (expectBaseSha != null) {
+    const actual = baseline.provenance?.commit;
+    if (actual === undefined) {
+      return deltaRefusal(
+        `--expect-base-sha pins the baseline commit to ${expectBaseSha}, but the baseline was ` +
+          `captured without provenance to compare it against`,
+        { root, provider, marker, graph, analysis, headProvenance },
+      );
+    }
+    if (actual !== expectBaseSha) {
+      return deltaRefusal(
+        `--expect-base-sha pins the baseline commit to ${expectBaseSha}, but the baseline was ` +
+          `captured at ${actual}`,
+        { root, provider, marker, graph, analysis, headProvenance },
+      );
+    }
+  }
+
   const baseGraph = evidenceGraphToProjectGraph(baseline.graph);
   const configWithNow = { ...config, now };
   // Both sides RAW (pre-suppression), through the same walk `waivers` reads:
@@ -696,7 +817,6 @@ export async function deltaCommand(
     sourceProjectOf: sourceProjectAttributor(graph, baseline.graph.projects),
   });
 
-  const headProvenance = resolveProvenance(root);
   const headFingerprint = computePolicyFingerprint(config);
   const meta = compareSnapshotMetadata({
     baselineProvider: baseline.provider,
@@ -860,37 +980,7 @@ export async function deltaCommand(
   // whose counts could not be read has no result to report.
   const fold = deltaFold(classification, custom);
   if (fold.refused !== undefined) {
-    const refusalCoverage = {
-      complete: true,
-      projects: Object.keys(graph.nodes).length,
-      analyzedFiles: analysis.analyzed,
-      imports: analysis.imports.length,
-      notAnalyzed: [],
-      blindSpots: blindSpotRows(analysis.failures),
-      notes: [fold.refused],
-    };
-    return {
-      status: fold.status,
-      exitCode: fold.exitCode,
-      coverage: refusalCoverage,
-      report: {
-        text: `delta: no verdict — ${fold.refused}\n`,
-        json: renderJson(
-          jsonEnvelope({
-            command: "delta",
-            context: { root, provider, marker, provenance: headProvenance },
-            status: fold.status,
-            exitCode: fold.exitCode,
-            coverage: refusalCoverage,
-            // The refusal-withheld payload, stated the way `coverageRefusal`
-            // states it: `jsonEnvelope` requires the key, the refusal has no
-            // result to report.
-            result: undefined,
-            decision: fold.decision,
-          }),
-        ),
-      },
-    };
+    return deltaRefusal(fold.refused, { root, provider, marker, graph, analysis, headProvenance });
   }
 
   if (custom !== null) {
@@ -963,6 +1053,7 @@ export async function deltaCommand(
       policyFingerprint: baseline.policyFingerprint,
       records: baseline.records.length,
       projects: baseline.graph.projects.length,
+      ...(typeof baseline.digest === "string" ? { digest: `sha256:${baseline.digest}` } : {}),
     },
     head: {
       provenance: headProvenance,
@@ -1159,7 +1250,8 @@ export async function captureBaseline(options, { cwd, readGraph, listFiles }) {
  * IO seams, and where output lands. The engine this returns from is
  * `deltaCommand` above, unchanged.
  *
- * @param {{config: string|null, eventOut: string|null, paths: string[]}} options
+ * @param {{config: string|null, eventOut: string|null, paths: string[],
+ *   expectHeadSha: string|null, expectBaseSha: string|null}} options
  *   This run's parsed flags; `paths[0]` is the baseline file.
  * @param {{cwd: string, readGraph?: Function, listFiles?: Function}} io The
  *   seams a test injects, the same ones `check` takes.
@@ -1177,5 +1269,7 @@ export async function delta(options, { cwd, readGraph, listFiles }) {
   return deltaCommand(baselinePath, commandContext, {
     config,
     eventOut: options.eventOut,
+    expectHeadSha: options.expectHeadSha,
+    expectBaseSha: options.expectBaseSha,
   });
 }

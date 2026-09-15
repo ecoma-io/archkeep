@@ -212,9 +212,10 @@ the split is each command's own envelope shape, not the refusal's:
   the whole tree.
 - the rest — `drift`, `reconcile`, `waivers`, `debt`, `fitness`, `impact`,
   `scenario`, `diff`, `delta` (compare) and `change` — refuse through the one
-  shared builder (`packages/archkeep/src/commands/coverage-verdict.mjs`'s
-  `coverageRefusal`), whose envelope carries no `result` at all: the verdict
-  was withheld, so the `coverage` block is the whole payload. `delta` and
+  shared envelope shape (`coverageRefusal` in
+  `packages/archkeep/src/commands/coverage-verdict.mjs` and `delta`'s own
+  `deltaRefusal` build the same no-`result` contract): the verdict was
+  withheld, so the `coverage` block is the whole payload. `delta` and
   `change` additionally carry their usual `decision`, with `decision.reason`
   naming the clauses.
 

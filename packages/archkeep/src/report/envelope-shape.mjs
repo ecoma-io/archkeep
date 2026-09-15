@@ -148,8 +148,8 @@ function walk(value, path, byPath) {
  * dropped, or changed type, and every one of those breaks a consumer that
  * parses this output today.
  *
- * @param {string[]} recorded The snapshot's entries for this command.
- * @param {string[]} observed `envelopeFieldPaths` over a real run.
+ * @param {readonly string[]} recorded The snapshot's entries for this command.
+ * @param {readonly string[]} observed `envelopeFieldPaths` over a real run.
  * @returns {{added: string[], removed: string[]}}
  */
 export function compareFieldPaths(recorded, observed) {

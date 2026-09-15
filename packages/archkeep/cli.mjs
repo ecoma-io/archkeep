@@ -122,6 +122,7 @@ import {
   diff,
   drift,
   evolutionCommand,
+  FULL_SHA,
   history,
   historyOutputRefusal,
   reconcileCommand,
@@ -907,7 +908,8 @@ async function runDiff(options, { cwd, env }) {
  * `--capture` writes the evidence snapshot a later run compares against;
  * `delta <baseline>` loads one, re-judges both sides under the current law,
  * @param {{format: string, output: string|null, config: string|null, capture: boolean,
- *   eventOut: string|null, paths: string[]}} options
+ *   eventOut: string|null, expectHeadSha: string|null, expectBaseSha: string|null,
+ *   paths: string[]}} options
  * @param {{cwd: string, env: {out: Function, err: Function, readGraph?: Function, listFiles?: Function}}} runContext
  * @returns {Promise<number>}
  */
@@ -926,12 +928,34 @@ async function runDelta(options, { cwd, env }) {
       );
       return EXIT.usage;
     }
+    if (options.expectHeadSha !== null || options.expectBaseSha !== null) {
+      env.err(
+        `archkeep: delta --capture does not take --expect-head-sha / --expect-base-sha — a pin ` +
+          `declares which commits a compare may judge, and a capture is the state being pinned`,
+      );
+      return EXIT.usage;
+    }
   } else if (options.paths.length !== 1) {
     env.err(
       `archkeep: delta takes exactly one positional argument (the baseline evidence snapshot), ` +
         `or --capture to write one; got ${options.paths.length}`,
     );
     return EXIT.usage;
+  }
+
+  // A pin is a declaration that THIS exact 40-hex commit be judged; a value
+  // that cannot be that — short, mixed-case, non-hex — is a malformed
+  // declaration, refused here like every other malformed delta flag (exit 2),
+  // never folded into "no pin" (which would silently skip the gate #924
+  // exists to hold).
+  for (const [flag, value] of [
+    ["--expect-head-sha", options.expectHeadSha],
+    ["--expect-base-sha", options.expectBaseSha],
+  ]) {
+    if (value !== null && !FULL_SHA.test(value)) {
+      env.err(`archkeep: delta ${flag} needs a full 40-hex commit SHA; got '${value}'`);
+      return EXIT.usage;
+    }
   }
 
   let result;
@@ -2427,6 +2451,26 @@ const DELTA_FLAG_HELP = Object.freeze([
       "Absent: no event file is written",
     ]),
   }),
+  Object.freeze({
+    flag: "--expect-head-sha",
+    key: "expectHeadSha",
+    arg: "<sha>",
+    describe: Object.freeze([
+      "Pin the run's head to this exact 40-hex commit: a",
+      "run whose head differs refuses with no verdict (exit",
+      "3), never judging an unpinned state",
+    ]),
+  }),
+  Object.freeze({
+    flag: "--expect-base-sha",
+    key: "expectBaseSha",
+    arg: "<sha>",
+    describe: Object.freeze([
+      "Pin the baseline to the exact 40-hex commit it was",
+      "captured at; a baseline captured elsewhere refuses",
+      "with no verdict (exit 3)",
+    ]),
+  }),
 ]);
 
 /**
@@ -3250,6 +3294,8 @@ const COMMANDS = Object.freeze({
       config: null,
       capture: false,
       eventOut: null,
+      expectHeadSha: null,
+      expectBaseSha: null,
     }),
     formats: DELTA_FORMATS,
     booleans: Object.freeze(["capture"]),

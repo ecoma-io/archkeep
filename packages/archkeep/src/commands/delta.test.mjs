@@ -1,14 +1,23 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
+import { SPAWN_BUDGET_MS, SPAWN_TEST_BUDGET_MS } from "../../spawn-budget.mjs";
+
+import { compareFieldPaths, envelopeFieldPaths } from "../report/envelope-shape.mjs";
 
 import { buildRuleModule } from "../custom-rules/wasm-fixture.mjs";
 import { captureDelta, deltaCommand, deltaFold, evidenceGraphToProjectGraph } from "./delta.mjs";
-import { parseEvidenceSnapshot, serializeEvidenceSnapshot } from "./delta-snapshot.mjs";
+import {
+  parseEvidenceSnapshot,
+  readEvidenceSnapshot,
+  serializeEvidenceSnapshot,
+} from "./delta-snapshot.mjs";
 import { computePolicyFingerprint } from "./graph.mjs";
 
 /**
@@ -428,6 +437,30 @@ describe("deltaCommand", () => {
     await expect(
       deltaCommand("/invented/base.json", contextOf(), { config: null, readBaseline, now: NOW }),
     ).rejects.toThrow(/boundary config/u);
+  });
+  it("carries the baseline FILE bytes' sha256 as result.baseline.digest", async () => {
+    const { snapshot } = baselineOf({ records: [] });
+    const text = serializeEvidenceSnapshot(snapshot);
+    // The loader is the real one — only its read is injected — so the digest
+    // is exactly what deltaCommand receives from disk bytes in a real run.
+    const result = await deltaCommand("/invented/base.json", contextOf({ records: [] }), {
+      config: config(),
+      readBaseline: (path) => readEvidenceSnapshot(path, { read: () => text }),
+      now: NOW,
+    });
+    expect(result.delta.baseline.digest).toBe(
+      `sha256:${createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex")}`,
+    );
+  });
+
+  it("omits baseline.digest when the baseline seam supplied no bytes to hash", async () => {
+    const { readBaseline } = baselineOf({ records: [] });
+    const result = await deltaCommand("/invented/base.json", contextOf({ records: [] }), {
+      config: config(),
+      readBaseline,
+      now: NOW,
+    });
+    expect(result.delta.baseline).not.toHaveProperty("digest");
   });
 
   it("notes a policy change loudly instead of refusing — both sides answer to the current law", async () => {
@@ -866,5 +899,283 @@ describe("deltaFold input latch", () => {
     expect(fold.status).toBe("no-verdict");
     expect(fold.exitCode).toBe(3);
     expect(fold.refused).toContain('"classification.violations.introduced"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #924 delta commit pins: the compare refuses a run whose head or baseline
+// provenance disagrees with the declared `--expect-*-sha`, and a run with no
+// pins stays byte-identical to the pre-#924 envelope.
+//
+// The mismatch lanes assert the SILENT direction — a pinned run must never
+// judge an unpinned state, so the proof is the withheld verdict (status
+// no-verdict, exit 3, no `result`, no event), with the decision's reason
+// naming the flag, the expected SHA and the observed SHA.
+// ---------------------------------------------------------------------------
+
+const gitRoot = join(root, "git");
+const git = (...args) =>
+  spawnSync("git", args, {
+    cwd: gitRoot,
+    encoding: "utf8",
+    timeout: SPAWN_BUDGET_MS,
+    killSignal: "SIGKILL",
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "t",
+      GIT_AUTHOR_EMAIL: "t@t",
+      GIT_COMMITTER_NAME: "t",
+      GIT_COMMITTER_EMAIL: "t@t",
+      HOME: process.env.HOME,
+    },
+  });
+beforeAll(() => {
+  mkdirSync(gitRoot, { recursive: true });
+  writeFileSync(join(gitRoot, "README.md"), "fixture\n");
+  expect(git("init", "-q", "-b", "main").status).toBe(0);
+  expect(git("add", "-A").status).toBe(0);
+  expect(git("commit", "-q", "-m", "base").status).toBe(0);
+}, SPAWN_TEST_BUDGET_MS);
+
+/** A context rooted in the committed fixture: provenance resolves to HEAD. */
+function gitContextOf(records = []) {
+  return {
+    root: gitRoot,
+    provider: "nx",
+    marker: "nx.json",
+    graph: engineGraph(),
+    analysis: {
+      imports: records,
+      failures: [],
+      analyzed: 2,
+      analyzedFiles: [],
+      exemptedFiles: [],
+    },
+    owned: [],
+    pluginGap: { registered: true, manifests: [] },
+  };
+}
+
+/**
+ * A baseline captured in the git root, read through the REAL loader (its read
+ * injected) so the #923 file-bytes digest rides the envelope — the same shape
+ * a file on disk reaches `deltaCommand` with.
+ */
+function gitBaselineOf(records = []) {
+  const { text } = captureDelta(gitContextOf(records), { config: config() });
+  return (path) => readEvidenceSnapshot(path, { read: () => text });
+}
+
+// The pre-#924 envelope field roster, frozen from a real no-pins run over the
+// committed fixture at #923's HEAD: `result.baseline.digest: string` is the
+// #923 addition, and nothing pin-related exists. Comparing a no-pins run's
+// envelope against this literal is the tripwire for BOTH directions the
+// promise makes — #924 adds no envelope field (`added` must stay empty) and
+// removes none (`removed` must stay empty).
+const PRE_924_DELTA_ROSTER = Object.freeze([
+  "command: string",
+  "coverage: object",
+  "coverage.analyzedFiles: number",
+  "coverage.blindSpots: array",
+  "coverage.complete: boolean",
+  "coverage.imports: number",
+  "coverage.notAnalyzed: array",
+  "coverage.notes: array",
+  "coverage.projects: number",
+  "decision: object",
+  "decision.verdict: string",
+  "exitCode: number",
+  "result: object",
+  "result.affected: object",
+  "result.affected.boundaries: array",
+  "result.affected.constraints: array",
+  "result.affected.decisions: array",
+  "result.affected.projects: array",
+  "result.baseline: object",
+  "result.baseline.digest: string",
+  "result.baseline.path: string",
+  "result.baseline.policyFingerprint: string",
+  "result.baseline.projects: number",
+  "result.baseline.provenance: object",
+  "result.baseline.provenance.commit: string",
+  "result.baseline.provenance.dirty: boolean",
+  "result.baseline.provenance.remote: null",
+  "result.baseline.provider: string",
+  "result.baseline.records: number",
+  "result.baseline.tool: object",
+  "result.baseline.tool.name: string",
+  "result.baseline.tool.version: string",
+  "result.classifications: array",
+  "result.head: object",
+  "result.head.policyFingerprint: string",
+  "result.head.projects: number",
+  "result.head.provenance: object",
+  "result.head.provenance.commit: string",
+  "result.head.provenance.dirty: boolean",
+  "result.head.provenance.remote: null",
+  "result.head.records: number",
+  "result.policyChanged: boolean",
+  "result.summary: object",
+  "result.summary.introduced: number",
+  "result.summary.introducedWaived: number",
+  "result.summary.resolved: number",
+  "result.summary.unchanged: number",
+  "result.summary.unknown: number",
+  "result.summary.unresolvable: object",
+  "result.summary.unresolvable.introduced: number",
+  "result.summary.unresolvable.resolved: number",
+  "result.summary.unresolvable.unchanged: number",
+  "result.summary.unresolvable.unknown: number",
+  "result.unresolvable: object",
+  "result.unresolvable.introduced: array",
+  "result.unresolvable.resolved: array",
+  "result.unresolvable.unchanged: array",
+  "result.unresolvable.unknown: array",
+  "result.violations: object",
+  "result.violations.introduced: array",
+  "result.violations.resolved: array",
+  "result.violations.unchanged: array",
+  "result.violations.unknown: array",
+  "schemaVersion: number",
+  "status: string",
+  "tool: object",
+  "tool.name: string",
+  "tool.version: string",
+  "workspace: object",
+  "workspace.marker: string",
+  "workspace.provenance: object",
+  "workspace.provenance.commit: string",
+  "workspace.provenance.dirty: boolean",
+  "workspace.provenance.remote: null",
+  "workspace.provider: string",
+  "workspace.root: string",
+]);
+
+describe("delta commit pins (#924)", () => {
+  const headSha = () => git("rev-parse", "HEAD").stdout.trim();
+
+  it("passes a matching head pin through to the verdict", async () => {
+    const result = await deltaCommand("/invented/base.json", gitContextOf(), {
+      config: config(),
+      readBaseline: gitBaselineOf(),
+      expectHeadSha: headSha(),
+    });
+    expect(result.status).toBe("ok");
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("passes a matching base pin through to the verdict", async () => {
+    const baseline = gitBaselineOf();
+    const baseSha = baseline("/invented/base.json").provenance.commit;
+    const result = await deltaCommand("/invented/base.json", gitContextOf(), {
+      config: config(),
+      readBaseline: baseline,
+      expectBaseSha: baseSha,
+    });
+    expect(result.status).toBe("ok");
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("passes matching head AND base pins through to the verdict", async () => {
+    const baseline = gitBaselineOf();
+    const result = await deltaCommand("/invented/base.json", gitContextOf(), {
+      config: config(),
+      readBaseline: baseline,
+      expectHeadSha: headSha(),
+      expectBaseSha: baseline("/invented/base.json").provenance.commit,
+    });
+    expect(result.status).toBe("ok");
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("refuses a mismatched head pin with no verdict, naming the expected and actual commits", async () => {
+    const expected = "0".repeat(40);
+    const result = await deltaCommand("/invented/base.json", gitContextOf(), {
+      config: config(),
+      readBaseline: gitBaselineOf(),
+      expectHeadSha: expected,
+    });
+    // The silent direction: a pinned run over an unpinned state must not
+    // judge — the refusal withholds the verdict, the `result`, and the event.
+    expect(result.status).toBe("no-verdict");
+    expect(result.exitCode).toBe(3);
+    expect(result).not.toHaveProperty("delta");
+    expect(result).not.toHaveProperty("eventWrite");
+    expect(result.report).not.toHaveProperty("sarif");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope).not.toHaveProperty("result");
+    expect(envelope.decision.verdict).toBe("unknown");
+    expect(envelope.decision.reason).toContain("--expect-head-sha");
+    expect(envelope.decision.reason).toContain(expected);
+    expect(envelope.decision.reason).toContain(headSha());
+  });
+
+  it("refuses a mismatched base pin with no verdict, naming the expected and captured commits", async () => {
+    const expected = "1".repeat(40);
+    const result = await deltaCommand("/invented/base.json", gitContextOf(), {
+      config: config(),
+      readBaseline: gitBaselineOf(),
+      expectBaseSha: expected,
+    });
+    expect(result.status).toBe("no-verdict");
+    expect(result.exitCode).toBe(3);
+    expect(result).not.toHaveProperty("delta");
+    expect(result).not.toHaveProperty("eventWrite");
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope).not.toHaveProperty("result");
+    expect(envelope.decision.reason).toContain("--expect-base-sha");
+    expect(envelope.decision.reason).toContain(expected);
+    expect(envelope.decision.reason).toContain(headSha());
+  });
+
+  it("refuses a head pin when this run's head carries no provenance", async () => {
+    // The shared `root` is NOT a git repository, so the head provenance is
+    // null — a run that pins a commit must not judge a state that cannot
+    // show one, whatever the graph says.
+    const expected = "2".repeat(40);
+    const result = await deltaCommand("/invented/base.json", contextOf(), {
+      config: config(),
+      readBaseline: baselineOf().readBaseline,
+      expectHeadSha: expected,
+    });
+    expect(result.status).toBe("no-verdict");
+    expect(result.exitCode).toBe(3);
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope).not.toHaveProperty("result");
+    expect(envelope.decision.reason).toContain("--expect-head-sha");
+    expect(envelope.decision.reason).toContain(expected);
+    expect(envelope.decision.reason).toContain("no provenance");
+  });
+
+  it("refuses a base pin when the baseline was captured without provenance", async () => {
+    const expected = "3".repeat(40);
+    const result = await deltaCommand("/invented/base.json", contextOf(), {
+      config: config(),
+      readBaseline: baselineOf().readBaseline,
+      expectBaseSha: expected,
+    });
+    expect(result.status).toBe("no-verdict");
+    expect(result.exitCode).toBe(3);
+    const envelope = JSON.parse(result.report.json);
+    expect(envelope).not.toHaveProperty("result");
+    expect(envelope.decision.reason).toContain("--expect-base-sha");
+    expect(envelope.decision.reason).toContain(expected);
+    expect(envelope.decision.reason).toContain("without provenance");
+  });
+
+  it("keeps the no-pins envelope field-identical to the pre-#924 shape", async () => {
+    const result = await deltaCommand("/invented/base.json", gitContextOf(), {
+      config: config(),
+      readBaseline: gitBaselineOf(),
+      now: NOW,
+    });
+    const observed = envelopeFieldPaths(JSON.parse(result.report.json));
+    expect(compareFieldPaths(PRE_924_DELTA_ROSTER, observed)).toEqual({ added: [], removed: [] });
+    // Both directions spelled out: no pin field grew into the envelope and
+    // the #923 digest seam still rides — the shape is exactly #923's.
+    expect(observed).toContain("result.baseline.digest: string");
+    expect(observed).toEqual(
+      expect.not.arrayContaining(["result.baseline.pin", "result.head.pin"]),
+    );
   });
 });

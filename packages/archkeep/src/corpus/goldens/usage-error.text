@@ -46,6 +46,12 @@ Options:
                         (one canonical record per transition; idempotent — a
                         rerun over the same transition writes nothing new).
                         Absent: no event file is written
+  --expect-head-sha <sha>   Pin the run's head to this exact 40-hex commit: a
+                        run whose head differs refuses with no verdict (exit
+                        3), never judging an unpinned state
+  --expect-base-sha <sha>   Pin the baseline to the exact 40-hex commit it was
+                        captured at; a baseline captured elsewhere refuses
+                        with no verdict (exit 3)
   --intent <file>       The change-intent manifest declaring the material
                         architectural consequences this change expects
                         (required; see docs/usage/change.md)

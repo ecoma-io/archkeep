@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -650,6 +652,56 @@ describe("readEvidenceSnapshot", () => {
   it("propagates parse refusals for text the read returned", () => {
     expect(() => readEvidenceSnapshot("/bad.json", { read: () => "not json" })).toThrow(
       /not valid JSON/,
+    );
+  });
+  it("attaches the sha256 of the exact bytes read as a non-enumerable digest", () => {
+    const text = serializeEvidenceSnapshot(buildEvidenceSnapshot(validInput()));
+    const result = readEvidenceSnapshot("/base.json", { read: () => text });
+    expect(result.digest).toBe(
+      createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex"),
+    );
+    // Invisible to every other surface: the enumerable shape is what
+    // serialize/parse/validate see, so the snapshot round-trips byte-stable.
+    expect(Object.keys(result)).not.toContain("digest");
+    expect(serializeEvidenceSnapshot(result)).toBe(text);
+  });
+
+  it("accepts a Buffer read and digests the buffer's own bytes", () => {
+    const text = serializeEvidenceSnapshot(buildEvidenceSnapshot(validInput()));
+    const viaBuffer = readEvidenceSnapshot("/base.json", { read: () => Buffer.from(text, "utf8") });
+    const viaString = readEvidenceSnapshot("/base.json", { read: () => text });
+    expect(viaBuffer.digest).toBe(viaString.digest);
+  });
+
+  it("digests the bytes, not the parsed meaning — a byte change moves the digest", () => {
+    const text = serializeEvidenceSnapshot(buildEvidenceSnapshot(validInput()));
+    const oneByteChanged = text.replace('"dirty": false', '"dirty": true');
+    // `dirty: true` is a deliberate non-refusal, so both texts parse.
+    expect(oneByteChanged).not.toBe(text);
+    expect(readEvidenceSnapshot("/a.json", { read: () => text }).digest).not.toBe(
+      readEvidenceSnapshot("/b.json", { read: () => oneByteChanged }).digest,
+    );
+  });
+
+  it("digests the bytes, not the parsed meaning — key order or whitespace moves the digest", () => {
+    const text = serializeEvidenceSnapshot(buildEvidenceSnapshot(validInput()));
+    const parsed = JSON.parse(text);
+    // Same object, different raw bytes: keys in a non-canonical order (built
+    // WITHOUT canonicalJsonReplacer, which the serializer would re-sort).
+    const reordered = `${JSON.stringify(
+      { tool: parsed.tool, schemaVersion: parsed.schemaVersion, ...parsed },
+      null,
+      2,
+    )}\n`;
+    // Semantically the same snapshot — re-serialization is identical…
+    expect(serializeEvidenceSnapshot(parseEvidenceSnapshot(reordered, "/r.json"))).toBe(text);
+    // …but the bytes differ, and the digest follows the bytes.
+    expect(readEvidenceSnapshot("/r.json", { read: () => reordered }).digest).not.toBe(
+      readEvidenceSnapshot("/c.json", { read: () => text }).digest,
+    );
+    // Whitespace after the trailing newline parses identically, hashes differently.
+    expect(readEvidenceSnapshot("/w.json", { read: () => `${text} ` }).digest).not.toBe(
+      readEvidenceSnapshot("/c.json", { read: () => text }).digest,
     );
   });
 });
