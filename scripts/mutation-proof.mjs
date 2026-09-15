@@ -467,17 +467,15 @@ if (AS_JSON) {
     JSON.stringify(
       {
         ok: overallOk,
-        mutations: results.map(
-          ({ name, file, testFiles, outcome, matchedFailure, restored, why }) => ({
-            name,
-            file,
-            testFiles,
-            outcome,
-            matchedFailure,
-            restored,
-            why,
-          }),
-        ),
+        mutations: results.map((r) => ({
+          name: r.name,
+          file: r.file,
+          testFiles: r.testFiles,
+          outcome: r.outcome,
+          ...("matchedFailure" in r ? { matchedFailure: r.matchedFailure } : {}),
+          restored: r.restored,
+          why: r.why,
+        })),
         trees: {
           judgedPreflight: { clean: true, output: "" },
           judgedPostflight: {
